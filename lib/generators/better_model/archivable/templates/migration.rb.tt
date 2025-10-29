@@ -1,0 +1,26 @@
+class <%= migration_class_name %> < ActiveRecord::Migration[<%= ActiveRecord::Migration.current_version %>]
+  def change
+    change_table :<%= table_name %> do |t|
+      # Required column for archivable
+      t.datetime :archived_at
+<% if with_by_column? -%>
+
+      # Optional: track who archived the record
+      t.integer :archived_by_id
+<% end -%>
+<% if with_reason_column? -%>
+
+      # Optional: track why the record was archived
+      t.string :archive_reason
+<% end -%>
+    end
+<% if add_indexes? -%>
+
+    # Indexes for performance
+    add_index :<%= table_name %>, :archived_at
+<% if with_by_column? -%>
+    add_index :<%= table_name %>, :archived_by_id
+<% end -%>
+<% end -%>
+  end
+end

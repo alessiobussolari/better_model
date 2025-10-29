@@ -134,7 +134,7 @@ module BetterModel
 
       # Registra un campo nel registry predicable_fields
       def register_predicable_field(field_name)
-        self.predicable_fields = (predicable_fields + [field_name.to_sym]).to_set.freeze
+        self.predicable_fields = (predicable_fields + [ field_name.to_sym ]).to_set.freeze
       end
 
       # Registra scope nel registry predicable_scopes
@@ -188,7 +188,7 @@ module BetterModel
         # Case-insensitive pattern matching (2)
         scope :"#{field_name}_i_cont", ->(substring) {
           sanitized = ActiveRecord::Base.sanitize_sql_like(substring.to_s.downcase)
-          where(Arel::Nodes::NamedFunction.new("LOWER", [field]).matches("%#{sanitized}%"))
+          where(Arel::Nodes::NamedFunction.new("LOWER", [ field ]).matches("%#{sanitized}%"))
         }
         scope :"#{field_name}_not_cont", ->(substring) {
           sanitized = ActiveRecord::Base.sanitize_sql_like(substring.to_s)
@@ -196,7 +196,7 @@ module BetterModel
         }
         scope :"#{field_name}_not_i_cont", ->(substring) {
           sanitized = ActiveRecord::Base.sanitize_sql_like(substring.to_s.downcase)
-          where.not(Arel::Nodes::NamedFunction.new("LOWER", [field]).matches("%#{sanitized}%"))
+          where.not(Arel::Nodes::NamedFunction.new("LOWER", [ field ]).matches("%#{sanitized}%"))
         }
 
         # Array operations (2)

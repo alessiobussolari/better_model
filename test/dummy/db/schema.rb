@@ -10,8 +10,11 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_01_29_000002) do
+ActiveRecord::Schema[8.1].define(version: 2025_01_29_000003) do
   create_table "articles", force: :cascade do |t|
+    t.string "archive_reason"
+    t.datetime "archived_at"
+    t.integer "archived_by_id"
     t.text "content"
     t.datetime "created_at", null: false
     t.datetime "expires_at"
@@ -22,5 +25,6 @@ ActiveRecord::Schema[8.1].define(version: 2025_01_29_000002) do
     t.string "title"
     t.datetime "updated_at", null: false
     t.integer "view_count", default: 0
+    t.index [ "archived_at" ], name: "index_articles_on_archived_at"
   end
 end

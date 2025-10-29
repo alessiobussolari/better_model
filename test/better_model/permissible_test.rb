@@ -170,7 +170,7 @@ module BetterModel
 
       instance = test_class.new
       perms = instance.permissions
-      expected_permissions = [:delete, :edit, :publish]
+      expected_permissions = [ :delete, :edit, :publish ]
 
       assert_equal expected_permissions.sort, perms.keys.sort
     end
@@ -238,8 +238,8 @@ module BetterModel
       end
 
       instance = test_class.new
-      assert instance.has_all_permissions?([:delete, :edit])
-      refute instance.has_all_permissions?([:delete, :publish])
+      assert instance.has_all_permissions?([ :delete, :edit ])
+      refute instance.has_all_permissions?([ :delete, :publish ])
     end
 
     test "has_all_permissions? should handle single permission" do
@@ -251,7 +251,7 @@ module BetterModel
       end
 
       instance = test_class.new
-      assert instance.has_all_permissions?([:delete])
+      assert instance.has_all_permissions?([ :delete ])
     end
 
     test "has_all_permissions? should handle empty array" do
@@ -277,9 +277,9 @@ module BetterModel
       end
 
       instance = test_class.new
-      granted = instance.granted_permissions([:delete, :edit, :publish])
+      granted = instance.granted_permissions([ :delete, :edit, :publish ])
 
-      assert_equal [:delete, :publish].sort, granted.sort
+      assert_equal [ :delete, :publish ].sort, granted.sort
     end
 
     test "granted_permissions should handle empty input" do
@@ -306,7 +306,7 @@ module BetterModel
       end
 
       instance = test_class.new
-      granted = instance.granted_permissions([:delete, :edit])
+      granted = instance.granted_permissions([ :delete, :edit ])
 
       assert_equal [], granted
     end
@@ -324,7 +324,7 @@ module BetterModel
 
       permissions = test_class.defined_permissions
       assert_instance_of Array, permissions
-      expected = [:delete, :edit, :publish]
+      expected = [ :delete, :edit, :publish ]
 
       assert_equal expected.sort, permissions.sort
     end

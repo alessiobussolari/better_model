@@ -1,6 +1,6 @@
 # BetterModel
 
-BetterModel is a Rails engine gem (Rails 8.1+) that provides powerful extensions for ActiveRecord models, including declarative status management, permissions, sorting, filtering, and unified search capabilities.
+BetterModel is a Rails engine gem (Rails 8.1+) that provides powerful extensions for ActiveRecord models, including declarative status management, permissions, archiving, sorting, filtering, and unified search capabilities.
 
 ## Installation
 
@@ -47,7 +47,12 @@ class Article < ApplicationRecord
   # 4. PREDICABLE - Define searchable/filterable fields
   predicates :title, :status, :view_count, :published_at, :created_at, :featured
 
-  # 5. SEARCHABLE - Configure unified search interface
+  # 5. ARCHIVABLE - Soft delete with tracking (opt-in)
+  archivable do
+    skip_archived_by_default true  # Hide archived records by default
+  end
+
+  # 6. SEARCHABLE - Configure unified search interface
   searchable do
     per_page 25
     max_per_page 100
@@ -81,6 +86,16 @@ Article.title_cont("Rails")
 Article.view_count_gteq(100)
 Article.published_at_present
 
+# Archive records
+article.archive!(by: current_user, reason: "Outdated")
+article.archived?  # => true
+article.restore!
+
+# Query archived records
+Article.archived
+Article.not_archived
+Article.archived_recently(7.days)
+
 # Unified search with filters, sorting, and pagination
 Article.search(
   { status_eq: "published", view_count_gteq: 50 },
@@ -97,6 +112,7 @@ If you only need specific features, you can include individual concerns:
 class Article < ApplicationRecord
   include BetterModel::Statusable    # Only status management
   include BetterModel::Permissible   # Only permissions
+  include BetterModel::Archivable    # Only archiving
   include BetterModel::Sortable      # Only sorting
   include BetterModel::Predicable    # Only filtering
   include BetterModel::Searchable    # Only search (requires Predicable & Sortable)
@@ -129,7 +145,7 @@ BetterModel works with all databases supported by ActiveRecord:
 
 ## Features
 
-BetterModel provides five powerful concerns that work together seamlessly:
+BetterModel provides six powerful concerns that work together seamlessly:
 
 ### 📋 Statusable - Declarative Status Management
 
@@ -158,6 +174,24 @@ Define permissions dynamically based on model state and statuses - perfect for a
 - Thread-safe with immutable registry
 
 **[📖 Full Documentation →](docs/permissible.md)**
+
+---
+
+### 🗄️ Archivable - Soft Delete with Archive Management
+
+Soft-delete records with archive tracking, audit trails, and restoration capabilities.
+
+**Key Benefits:**
+- Opt-in activation: only enabled when explicitly configured
+- Archive and restore methods with optional tracking
+- Status methods: `archived?` and `active?`
+- Semantic scopes: `archived`, `not_archived`, `archived_only`
+- Helper predicates: `archived_today`, `archived_this_week`, `archived_recently`
+- Optional default scope to hide archived records
+- Migration generator with flexible options
+- Thread-safe with immutable configuration
+
+**[📖 Full Documentation →](docs/archivable.md)**
 
 ---
 
@@ -211,7 +245,7 @@ Orchestrate Predicable and Sortable into a powerful, secure search interface wit
 
 ## Version & Changelog
 
-**Current Version:** 0.1.0
+**Current Version:** 1.0.0
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 

@@ -28,12 +28,33 @@ class Article < ApplicationRecord
 
   # Define searchable configuration for testing
   searchable do
-    default_order [:sort_created_at_desc]
+    default_order [ :sort_created_at_desc ]
     per_page 25
     max_per_page 100
 
     # Example securities for testing
-    security :status_required, [:status_eq]
-    security :featured_only, [:featured_true]
+    security :status_required, [ :status_eq ]
+    security :featured_only, [ :featured_true ]
   end
+
+  # ========================================
+  # Archivable Example (Opt-In)
+  # ========================================
+  # Uncomment to enable archivable functionality:
+  #
+  # archivable do
+  #   skip_archived_by_default true  # Nasconde archiviati di default
+  # end
+  #
+  # Usage:
+  #   article.archive!(by: user, reason: "Outdated content")
+  #   article.archived?  # => true
+  #   article.restore!
+  #
+  #   Article.archived                    # Scope: find archived
+  #   Article.not_archived                # Scope: find active
+  #   Article.archived_at_within(7.days)  # Predicate: archived recently
+  #   Article.archived_today              # Helper: archived today
+  #
+  #   Article.search({ archived_at_null: true, status_eq: "published" })
 end

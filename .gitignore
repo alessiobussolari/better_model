@@ -9,3 +9,19 @@
 /test/dummy/storage/
 /test/dummy/tmp/
 /coverage/
+
+# Gem builds
+*.gem
+
+# macOS
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+
+# Editor backups
+*.swp
+*.swo
+*~
+*.bak

@@ -31,7 +31,7 @@ module BetterModel
     end
 
     test "search accepts orders keyword argument" do
-      result = Article.search({}, orders: [:sort_title_asc])
+      result = Article.search({}, orders: [ :sort_title_asc ])
       assert_kind_of ActiveRecord::Relation, result
     end
 
@@ -39,7 +39,7 @@ module BetterModel
       result = Article.search(
         { title_cont: "Test" },
         pagination: { page: 1, per_page: 10 },
-        orders: [:sort_title_asc]
+        orders: [ :sort_title_asc ]
       )
       assert_kind_of ActiveRecord::Relation, result
     end
@@ -56,7 +56,7 @@ module BetterModel
       a2 = Article.create!(title: "Python Programming Guide", content: "Test", status: "draft")
 
       results = Article.search({ title_cont: "Ruby" }).pluck(:title)
-      assert_equal ["Ruby on Rails Tutorial"], results
+      assert_equal [ "Ruby on Rails Tutorial" ], results
 
       a1.destroy
       a2.destroy
@@ -72,7 +72,7 @@ module BetterModel
         view_count_gt: 100
       }).pluck(:title)
 
-      assert_equal ["Python", "Ruby"], results.sort
+      assert_equal [ "Python", "Ruby" ], results.sort
 
       a1.destroy
       a2.destroy
@@ -108,7 +108,7 @@ module BetterModel
       a2 = Article.create!(title: "Test2", content: "Test", status: "draft", featured: false)
 
       results = Article.search({ featured_true: true }).pluck(:featured)
-      assert_equal [true], results
+      assert_equal [ true ], results
 
       a1.destroy
       a2.destroy
@@ -127,7 +127,7 @@ module BetterModel
         ]
       }).pluck(:title).sort
 
-      assert_equal ["Python Guide", "Ruby on Rails"], results
+      assert_equal [ "Python Guide", "Ruby on Rails" ], results
 
       a1.destroy
       a2.destroy
@@ -147,7 +147,7 @@ module BetterModel
         status_eq: "published"
       }).pluck(:title).sort
 
-      assert_equal ["Python", "Ruby"], results
+      assert_equal [ "Python", "Ruby" ], results
 
       a1.destroy
       a2.destroy
@@ -169,8 +169,8 @@ module BetterModel
       a1 = Article.create!(title: "Zebra", content: "Test", status: "draft")
       a2 = Article.create!(title: "Apple", content: "Test", status: "draft")
 
-      results = Article.search({}, orders: [:sort_title_asc]).pluck(:title)
-      assert_equal ["Apple", "Zebra"], results
+      results = Article.search({}, orders: [ :sort_title_asc ]).pluck(:title)
+      assert_equal [ "Apple", "Zebra" ], results
 
       a1.destroy
       a2.destroy
@@ -181,9 +181,9 @@ module BetterModel
       a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: 100)
       a3 = Article.create!(title: "C", content: "Test", status: "draft", view_count: 200)
 
-      results = Article.search({}, orders: [:sort_view_count_desc, :sort_title_asc]).pluck(:title)
+      results = Article.search({}, orders: [ :sort_view_count_desc, :sort_title_asc ]).pluck(:title)
 
-      assert_equal ["C", "A", "B"], results
+      assert_equal [ "C", "A", "B" ], results
 
       a1.destroy
       a2.destroy
@@ -192,7 +192,7 @@ module BetterModel
 
     test "search validates order scopes" do
       assert_raises(BetterModel::Searchable::InvalidOrderError) do
-        Article.search({}, orders: [:nonexistent_sort])
+        Article.search({}, orders: [ :nonexistent_sort ])
       end
     end
 
@@ -204,7 +204,7 @@ module BetterModel
 
       # Article has default_order [:sort_created_at_desc]
       results = Article.search({}).pluck(:title)
-      assert_equal ["Second", "Third", "First"], results
+      assert_equal [ "Second", "Third", "First" ], results
 
       a1.destroy
       a2.destroy
@@ -218,8 +218,8 @@ module BetterModel
       a3 = Article.create!(title: "Mango", content: "Test", status: "draft", created_at: 2.days.ago)
 
       # Override default_order with custom order
-      results = Article.search({}, orders: [:sort_title_asc]).pluck(:title)
-      assert_equal ["Apple", "Mango", "Zebra"], results
+      results = Article.search({}, orders: [ :sort_title_asc ]).pluck(:title)
+      assert_equal [ "Apple", "Mango", "Zebra" ], results
 
       a1.destroy
       a2.destroy
@@ -277,8 +277,8 @@ module BetterModel
     test "search handles page correctly" do
       6.times { |i| Article.create!(title: "Article #{i}", content: "Test", status: "draft") }
 
-      page1 = Article.search({}, pagination: { page: 1, per_page: 2 }, orders: [:sort_title_asc])
-      page2 = Article.search({}, pagination: { page: 2, per_page: 2 }, orders: [:sort_title_asc])
+      page1 = Article.search({}, pagination: { page: 1, per_page: 2 }, orders: [ :sort_title_asc ])
+      page2 = Article.search({}, pagination: { page: 2, per_page: 2 }, orders: [ :sort_title_asc ])
 
       assert_equal 2, page1.count
       assert_equal 2, page2.count
@@ -353,13 +353,13 @@ module BetterModel
         predicates :status, :featured
 
         searchable do
-          security :status_required, [:status_eq]
-          security :multi_pred, [:status_eq, :featured_true]
+          security :status_required, [ :status_eq ]
+          security :multi_pred, [ :status_eq, :featured_true ]
         end
       end
 
-      assert_equal [:status_eq], test_class.searchable_config[:securities][:status_required]
-      assert_equal [:status_eq, :featured_true], test_class.searchable_config[:securities][:multi_pred]
+      assert_equal [ :status_eq ], test_class.searchable_config[:securities][:status_required]
+      assert_equal [ :status_eq, :featured_true ], test_class.searchable_config[:securities][:multi_pred]
     end
 
     test "security requires at least one predicate" do
@@ -404,7 +404,7 @@ module BetterModel
         predicates :status, :featured, :title
 
         searchable do
-          security :multi, [:status_eq, :featured_true]
+          security :multi, [ :status_eq, :featured_true ]
         end
       end
 
@@ -461,11 +461,11 @@ module BetterModel
         { status_eq: "published" },
         security: :status_required,
         pagination: { page: 1, per_page: 3 },
-        orders: [:sort_title_asc]
+        orders: [ :sort_title_asc ]
       )
 
       assert_equal 3, results.count
-      assert_equal ["Article 0", "Article 1", "Article 2"], results.pluck(:title)
+      assert_equal [ "Article 0", "Article 1", "Article 2" ], results.pluck(:title)
 
       Article.where("title LIKE 'Article%'").destroy_all
     end
@@ -505,7 +505,7 @@ module BetterModel
         predicates :featured
 
         searchable do
-          security :featured_filter, [:featured_eq]
+          security :featured_filter, [ :featured_eq ]
         end
       end
 
@@ -523,7 +523,7 @@ module BetterModel
         predicates :status, :featured
 
         searchable do
-          security :multi, [:status_eq, :featured_true]
+          security :multi, [ :status_eq, :featured_true ]
         end
       end
 
@@ -553,7 +553,7 @@ module BetterModel
                       .where("view_count > 100")
                       .pluck(:title)
 
-      assert_equal ["Ruby"], results
+      assert_equal [ "Ruby" ], results
 
       a1.destroy
       a2.destroy
@@ -595,11 +595,11 @@ module BetterModel
         sort :title, :created_at
 
         searchable do
-          default_order [:sort_created_at_desc, :sort_title_asc]
+          default_order [ :sort_created_at_desc, :sort_title_asc ]
         end
       end
 
-      assert_equal [:sort_created_at_desc, :sort_title_asc], test_class.searchable_config[:default_order]
+      assert_equal [ :sort_created_at_desc, :sort_title_asc ], test_class.searchable_config[:default_order]
     end
 
     test "searchable config has nil defaults" do
@@ -659,9 +659,9 @@ module BetterModel
       results = Article.search({
         title_cont: "Ruby",
         status_eq: "published"
-      }, pagination: { page: 1, per_page: 10 }, orders: [:sort_view_count_desc]).pluck(:title)
+      }, pagination: { page: 1, per_page: 10 }, orders: [ :sort_view_count_desc ]).pluck(:title)
 
-      assert_equal ["Ruby on Rails", "Ruby Gems"], results
+      assert_equal [ "Ruby on Rails", "Ruby Gems" ], results
 
       a1.destroy
       a2.destroy
@@ -680,8 +680,8 @@ module BetterModel
 
       results = Article.search({
         status_eq: "published",
-        view_count_between: [10, 50]
-      }, pagination: { page: 1, per_page: 5 }, orders: [:sort_view_count_desc])
+        view_count_between: [ 10, 50 ]
+      }, pagination: { page: 1, per_page: 5 }, orders: [ :sort_view_count_desc ])
 
       assert_operator results.count, :<=, 5
       assert results.all? { |a| a.status == "published" }

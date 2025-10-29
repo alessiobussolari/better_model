@@ -99,7 +99,7 @@ module BetterModel
 
     test "statuses should have all defined statuses" do
       statuses = @article.statuses
-      expected_statuses = [:draft, :published, :scheduled, :ready_to_publish, :expired, :popular, :active]
+      expected_statuses = [ :draft, :published, :scheduled, :ready_to_publish, :expired, :popular, :active ]
       assert_equal expected_statuses.sort, statuses.keys.sort
     end
 
@@ -126,13 +126,13 @@ module BetterModel
 
     test "has_all_statuses? should return true when all specified statuses are active" do
       @article.update!(status: "published", published_at: Time.current, view_count: 150)
-      assert @article.has_all_statuses?([:published, :popular, :active])
-      refute @article.has_all_statuses?([:published, :draft])
+      assert @article.has_all_statuses?([ :published, :popular, :active ])
+      refute @article.has_all_statuses?([ :published, :draft ])
     end
 
     test "has_all_statuses? should handle single status" do
-      assert @article.has_all_statuses?([:draft])
-      refute @article.has_all_statuses?([:published])
+      assert @article.has_all_statuses?([ :draft ])
+      refute @article.has_all_statuses?([ :published ])
     end
 
     test "has_all_statuses? should handle empty array" do
@@ -141,8 +141,8 @@ module BetterModel
 
     test "active_statuses should return only active statuses" do
       @article.update!(status: "published", published_at: Time.current, view_count: 150)
-      active = @article.active_statuses([:published, :draft, :popular, :expired])
-      assert_equal [:published, :popular].sort, active.sort
+      active = @article.active_statuses([ :published, :draft, :popular, :expired ])
+      assert_equal [ :published, :popular ].sort, active.sort
     end
 
     test "active_statuses should handle empty input" do
@@ -151,7 +151,7 @@ module BetterModel
     end
 
     test "active_statuses should return empty when no statuses are active" do
-      active = @article.active_statuses([:published, :expired, :popular])
+      active = @article.active_statuses([ :published, :expired, :popular ])
       assert_equal [], active
     end
 
@@ -159,7 +159,7 @@ module BetterModel
     test "defined_statuses should return all defined status names" do
       statuses = Article.defined_statuses
       assert_instance_of Array, statuses
-      expected = [:draft, :published, :scheduled, :ready_to_publish, :expired, :popular, :active]
+      expected = [ :draft, :published, :scheduled, :ready_to_publish, :expired, :popular, :active ]
       assert_equal expected.sort, statuses.sort
     end
 

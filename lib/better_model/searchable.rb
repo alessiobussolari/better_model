@@ -312,7 +312,7 @@ module BetterModel
 
         # Respect max_per_page limit if configured
         if searchable_config[:max_per_page].present?
-          per_page = [per_page, searchable_config[:max_per_page]].min
+          per_page = [ per_page, searchable_config[:max_per_page] ].min
         end
 
         offset = (page - 1) * per_page

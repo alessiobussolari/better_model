@@ -75,7 +75,7 @@ module BetterModel
       article3 = Article.create!(title: "Mango", content: "Test", status: "draft")
 
       results = Article.sort_title_asc.pluck(:title)
-      assert_equal ["Apple", "Mango", "Zebra"], results
+      assert_equal [ "Apple", "Mango", "Zebra" ], results
 
       article1.destroy
       article2.destroy
@@ -88,7 +88,7 @@ module BetterModel
       article3 = Article.create!(title: "Mango", content: "Test", status: "draft")
 
       results = Article.sort_title_desc.pluck(:title)
-      assert_equal ["Zebra", "Mango", "Apple"], results
+      assert_equal [ "Zebra", "Mango", "Apple" ], results
 
       article1.destroy
       article2.destroy
@@ -101,7 +101,7 @@ module BetterModel
       article3 = Article.create!(title: "MANGO", content: "Test", status: "draft")
 
       results = Article.sort_title_asc_i.pluck(:title)
-      assert_equal ["Apple", "MANGO", "zebra"], results
+      assert_equal [ "Apple", "MANGO", "zebra" ], results
 
       article1.destroy
       article2.destroy
@@ -114,7 +114,7 @@ module BetterModel
       article3 = Article.create!(title: "MANGO", content: "Test", status: "draft")
 
       results = Article.sort_title_desc_i.pluck(:title)
-      assert_equal ["zebra", "MANGO", "Apple"], results
+      assert_equal [ "zebra", "MANGO", "Apple" ], results
 
       article1.destroy
       article2.destroy
@@ -144,7 +144,7 @@ module BetterModel
       article3 = Article.create!(title: "Medium", content: "Test", status: "draft", view_count: 50)
 
       results = Article.sort_view_count_asc.pluck(:view_count)
-      assert_equal [10, 50, 100], results
+      assert_equal [ 10, 50, 100 ], results
 
       article1.destroy
       article2.destroy
@@ -157,7 +157,7 @@ module BetterModel
       article3 = Article.create!(title: "Medium", content: "Test", status: "draft", view_count: 50)
 
       results = Article.sort_view_count_desc.pluck(:view_count)
-      assert_equal [100, 50, 10], results
+      assert_equal [ 100, 50, 10 ], results
 
       article1.destroy
       article2.destroy
@@ -170,7 +170,7 @@ module BetterModel
       article3 = Article.create!(title: "More views", content: "Test", status: "draft", view_count: 100)
 
       results = Article.sort_view_count_desc_nulls_last.pluck(:view_count)
-      assert_equal [100, 50, nil], results
+      assert_equal [ 100, 50, nil ], results
 
       article1.destroy
       article2.destroy
@@ -183,7 +183,7 @@ module BetterModel
       article3 = Article.create!(title: "Fewer views", content: "Test", status: "draft", view_count: 10)
 
       results = Article.sort_view_count_asc_nulls_first.pluck(:view_count)
-      assert_equal [nil, 10, 50], results
+      assert_equal [ nil, 10, 50 ], results
 
       article1.destroy
       article2.destroy
@@ -211,7 +211,7 @@ module BetterModel
       article3 = Article.create!(title: "Middle", content: "Test", status: "draft", published_at: 2.days.ago)
 
       results = Article.sort_published_at_newest.pluck(:title)
-      assert_equal ["Recent", "Middle", "Old"], results
+      assert_equal [ "Recent", "Middle", "Old" ], results
 
       article1.destroy
       article2.destroy
@@ -224,7 +224,7 @@ module BetterModel
       article3 = Article.create!(title: "Middle", content: "Test", status: "draft", published_at: 2.days.ago)
 
       results = Article.sort_published_at_oldest.pluck(:title)
-      assert_equal ["Old", "Middle", "Recent"], results
+      assert_equal [ "Old", "Middle", "Recent" ], results
 
       article1.destroy
       article2.destroy
@@ -293,7 +293,7 @@ module BetterModel
 
       # Order by view_count desc, then by published_at newest
       results = Article.sort_view_count_desc.sort_published_at_newest.pluck(:title)
-      assert_equal ["A", "B", "C"], results
+      assert_equal [ "A", "B", "C" ], results
 
       article1.destroy
       article2.destroy
@@ -318,7 +318,7 @@ module BetterModel
 
         # Simuliamo la presenza di campi sensibili aggiungendoli manualmente
         def self.column_names
-          super + ["password_digest", "encrypted_email"]
+          super + [ "password_digest", "encrypted_email" ]
         end
       end
 
@@ -387,8 +387,8 @@ module BetterModel
       a1 = Article.create!(title: "Zebra", content: "Test", status: "draft", view_count: 100)
       a2 = Article.create!(title: "Apple", content: "Test", status: "draft", view_count: 50)
 
-      assert_equal ["Apple", "Zebra"], Article.sort_title_asc.pluck(:title)
-      assert_equal [100, 50], Article.sort_view_count_desc.pluck(:view_count)
+      assert_equal [ "Apple", "Zebra" ], Article.sort_title_asc.pluck(:title)
+      assert_equal [ 100, 50 ], Article.sort_view_count_desc.pluck(:view_count)
 
       a1.destroy
       a2.destroy

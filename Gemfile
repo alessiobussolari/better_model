@@ -10,6 +10,9 @@ gem "sqlite3"
 # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]
 gem "rubocop-rails-omakase", require: false
 
+# Dependency vulnerability scanning [https://github.com/rubysec/bundler-audit]
+gem "bundler-audit", require: false
+
 # Code coverage [https://github.com/simplecov-ruby/simplecov]
 gem "simplecov", require: false
 

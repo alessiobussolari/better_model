@@ -89,7 +89,7 @@ module BetterModel
       a2 = Article.create!(title: "Rails", content: "Test", status: "draft")
 
       results = Article.title_eq("Ruby").pluck(:title)
-      assert_equal ["Ruby"], results
+      assert_equal [ "Ruby" ], results
 
       a1.destroy
       a2.destroy
@@ -100,7 +100,7 @@ module BetterModel
       a2 = Article.create!(title: "Rails", content: "Test", status: "draft")
 
       results = Article.title_not_eq("Ruby").pluck(:title)
-      assert_equal ["Rails"], results
+      assert_equal [ "Rails" ], results
 
       a1.destroy
       a2.destroy
@@ -112,7 +112,7 @@ module BetterModel
       a3 = Article.create!(title: "Ruby Gems", content: "Test", status: "draft")
 
       results = Article.title_start("Ruby").pluck(:title).sort
-      assert_equal ["Ruby Gems", "Ruby on Rails"], results
+      assert_equal [ "Ruby Gems", "Ruby on Rails" ], results
 
       a1.destroy
       a2.destroy
@@ -125,7 +125,7 @@ module BetterModel
       a3 = Article.create!(title: "Ruby on Rails", content: "Test", status: "draft")
 
       results = Article.title_end("Rails").pluck(:title)
-      assert_equal ["Learning Rails", "Ruby on Rails"], results.sort
+      assert_equal [ "Learning Rails", "Ruby on Rails" ], results.sort
 
       a1.destroy
       a2.destroy
@@ -138,7 +138,7 @@ module BetterModel
       a3 = Article.create!(title: "Rails Tutorial", content: "Test", status: "draft")
 
       results = Article.title_cont("Rails").pluck(:title)
-      assert_equal ["Rails Tutorial", "Ruby on Rails"], results.sort
+      assert_equal [ "Rails Tutorial", "Ruby on Rails" ], results.sort
 
       a1.destroy
       a2.destroy
@@ -151,7 +151,7 @@ module BetterModel
       a3 = Article.create!(title: "rails tutorial", content: "Test", status: "draft")
 
       results = Article.title_i_cont("rails").pluck(:title)
-      assert_equal ["Ruby on RAILS", "rails tutorial"], results.sort
+      assert_equal [ "Ruby on RAILS", "rails tutorial" ], results.sort
 
       a1.destroy
       a2.destroy
@@ -163,7 +163,7 @@ module BetterModel
       a2 = Article.create!(title: "Python Guide", content: "Test", status: "draft")
 
       results = Article.title_not_cont("Rails").pluck(:title)
-      assert_equal ["Python Guide"], results
+      assert_equal [ "Python Guide" ], results
 
       a1.destroy
       a2.destroy
@@ -174,7 +174,7 @@ module BetterModel
       a2 = Article.create!(title: "Python Guide", content: "Test", status: "draft")
 
       results = Article.title_not_i_cont("rails").pluck(:title)
-      assert_equal ["Python Guide"], results
+      assert_equal [ "Python Guide" ], results
 
       a1.destroy
       a2.destroy
@@ -185,8 +185,8 @@ module BetterModel
       a2 = Article.create!(title: "Rails", content: "Test", status: "draft")
       a3 = Article.create!(title: "Python", content: "Test", status: "draft")
 
-      results = Article.title_in(["Ruby", "Rails"]).pluck(:title)
-      assert_equal ["Rails", "Ruby"], results.sort
+      results = Article.title_in([ "Ruby", "Rails" ]).pluck(:title)
+      assert_equal [ "Rails", "Ruby" ], results.sort
 
       a1.destroy
       a2.destroy
@@ -198,8 +198,8 @@ module BetterModel
       a2 = Article.create!(title: "Rails", content: "Test", status: "draft")
       a3 = Article.create!(title: "Python", content: "Test", status: "draft")
 
-      results = Article.title_not_in(["Ruby", "Rails"]).pluck(:title)
-      assert_equal ["Python"], results
+      results = Article.title_not_in([ "Ruby", "Rails" ]).pluck(:title)
+      assert_equal [ "Python" ], results
 
       a1.destroy
       a2.destroy
@@ -212,7 +212,7 @@ module BetterModel
       a3 = Article.create!(title: nil, content: "Test", status: "draft")
 
       results = Article.title_present.pluck(:title)
-      assert_equal ["Ruby"], results
+      assert_equal [ "Ruby" ], results
 
       a1.destroy
       a2.destroy
@@ -270,7 +270,7 @@ module BetterModel
       a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
 
       results = Article.view_count_eq(100).pluck(:view_count)
-      assert_equal [100], results
+      assert_equal [ 100 ], results
 
       a1.destroy
       a2.destroy
@@ -281,7 +281,7 @@ module BetterModel
       a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
 
       results = Article.view_count_not_eq(100).pluck(:view_count)
-      assert_equal [50], results
+      assert_equal [ 50 ], results
 
       a1.destroy
       a2.destroy
@@ -293,7 +293,7 @@ module BetterModel
       a3 = Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
 
       results = Article.view_count_lt(75).pluck(:view_count)
-      assert_equal [25, 50], results.sort
+      assert_equal [ 25, 50 ], results.sort
 
       a1.destroy
       a2.destroy
@@ -306,7 +306,7 @@ module BetterModel
       a3 = Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
 
       results = Article.view_count_lteq(50).pluck(:view_count)
-      assert_equal [25, 50], results.sort
+      assert_equal [ 25, 50 ], results.sort
 
       a1.destroy
       a2.destroy
@@ -319,7 +319,7 @@ module BetterModel
       a3 = Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
 
       results = Article.view_count_gt(40).pluck(:view_count)
-      assert_equal [50, 100], results.sort
+      assert_equal [ 50, 100 ], results.sort
 
       a1.destroy
       a2.destroy
@@ -332,7 +332,7 @@ module BetterModel
       a3 = Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
 
       results = Article.view_count_gteq(50).pluck(:view_count)
-      assert_equal [50, 100], results.sort
+      assert_equal [ 50, 100 ], results.sort
 
       a1.destroy
       a2.destroy
@@ -344,8 +344,8 @@ module BetterModel
       a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
       a3 = Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
 
-      results = Article.view_count_in([50, 100]).pluck(:view_count)
-      assert_equal [50, 100], results.sort
+      results = Article.view_count_in([ 50, 100 ]).pluck(:view_count)
+      assert_equal [ 50, 100 ], results.sort
 
       a1.destroy
       a2.destroy
@@ -357,8 +357,8 @@ module BetterModel
       a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
       a3 = Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
 
-      results = Article.view_count_not_in([50, 100]).pluck(:view_count)
-      assert_equal [25], results
+      results = Article.view_count_not_in([ 50, 100 ]).pluck(:view_count)
+      assert_equal [ 25 ], results
 
       a1.destroy
       a2.destroy
@@ -370,7 +370,7 @@ module BetterModel
       a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: nil)
 
       results = Article.view_count_present.pluck(:view_count)
-      assert_equal [100], results
+      assert_equal [ 100 ], results
 
       a1.destroy
       a2.destroy
@@ -397,7 +397,7 @@ module BetterModel
       a2 = Article.create!(title: "B", content: "Test", status: "draft", featured: false)
 
       results = Article.featured_eq(true).pluck(:featured)
-      assert_equal [true], results
+      assert_equal [ true ], results
 
       a1.destroy
       a2.destroy
@@ -408,7 +408,7 @@ module BetterModel
       a2 = Article.create!(title: "B", content: "Test", status: "draft", featured: false)
 
       results = Article.featured_not_eq(true).pluck(:featured)
-      assert_equal [false], results
+      assert_equal [ false ], results
 
       a1.destroy
       a2.destroy
@@ -419,7 +419,7 @@ module BetterModel
       a2 = Article.create!(title: "B", content: "Test", status: "draft", featured: false)
 
       results = Article.featured_true.pluck(:featured)
-      assert_equal [true], results
+      assert_equal [ true ], results
 
       a1.destroy
       a2.destroy
@@ -430,7 +430,7 @@ module BetterModel
       a2 = Article.create!(title: "B", content: "Test", status: "draft", featured: false)
 
       results = Article.featured_false.pluck(:featured)
-      assert_equal [false], results
+      assert_equal [ false ], results
 
       a1.destroy
       a2.destroy
@@ -551,7 +551,7 @@ module BetterModel
       a2 = Article.create!(title: "B", content: "Test", status: "draft", published_at: date2)
       a3 = Article.create!(title: "C", content: "Test", status: "draft", published_at: 3.days.ago)
 
-      results = Article.published_at_in([date1, date2]).count
+      results = Article.published_at_in([ date1, date2 ]).count
       assert_equal 2, results
 
       a1.destroy
@@ -566,7 +566,7 @@ module BetterModel
       a2 = Article.create!(title: "B", content: "Test", status: "draft", published_at: date2)
       a3 = Article.create!(title: "C", content: "Test", status: "draft", published_at: 3.days.ago)
 
-      results = Article.published_at_not_in([date1, date2]).count
+      results = Article.published_at_not_in([ date1, date2 ]).count
       assert_equal 1, results
 
       a1.destroy
@@ -655,7 +655,7 @@ module BetterModel
                                view_count: 50, published_at: 3.days.ago)
 
       results = test_class.recent_popular(7, 100).pluck(:title)
-      assert_equal ["Recent Popular"], results
+      assert_equal [ "Recent Popular" ], results
 
       a1.destroy
       a2.destroy
@@ -777,7 +777,7 @@ module BetterModel
       a3 = Article.create!(title: "Ruby Gems", content: "Test", status: "draft", view_count: 50)
 
       results = Article.title_cont("Ruby").view_count_gt(75).pluck(:title)
-      assert_equal ["Ruby on Rails"], results
+      assert_equal [ "Ruby on Rails" ], results
 
       a1.destroy
       a2.destroy
@@ -790,7 +790,7 @@ module BetterModel
       a3 = Article.create!(title: "Python", content: "Test", status: "draft", view_count: 50)
 
       results = Article.title_cont("Ruby").sort_view_count_desc.pluck(:title)
-      assert_equal ["Ruby A", "Ruby B"], results
+      assert_equal [ "Ruby A", "Ruby B" ], results
 
       a1.destroy
       a2.destroy
@@ -852,7 +852,7 @@ module BetterModel
       a3 = Article.create!(title: "High", content: "Test", status: "draft", view_count: 200)
 
       results = Article.view_count_between(75, 150).pluck(:view_count)
-      assert_equal [100], results
+      assert_equal [ 100 ], results
 
       a1.destroy
       a2.destroy
@@ -865,7 +865,7 @@ module BetterModel
       a3 = Article.create!(title: "High", content: "Test", status: "draft", view_count: 200)
 
       results = Article.view_count_not_between(75, 150).pluck(:view_count).sort
-      assert_equal [50, 200], results
+      assert_equal [ 50, 200 ], results
 
       a1.destroy
       a2.destroy
@@ -904,7 +904,7 @@ module BetterModel
       a2 = Article.create!(title: "Yesterday", content: "Test", status: "draft", published_at: 1.day.ago)
 
       results = Article.published_at_today.pluck(:title)
-      assert_equal ["Today"], results
+      assert_equal [ "Today" ], results
 
       a1.destroy
       a2.destroy
@@ -915,7 +915,7 @@ module BetterModel
       a2 = Article.create!(title: "Yesterday", content: "Test", status: "draft", published_at: 1.day.ago)
 
       results = Article.published_at_yesterday.pluck(:title)
-      assert_equal ["Yesterday"], results
+      assert_equal [ "Yesterday" ], results
 
       a1.destroy
       a2.destroy
@@ -962,7 +962,7 @@ module BetterModel
       a2 = Article.create!(title: "Future", content: "Test", status: "draft", published_at: 1.day.from_now)
 
       results = Article.published_at_past.pluck(:title)
-      assert_equal ["Past"], results
+      assert_equal [ "Past" ], results
 
       a1.destroy
       a2.destroy
@@ -973,7 +973,7 @@ module BetterModel
       a2 = Article.create!(title: "Future", content: "Test", status: "draft", published_at: 1.day.from_now)
 
       results = Article.published_at_future.pluck(:title)
-      assert_equal ["Future"], results
+      assert_equal [ "Future" ], results
 
       a1.destroy
       a2.destroy
@@ -985,7 +985,7 @@ module BetterModel
       a2 = Article.create!(title: "Old", content: "Test", status: "draft", published_at: 10.days.ago)
 
       results = Article.published_at_within(7).pluck(:title)
-      assert_equal ["Recent"], results
+      assert_equal [ "Recent" ], results
 
       a1.destroy
       a2.destroy
@@ -996,7 +996,7 @@ module BetterModel
       a2 = Article.create!(title: "Old", content: "Test", status: "draft", published_at: 10.days.ago)
 
       results = Article.published_at_within(7.days).pluck(:title)
-      assert_equal ["Recent"], results
+      assert_equal [ "Recent" ], results
 
       a1.destroy
       a2.destroy
@@ -1007,7 +1007,7 @@ module BetterModel
       a2 = Article.create!(title: "Old", content: "Test", status: "draft", published_at: 2.days.ago)
 
       results = Article.published_at_within(6.hours).pluck(:title)
-      assert_equal ["Very recent"], results
+      assert_equal [ "Very recent" ], results
 
       a1.destroy
       a2.destroy
@@ -1018,7 +1018,7 @@ module BetterModel
       a2 = Article.create!(title: "Old", content: "Test", status: "draft", created_at: 3.weeks.ago)
 
       results = Article.created_at_within(2.weeks).pluck(:title)
-      assert_equal ["Recent"], results
+      assert_equal [ "Recent" ], results
 
       a1.destroy
       a2.destroy

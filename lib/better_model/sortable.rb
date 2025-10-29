@@ -88,7 +88,7 @@ module BetterModel
 
       # Registra un campo nel registry sortable_fields
       def register_sortable_field(field_name)
-        self.sortable_fields = (sortable_fields + [field_name.to_sym]).to_set.freeze
+        self.sortable_fields = (sortable_fields + [ field_name.to_sym ]).to_set.freeze
       end
 
       # Registra scope nel registry sortable_scopes

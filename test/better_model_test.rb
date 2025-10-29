@@ -30,7 +30,7 @@ class BetterModelTest < ActiveSupport::TestCase
       is :inactive, -> { status == "inactive" }
     end
 
-    assert_equal [:active, :inactive].sort, test_class.defined_statuses.sort
+    assert_equal [ :active, :inactive ].sort, test_class.defined_statuses.sort
     assert test_class.status_defined?(:active)
     assert test_class.status_defined?(:inactive)
   end

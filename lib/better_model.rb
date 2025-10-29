@@ -5,6 +5,7 @@ require "better_model/permissible"
 require "better_model/sortable"
 require "better_model/predicable"
 require "better_model/searchable"
+require "better_model/archivable"
 
 module BetterModel
   extend ActiveSupport::Concern
@@ -16,6 +17,7 @@ module BetterModel
     include BetterModel::Sortable
     include BetterModel::Predicable
     include BetterModel::Searchable
+    include BetterModel::Archivable
     # Future concerns will be added here:
     # include BetterModel::Validatable
   end
