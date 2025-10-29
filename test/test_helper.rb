@@ -1,3 +1,15 @@
+# Code Coverage
+require "simplecov"
+SimpleCov.start "rails" do
+  add_filter "/test/"
+  add_filter "/spec/"
+
+  add_group "Concerns", "lib/better_model"
+  add_group "Models", "test/dummy/app/models"
+
+  minimum_coverage 89
+end
+
 # Configure Rails Environment
 ENV["RAILS_ENV"] = "test"
 
