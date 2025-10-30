@@ -160,11 +160,15 @@ module BetterModel
         )
       end
 
-      # Genera predicati per campi stringa (11 scope)
-      # Base predicates (_eq, _not_eq, _present) are defined separately
+      # Genera predicati per campi stringa (12 scope)
+      # Base predicates (_eq, _not_eq) are defined separately
+      # _present is redefined here to handle empty strings
       def define_string_predicates(field_name)
         table = arel_table
         field = table[field_name]
+
+        # String-specific presence check (overrides base _present)
+        scope :"#{field_name}_present", -> { where(field.not_eq(nil).and(field.not_eq(""))) }
 
         # Pattern matching (4)
         scope :"#{field_name}_matches", ->(pattern) { where(field.matches(pattern)) }
@@ -199,7 +203,7 @@ module BetterModel
         scope :"#{field_name}_in", ->(values) { where(field.in(Array(values))) }
         scope :"#{field_name}_not_in", ->(values) { where.not(field.in(Array(values))) }
 
-        # Presence (2) - _present is defined in base predicates
+        # Presence (2) - _present is overridden above for string-specific behavior
         scope :"#{field_name}_blank", -> { where(field.eq(nil).or(field.eq(""))) }
         scope :"#{field_name}_null", -> { where(field.eq(nil)) }
 
@@ -252,28 +256,19 @@ module BetterModel
         )
       end
 
-      # Genera predicati per campi booleani (5 scope)
+      # Genera predicati per campi booleani (2 scope)
+      # Base predicates (_eq, _not_eq, _present) are defined separately
       def define_boolean_predicates(field_name)
         table = arel_table
         field = table[field_name]
-
-        # Comparison (2)
-        scope :"#{field_name}_eq", ->(value) { where(field.eq(value)) }
-        scope :"#{field_name}_not_eq", ->(value) { where(field.not_eq(value)) }
 
         # Boolean shortcuts (2)
         scope :"#{field_name}_true", -> { where(field.eq(true)) }
         scope :"#{field_name}_false", -> { where(field.eq(false)) }
 
-        # Presence (1)
-        scope :"#{field_name}_present", -> { where(field.not_eq(nil)) }
-
         register_predicable_scopes(
-          :"#{field_name}_eq",
-          :"#{field_name}_not_eq",
           :"#{field_name}_true",
-          :"#{field_name}_false",
-          :"#{field_name}_present"
+          :"#{field_name}_false"
         )
       end
 
@@ -378,14 +373,13 @@ module BetterModel
         )
       end
 
-      # Genera predicati per campi data/datetime (22 scope)
+      # Genera predicati per campi data/datetime (17 scope)
+      # Base predicates (_eq, _not_eq, _present) are defined separately
       def define_date_predicates(field_name)
         table = arel_table
         field = table[field_name]
 
-        # Comparison (6)
-        scope :"#{field_name}_eq", ->(value) { where(field.eq(value)) }
-        scope :"#{field_name}_not_eq", ->(value) { where(field.not_eq(value)) }
+        # Comparison (4)
         scope :"#{field_name}_lt", ->(value) { where(field.lt(value)) }
         scope :"#{field_name}_lteq", ->(value) { where(field.lteq(value)) }
         scope :"#{field_name}_gt", ->(value) { where(field.gt(value)) }
@@ -427,15 +421,12 @@ module BetterModel
           where(field.gteq(time_ago))
         }
 
-        # Presence (4)
-        scope :"#{field_name}_present", -> { where(field.not_eq(nil)) }
+        # Presence (3) - _present is defined in base predicates
         scope :"#{field_name}_blank", -> { where(field.eq(nil)) }
         scope :"#{field_name}_null", -> { where(field.eq(nil)) }
         scope :"#{field_name}_not_null", -> { where(field.not_eq(nil)) }
 
         register_predicable_scopes(
-          :"#{field_name}_eq",
-          :"#{field_name}_not_eq",
           :"#{field_name}_lt",
           :"#{field_name}_lteq",
           :"#{field_name}_gt",
@@ -452,7 +443,6 @@ module BetterModel
           :"#{field_name}_past",
           :"#{field_name}_future",
           :"#{field_name}_within",
-          :"#{field_name}_present",
           :"#{field_name}_blank",
           :"#{field_name}_null",
           :"#{field_name}_not_null"
