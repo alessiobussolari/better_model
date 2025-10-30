@@ -188,6 +188,10 @@ module BetterModel
       end
 
       # Genera SQL per gestione NULL multi-database
+      #
+      # NOTA: Il blocco MySQL else qui sotto non è coperto da test automatici
+      # perché i test vengono eseguiti su SQLite. Testare manualmente su MySQL
+      # con: rails console RAILS_ENV=test
       def nulls_order_sql(field_name, direction, nulls_position)
         quoted_field = connection.quote_column_name(field_name)
 

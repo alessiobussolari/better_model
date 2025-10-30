@@ -1103,19 +1103,6 @@ module BetterModel
       end
     end
 
-    test "predicates handles json column type" do
-      # This test verifies that JSON columns are detected
-      # Since SQLite doesn't have native JSON type, we'll skip actual functionality
-      # but the code path for type detection will be covered
-      skip "JSON column type not fully supported in SQLite" unless ActiveRecord::Base.connection.adapter_name.downcase.include?("postgresql")
-    end
-
-    test "predicates handles array column type" do
-      # This test verifies that array columns are detected
-      # Since SQLite doesn't have native array type, we'll skip actual functionality
-      # but the code path for type detection will be covered
-      skip "Array column type not supported in SQLite" unless ActiveRecord::Base.connection.adapter_name.downcase.include?("postgresql")
-    end
 
     # ========================================
     # COVERAGE TESTS - Opzione B: Riflessione
@@ -1164,7 +1151,7 @@ module BetterModel
 
     test "all numeric predicates are generated for numeric fields" do
       numeric_fields = Article.predicable_fields.select do |field|
-        [:integer, :decimal, :float].include?(Article.columns_hash[field.to_s]&.type)
+        [ :integer, :decimal, :float ].include?(Article.columns_hash[field.to_s]&.type)
       end
 
       numeric_fields.each do |field|
@@ -1179,7 +1166,7 @@ module BetterModel
 
     test "all datetime predicates are generated for datetime fields" do
       datetime_fields = Article.predicable_fields.select do |field|
-        [:datetime, :date, :time].include?(Article.columns_hash[field.to_s]&.type)
+        [ :datetime, :date, :time ].include?(Article.columns_hash[field.to_s]&.type)
       end
 
       datetime_fields.each do |field|
@@ -1243,7 +1230,7 @@ module BetterModel
 
     test "numeric predicates execute without errors for numeric fields" do
       numeric_fields = Article.predicable_fields.select do |field|
-        [:integer, :decimal, :float].include?(Article.columns_hash[field.to_s]&.type)
+        [ :integer, :decimal, :float ].include?(Article.columns_hash[field.to_s]&.type)
       end
 
       numeric_fields.each do |field|
@@ -1255,7 +1242,7 @@ module BetterModel
 
     test "datetime predicates execute without errors for datetime fields" do
       datetime_fields = Article.predicable_fields.select do |field|
-        [:datetime, :date, :time].include?(Article.columns_hash[field.to_s]&.type)
+        [ :datetime, :date, :time ].include?(Article.columns_hash[field.to_s]&.type)
       end
 
       datetime_fields.each do |field|
@@ -1326,6 +1313,45 @@ module BetterModel
       # - Lines 294-343: define_postgresql_array_predicates (3 scopes)
       # - Lines 346-392: define_postgresql_jsonb_predicates (4 scopes)
       # - Line 476: postgresql_adapter? helper method (partially covered above)
+    end
+
+    # ========================================
+    # Test: No Method Redefinition Warnings
+    # ========================================
+
+    test "no method redefinition warnings for string _present scopes" do
+      # Capture warnings during scope definition
+      original_stderr = $stderr
+      $stderr = StringIO.new
+
+      begin
+        # Create a new class with string predicates
+        test_class = Class.new(ApplicationRecord) do
+          self.table_name = "articles"
+          include BetterModel::Predicable
+
+          predicates :title, :status
+        end
+
+        # Get captured warnings
+        warnings = $stderr.string
+
+        # Verify no "method redefined" warnings for _present scopes
+        refute_match(/warning: method redefined.*title_present/, warnings,
+                     "Should not have method redefinition warning for title_present")
+        refute_match(/warning: method redefined.*status_present/, warnings,
+                     "Should not have method redefinition warning for status_present")
+        refute_match(/warning: previous definition of title_present/, warnings,
+                     "Should not have previous definition warning for title_present")
+        refute_match(/warning: previous definition of status_present/, warnings,
+                     "Should not have previous definition warning for status_present")
+
+        # Verify the scopes still work correctly
+        assert test_class.respond_to?(:title_present)
+        assert test_class.respond_to?(:status_present)
+      ensure
+        $stderr = original_stderr
+      end
     end
   end
 end

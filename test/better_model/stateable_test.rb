@@ -65,7 +65,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
       end
     end
 
-    assert_equal [:draft, :published, :archived], article_class.stateable_states
+    assert_equal [ :draft, :published, :archived ], article_class.stateable_states
     assert_equal :draft, article_class.stateable_initial_state
   end
 
@@ -243,7 +243,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
     article = article_class.create!(title: "Test")
     article.publish!
 
-    assert_equal ["before", "after"], callback_log
+    assert_equal [ "before", "after" ], callback_log
   end
 
   # Test 7: State history
@@ -281,7 +281,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
         state :deleted
 
         transition :publish, from: :draft, to: :published
-        transition :delete, from: [:draft, :published, :archived], to: :deleted
+        transition :delete, from: [ :draft, :published, :archived ], to: :deleted
       end
     end
 
@@ -303,11 +303,11 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
     article_class = create_stateable_class(:StateableArticle15) do
       stateable do
         state :draft, initial: true
-        transitions_table 'state_transitions'  # Use default
+        transitions_table "state_transitions"  # Use default
       end
     end
 
-    assert_equal 'state_transitions', article_class.stateable_table_name
+    assert_equal "state_transitions", article_class.stateable_table_name
   end
 
   # Test 10: Metadata support
@@ -690,7 +690,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
     # State should not have changed
     assert article.draft?
     # After callback should not have run
-    assert_equal ["before"], callback_log
+    assert_equal [ "before" ], callback_log
   end
 
   test "transition with invalid from state" do
@@ -751,5 +751,89 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
     assert_raises(NoMethodError) do
       article.publish!
     end
+  end
+
+  # ========================================
+  # ERROR HANDLING TESTS - Guards
+  # ========================================
+
+  test "should raise NoMethodError when guard method not found" do
+    article_class = Class.new(ApplicationRecord) do
+      self.table_name = "articles"
+      include BetterModel::Stateable
+
+      stateable do
+        state :draft, initial: true
+        state :published
+
+        transition :publish, from: :draft, to: :published do
+          guard :nonexistent_method
+        end
+      end
+    end
+
+    article = article_class.create!(title: "Test")
+
+    error = assert_raises(NoMethodError) do
+      article.publish!
+    end
+
+    assert_match(/Guard method 'nonexistent_method' not found/, error.message)
+  end
+
+  test "should raise NoMethodError when guard predicate not found" do
+    article_class = Class.new(ApplicationRecord) do
+      self.table_name = "articles"
+      include BetterModel::Stateable
+
+      stateable do
+        state :draft, initial: true
+        state :published
+
+        transition :publish, from: :draft, to: :published do
+          guard if: :nonexistent_predicate?
+        end
+      end
+    end
+
+    article = article_class.create!(title: "Test")
+
+    error = assert_raises(NoMethodError) do
+      article.publish!
+    end
+
+    assert_match(/Guard predicate 'nonexistent_predicate\?' not found/, error.message)
+  end
+
+  test "should raise StateableError for unknown guard type" do
+    article_class = Class.new(ApplicationRecord) do
+      self.table_name = "articles"
+      include BetterModel::Stateable
+
+      stateable do
+        state :draft, initial: true
+        state :published
+
+        transition :publish, from: :draft, to: :published
+      end
+
+      # Helper to inject invalid guard type
+      def self.inject_invalid_guard
+        # Access the stateable configuration
+        config = stateable_config
+        config[:transitions][:publish][:guards] << { type: :invalid_type, something: :value }
+      end
+    end
+
+    # Inject invalid guard type after class definition
+    article_class.inject_invalid_guard
+
+    article = article_class.create!(title: "Test")
+
+    error = assert_raises(BetterModel::Stateable::StateableError) do
+      article.publish!
+    end
+
+    assert_match(/Unknown guard type: invalid_type/, error.message)
   end
 end

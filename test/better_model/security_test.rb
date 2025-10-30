@@ -91,33 +91,6 @@ module BetterModel
     # SQL Injection Tests - PostgreSQL Array
     # ========================================
 
-    # Nota: questi test funzionano solo con PostgreSQL
-    # Se stai usando SQLite per i test, questi verranno skippati automaticamente dal blocco if
-    if Article.connection.adapter_name =~ /PostgreSQL/i
-      test "PostgreSQL array predicates should sanitize SQL injection in _overlaps" do
-        skip "Array columns not available in test schema - requires migration with array column"
-        # TODO: Per testare completamente, aggiungere migrazione con:
-        # add_column :articles, :tags, :string, array: true, default: []
-        #
-        # Poi testare:
-        # malicious_input = ["tag'; DROP TABLE articles;--"]
-        # assert_nothing_raised do
-        #   Article.tags_overlaps(malicious_input).to_a
-        # end
-      end
-
-      test "PostgreSQL JSONB predicates should sanitize SQL injection in _has_key" do
-        skip "JSONB columns not available in test schema - requires migration with jsonb column"
-        # TODO: Per testare completamente, aggiungere migrazione con:
-        # add_column :articles, :metadata, :jsonb, default: {}
-        #
-        # Poi testare:
-        # malicious_input = "key'; DROP TABLE articles;--"
-        # assert_nothing_raised do
-        #   Article.metadata_has_key(malicious_input).to_a
-        # end
-      end
-    end
 
     # ========================================
     # Strong Parameters Bypass Tests

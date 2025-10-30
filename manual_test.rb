@@ -29,7 +29,6 @@ puts "=" * 80
 
 # Wrap everything in a transaction with rollback
 ActiveRecord::Base.transaction do
-
 # Helper method to get the Article's version class
 def article_version_class
   # ArticleVersion is dynamically created by Traceable
@@ -928,7 +927,7 @@ test("Article ha traceable_enabled?") do
 end
 
 test("Article ha traceable_fields configurati") do
-  Article.traceable_fields == [:status, :title, :view_count, :published_at, :archived_at]
+  Article.traceable_fields == [ :status, :title, :view_count, :published_at, :archived_at ]
 end
 
 test("Article ha versions association") do
@@ -1227,7 +1226,7 @@ test("integration Traceable + Statusable") do
   # Check version tracks status change
   version = test_article.versions.where(event: "updated").first
   version.object_changes.key?("status") &&
-    version.object_changes["status"] == ["draft", "published"]
+    version.object_changes["status"] == [ "draft", "published" ]
 end
 
 section("TRACEABLE - Complex Scenarios")
@@ -1291,13 +1290,13 @@ test("traceable con campi nil/empty gestiti correttamente") do
   test_article.update!(title: "Changed Title")
   test_article.reload
   version1 = test_article.versions.where(event: "updated").first
-  title_changed = version1.object_changes["title"] == ["Empty Test Title", "Changed Title"]
+  title_changed = version1.object_changes["title"] == [ "Empty Test Title", "Changed Title" ]
 
   # Track another change
   test_article.update!(title: "Final Title")
   test_article.reload
   version2 = test_article.versions.where(event: "updated").first
-  title_changed_again = version2.object_changes["title"] == ["Changed Title", "Final Title"]
+  title_changed_again = version2.object_changes["title"] == [ "Changed Title", "Final Title" ]
 
   title_changed && title_changed_again
 end
@@ -1327,7 +1326,7 @@ if ActiveRecord::Base.connection.adapter_name == "PostgreSQL"
     # This would need custom JSON query implementation
     # For now, just verify versions are created correctly
     version = test_article.versions.where(event: "updated").first
-    version.object_changes["status"] == [nil, "published"]
+    version.object_changes["status"] == [ nil, "published" ]
   end
 else
   puts "  ⚠️  Skipping PostgreSQL-specific tests (not on PostgreSQL)"
@@ -1405,7 +1404,7 @@ Article.class_eval do
       after { puts "  [Callback] Article #{id} published!" }
     end
 
-    transition :archive, from: [:draft, :review, :published], to: :archived
+    transition :archive, from: [ :draft, :review, :published ], to: :archived
 
     transition :unarchive, from: :archived, to: :draft
   end
@@ -1421,7 +1420,7 @@ test("Article ha stateable_enabled?") do
 end
 
 test("Article ha stateable_states configurati") do
-  Article.stateable_states == [:draft, :review, :published, :archived]
+  Article.stateable_states == [ :draft, :review, :published, :archived ]
 end
 
 test("Article ha stateable_initial_state") do
@@ -1429,7 +1428,7 @@ test("Article ha stateable_initial_state") do
 end
 
 test("Article ha stateable_transitions configurate") do
-  Article.stateable_transitions.keys.sort == [:archive, :publish, :submit_for_review, :unarchive].sort
+  Article.stateable_transitions.keys.sort == [ :archive, :publish, :submit_for_review, :unarchive ].sort
 end
 
 test("Article ha state_transitions association") do
@@ -1739,7 +1738,7 @@ Article.class_eval do
       after { puts "  [Callback] Article #{id} published!" }
     end
 
-    transition :archive, from: [:draft, :review, :published], to: :archived
+    transition :archive, from: [ :draft, :review, :published ], to: :archived
     transition :unarchive, from: :archived, to: :draft
   end
 end
@@ -2137,7 +2136,7 @@ Article.class_eval do
 
     transition :submit_for_review, from: :draft, to: :review
     transition :publish, from: :review, to: :published
-    transition :archive, from: [:draft, :review, :published], to: :archived
+    transition :archive, from: [ :draft, :review, :published ], to: :archived
   end
 end
 

@@ -135,11 +135,11 @@ module BetterModel
         validate do
           condition_met = if condition.is_a?(Symbol)
                             send(condition)
-                          elsif condition.is_a?(Proc)
+          elsif condition.is_a?(Proc)
                             instance_exec(&condition)
-                          else
+          else
                             raise ArgumentError, "Condition must be a Symbol or Proc"
-                          end
+          end
 
           condition_met = !condition_met if negate
 

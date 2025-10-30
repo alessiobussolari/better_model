@@ -90,6 +90,9 @@ module BetterModel
   module Stateable
     extend ActiveSupport::Concern
 
+    # Thread-safe mutex for dynamic class creation
+    CLASS_CREATION_MUTEX = Mutex.new
+
     included do
       # Validazione ActiveRecord
       unless ancestors.include?(ActiveRecord::Base)
@@ -188,6 +191,9 @@ module BetterModel
 
       # Create or retrieve a StateTransition class for the given table name
       #
+      # Thread-safe implementation using mutex to prevent race conditions
+      # when multiple threads try to create the same class simultaneously.
+      #
       # @param table_name [String] Table name for state transitions
       # @return [Class] StateTransition class
       #
@@ -195,19 +201,27 @@ module BetterModel
         # Create a unique class name based on table name
         class_name = "#{table_name.camelize.singularize}"
 
-        # Check if class already exists in BetterModel namespace
+        # Fast path: check if class already exists (no lock needed)
         if BetterModel.const_defined?(class_name, false)
           return BetterModel.const_get(class_name)
         end
 
-        # Create new StateTransition class dynamically
-        transition_class = Class.new(BetterModel::StateTransition) do
-          self.table_name = table_name
-        end
+        # Slow path: acquire lock and create class
+        CLASS_CREATION_MUTEX.synchronize do
+          # Double-check after acquiring lock (another thread may have created it)
+          if BetterModel.const_defined?(class_name, false)
+            return BetterModel.const_get(class_name)
+          end
 
-        # Register the class in BetterModel namespace
-        BetterModel.const_set(class_name, transition_class)
-        transition_class
+          # Create new StateTransition class dynamically
+          transition_class = Class.new(BetterModel::StateTransition) do
+            self.table_name = table_name
+          end
+
+          # Register the class in BetterModel namespace
+          BetterModel.const_set(class_name, transition_class)
+          transition_class
+        end
       end
 
       # Setup dynamic methods per stati e transizioni

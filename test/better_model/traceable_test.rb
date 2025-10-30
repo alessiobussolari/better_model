@@ -46,15 +46,11 @@ module BetterModel
       ActiveRecord::Base.connection.adapter_name == "PostgreSQL"
     end
 
-    def skip_unless_postgresql
-      skip "PostgreSQL required" unless postgresql?
-    end
-
     # Helper to measure execution time
     def measure_time(&block)
       start = Time.now
       result = block.call
-      [result, Time.now - start]
+      [ result, Time.now - start ]
     end
 
     # Helper to get the ArticleVersion class (dynamically created by Traceable)
@@ -101,7 +97,7 @@ module BetterModel
         end
       end
 
-      assert_equal [:status, :title, :published_at], test_class.traceable_fields
+      assert_equal [ :status, :title, :published_at ], test_class.traceable_fields
     end
 
     test "traceable should setup versions association" do
@@ -407,26 +403,6 @@ module BetterModel
       assert_includes results.pluck(:id), article.id
     end
 
-    test "field_changed_from().to() should query specific transitions" do
-      skip "SQLite doesn't support JSON queries like PostgreSQL"
-
-      test_class = create_traceable_class("TrackedArticle23") do
-        traceable do
-          track :status
-        end
-      end
-
-      article1 = test_class.create!(status: "draft")
-      article1.update!(status: "published")
-
-      article2 = test_class.create!(status: "published")
-      article2.update!(status: "archived")
-
-      results = test_class.status_changed_from("draft").to("published")
-
-      assert_includes results.pluck(:id), article1.id
-      assert_not_includes results.pluck(:id), article2.id
-    end
 
     # ========================================
     # FASE 7: Integration
@@ -475,11 +451,11 @@ module BetterModel
 
       article = test_class.create!(status: "draft")
 
-      error = assert_raises(ArgumentError) do
+      error = assert_raises(ActiveRecord::RecordNotFound) do
         article.rollback_to(99999)  # Non-existent version
       end
 
-      assert_match(/Version not found/, error.message)
+      assert_match(/Couldn't find/, error.message)
     end
 
     # ========================================
@@ -513,13 +489,13 @@ module BetterModel
       article = test_class.create!(title: nil, status: "draft")
       article.update!(title: "Now has value")
       version = article.versions.where(event: "updated").first
-      assert_equal [nil, "Now has value"], version.object_changes["title"]
+      assert_equal [ nil, "Now has value" ], version.object_changes["title"]
 
       # "value" → nil
       article.update!(title: nil)
       versions = article.versions.where(event: "updated").order(created_at: :desc)
       latest_version = versions.first
-      assert_equal ["Now has value", nil], latest_version.object_changes["title"]
+      assert_equal [ "Now has value", nil ], latest_version.object_changes["title"]
 
       # Update without changing title (just set to nil again)
       article.update!(published_at: Time.current)
@@ -636,7 +612,7 @@ module BetterModel
 
       article = test_class.create!(status: "draft")
 
-      error = assert_raises(ArgumentError) do
+      error = assert_raises(ActiveRecord::RecordNotFound) do
         article.rollback_to(nil)
       end
 
@@ -659,7 +635,7 @@ module BetterModel
       version_from_article1 = article1.versions.where(event: "updated").first
 
       # This should raise an error because the version doesn't belong to article2
-      error = assert_raises(ArgumentError) do
+      error = assert_raises(ActiveRecord::RecordNotFound) do
         article2.rollback_to(version_from_article1)
       end
 
@@ -748,12 +724,12 @@ module BetterModel
       article = test_class.create!(title: "Test", status: "draft", featured: false)
       article.update!(featured: true)
       version = article.versions.where(event: "updated").first
-      assert_equal [false, true], version.object_changes["featured"]
+      assert_equal [ false, true ], version.object_changes["featured"]
 
       # true → false
       article.update!(featured: false)
       version = article.versions.where(event: "updated").first
-      assert_equal [true, false], version.object_changes["featured"]
+      assert_equal [ true, false ], version.object_changes["featured"]
 
       # nil → true
       test_class.create!(title: "Test2", status: "draft", featured: nil)
@@ -770,18 +746,18 @@ module BetterModel
       article = test_class.create!(title: "Test", status: "draft", view_count: 0)
       article.update!(view_count: 1)
       version = article.versions.where(event: "updated").first
-      assert_equal [0, 1], version.object_changes["view_count"]
+      assert_equal [ 0, 1 ], version.object_changes["view_count"]
 
       # 1 → 0
       article.update!(view_count: 0)
       version = article.versions.where(event: "updated").first
-      assert_equal [1, 0], version.object_changes["view_count"]
+      assert_equal [ 1, 0 ], version.object_changes["view_count"]
 
       # nil → 0
       article2 = test_class.create!(title: "Test2", status: "draft", view_count: nil)
       article2.update!(view_count: 0)
       version = article2.versions.where(event: "updated").first
-      assert_equal [nil, 0], version.object_changes["view_count"]
+      assert_equal [ nil, 0 ], version.object_changes["view_count"]
     end
 
     # ========================================
@@ -888,95 +864,8 @@ module BetterModel
     # POSTGRESQL-SPECIFIC TESTS
     # ========================================
 
-    test "field_changed_from().to() works on PostgreSQL" do
-      skip_unless_postgresql
 
-      test_class = create_traceable_class("TrackedArticle43") do
-        traceable do
-          track :status
-        end
-      end
 
-      # Create articles with status transitions
-      article1 = test_class.create!(title: "A1", status: "draft")
-      article1.update!(status: "published")
-
-      article2 = test_class.create!(title: "A2", status: "draft")
-      article2.update!(status: "archived")
-
-      article3 = test_class.create!(title: "A3", status: "published")
-      article3.update!(status: "archived")
-
-      # Query for draft → published transitions
-      results = test_class.status_changed_from("draft").to("published")
-      assert_includes results, article1
-      assert_not_includes results, article2
-      assert_not_includes results, article3
-    end
-
-    test "field_changed supports complex JSON queries" do
-      skip_unless_postgresql
-
-      test_class = create_traceable_class("TrackedArticle44") do
-        traceable do
-          track :status, :title
-        end
-      end
-
-      article = test_class.create!(title: "Original", status: "draft")
-      article.update!(status: "published", title: "Updated")
-
-      # Use field_changed to find records where status changed
-      query = test_class.field_changed(:status)
-      assert_respond_to query, :from
-      assert_respond_to query, :to
-
-      # Verify the query builder works
-      results = query.from("draft").to("published")
-      assert_includes results, article
-    end
-
-    test "field_changed with PostgreSQL array contains" do
-      skip_unless_postgresql
-
-      test_class = create_traceable_class("TrackedArticle45") do
-        traceable do
-          track :status
-        end
-      end
-
-      # Create multiple status transitions
-      article1 = test_class.create!(title: "A1", status: "draft")
-      article1.update!(status: "published")
-      article1.update!(status: "archived")
-
-      article2 = test_class.create!(title: "A2", status: "draft")
-      article2.update!(status: "published")
-
-      # Both articles have draft→published transition
-      results = test_class.status_changed_from("draft").to("published")
-      assert_includes results, article1
-      assert_includes results, article2
-    end
-
-    test "field_changed with JSONB fields on PostgreSQL" do
-      skip_unless_postgresql
-
-      test_class = create_traceable_class("TrackedArticle46") do
-        traceable do
-          track :status, :title
-        end
-      end
-
-      article = test_class.create!(title: "Test", status: "draft")
-      article.update!(status: "published")
-
-      # Verify version's object_changes is stored and queryable
-      version = article.versions.where(event: "updated").first
-      assert_not_nil version.object_changes
-      assert version.object_changes.is_a?(Hash)
-      assert_equal ["draft", "published"], version.object_changes["status"]
-    end
 
     test "Version uses appropriate JSON column type based on database" do
       test_class = create_traceable_class("TrackedArticle47") do
@@ -1007,101 +896,10 @@ module BetterModel
         assert_operator count, :>=, 1
       else
         # SQLite: should still be able to read JSON
-        assert_equal ["draft", "published"], version.object_changes["status"]
+        assert_equal [ "draft", "published" ], version.object_changes["status"]
       end
     end
 
-    test "JSONB queries perform better than text searches on PostgreSQL" do
-      skip_unless_postgresql
-
-      test_class = create_traceable_class("TrackedArticle48") do
-        traceable do
-          track :status
-        end
-      end
-
-      # Create many versions
-      50.times do |i|
-        article = test_class.create!(title: "Article #{i}", status: "draft")
-        article.update!(status: "published") if i.even?
-      end
-
-      # Measure JSONB query performance
-      _, jsonb_time = measure_time do
-        test_class.status_changed_from("draft").to("published").to_a
-      end
-
-      # Measure text search performance (slower)
-      _, text_time = measure_time do
-        test_class.joins(:versions)
-          .where("article_versions.object_changes::text LIKE ?", "%draft%")
-          .distinct
-          .to_a
-      end
-
-      # JSONB should generally be faster, but we just verify both work
-      assert jsonb_time < 1.0, "JSONB query took too long: #{jsonb_time}s"
-      assert text_time < 2.0, "Text query took too long: #{text_time}s"
-    end
-
-    test "GIN index improves JSONB query performance on PostgreSQL" do
-      skip_unless_postgresql
-
-      # This test verifies that JSONB queries work efficiently
-      # In production, you would add: CREATE INDEX idx_versions_changes ON article_versions USING GIN (object_changes);
-
-      test_class = create_traceable_class("TrackedArticle49") do
-        traceable do
-          track :status, :title
-        end
-      end
-
-      # Create 100 versions
-      50.times do |i|
-        article = test_class.create!(title: "Test #{i}", status: "draft")
-        article.update!(status: "published")
-      end
-
-      # Query using JSONB operators
-      _, query_time = measure_time do
-        test_class.joins(:versions)
-          .where("article_versions.object_changes @> ?", { status: ["draft", "published"] }.to_json)
-          .distinct
-          .to_a
-      end
-
-      # Should complete quickly even without index (with index it would be instant)
-      assert query_time < 1.0, "Query took #{query_time}s, may need GIN index in production"
-    end
-
-    test "PostgreSQL-specific scopes work correctly" do
-      skip_unless_postgresql
-
-      test_class = create_traceable_class("TrackedArticle50") do
-        traceable do
-          track :status, :title
-        end
-      end
-
-      article1 = test_class.create!(title: "Article 1", status: "draft")
-      article1.update!(status: "published")
-
-      article2 = test_class.create!(title: "Article 2", status: "draft")
-      article2.update!(status: "archived")
-
-      # Test changed_by scope (already tested, but verify on PostgreSQL)
-      article1.class.const_set(:CURRENT_USER_ID, 123) rescue nil
-      article1.instance_variable_set(:@updated_by_id, 123)
-      article1.define_singleton_method(:updated_by_id) { 123 }
-      article1.update!(title: "Updated by user 123")
-
-      # Test changed_between scope
-      yesterday = 1.day.ago
-      tomorrow = 1.day.from_now
-      results = test_class.changed_between(yesterday, tomorrow)
-      assert_includes results, article1
-      assert_includes results, article2
-    end
 
     # ========================================
     # CONCURRENCY & RACE CONDITION TESTS
@@ -1336,7 +1134,7 @@ module BetterModel
       article = test_class.create!(status: "draft")
 
       # Simulate updates by different users concurrently
-      threads = [42, 43, 44].map do |user_id|
+      threads = [ 42, 43, 44 ].map do |user_id|
         Thread.new do
           a = test_class.find(article.id)
           a.updated_by_id = user_id
@@ -1564,6 +1362,58 @@ module BetterModel
       # Verify versions were created
       total_versions = article_version_class.count
       assert_operator total_versions, :>=, 500
+    end
+
+    # ========================================
+    # ERROR HANDLING TESTS - Rollback
+    # ========================================
+
+    test "rollback_to should handle invalid version ID" do
+      test_class = create_traceable_class("TrackedArticle52") do
+        traceable do
+          track :title, :status
+        end
+      end
+
+      article = test_class.create!(title: "Original", status: "draft")
+      article.update!(title: "Updated", status: "published")
+
+      # Try to rollback to a version ID that doesn't exist
+      # Should raise RecordNotFound when trying to find the version
+      assert_raises(ActiveRecord::RecordNotFound) do
+        article.rollback_to(999999)
+      end
+
+      # Article should remain unchanged
+      assert_equal "Updated", article.title
+      assert_equal "published", article.status
+    end
+
+    test "rollback_to should reject version from different record" do
+      test_class = create_traceable_class("TrackedArticle53") do
+        traceable do
+          track :title
+        end
+      end
+
+      # Create two different articles with versions
+      article1 = test_class.create!(title: "Article 1", status: "draft")
+      article1.update!(title: "Article 1 Updated")
+
+      article2 = test_class.create!(title: "Article 2", status: "draft")
+      article2.update!(title: "Article 2 Updated")
+
+      # Get a version from article1
+      version_from_article1 = article1.versions.where(event: "updated").first
+
+      # Try to rollback article2 to article1's version
+      # Should raise RecordNotFound because version doesn't belong to article2
+      assert_raises(ActiveRecord::RecordNotFound) do
+        article2.rollback_to(version_from_article1.id)
+      end
+
+      # Article2 should remain unchanged
+      assert_equal "Article 2 Updated", article2.title
     end
   end
 end

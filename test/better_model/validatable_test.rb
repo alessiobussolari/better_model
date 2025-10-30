@@ -230,8 +230,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
         validate :status, presence: true
         validate :view_count, presence: true
 
-        validation_group :step1, [:title]
-        validation_group :step2, [:status, :view_count]
+        validation_group :step1, [ :title ]
+        validation_group :step2, [ :status, :view_count ]
       end
     end
 
@@ -253,7 +253,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
         validate :title, presence: true
         validate :status, presence: true
 
-        validation_group :step1, [:title]
+        validation_group :step1, [ :title ]
       end
     end
 
@@ -316,8 +316,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
         validate_business_rule :valid_view_count
 
         # Validation groups
-        validation_group :basic, [:title, :status]
-        validation_group :publishing, [:published_at, :scheduled_for]
+        validation_group :basic, [ :title, :status ]
+        validation_group :publishing, [ :published_at, :scheduled_for ]
       end
 
       def valid_view_count
@@ -884,7 +884,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     begin
       result = article.valid?
       # If it doesn't raise, it should return a boolean
-      assert [true, false].include?(result)
+      assert [ true, false ].include?(result)
     rescue ArgumentError, TypeError
       # Some implementations might raise an error for incompatible types
       # This is acceptable behavior
@@ -1056,7 +1056,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
         validate :title, presence: true
 
         # status has no validations defined
-        validation_group :status_group, [:status]
+        validation_group :status_group, [ :status ]
       end
     end
 
@@ -1073,8 +1073,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     error = assert_raises(ArgumentError) do
       create_validatable_class(:ValidatableArticle50) do
         validatable do
-          validation_group :step1, [:title]
-          validation_group :step1, [:status]  # Duplicate!
+          validation_group :step1, [ :title ]
+          validation_group :step1, [ :status ]  # Duplicate!
         end
       end
     end
@@ -1087,7 +1087,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       validatable do
         validate :title, presence: true
         validate :status, presence: true
-        validation_group :step1, [:title]
+        validation_group :step1, [ :title ]
       end
     end
 
@@ -1105,7 +1105,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     article_class = create_validatable_class(:ValidatableArticle52) do
       validatable do
         validate :title, presence: true
-        validation_group :step1, [:title]
+        validation_group :step1, [ :title ]
       end
     end
 
@@ -1124,8 +1124,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
         validate :status, presence: true
         validate :content, presence: true
 
-        validation_group :group1, [:title, :status]
-        validation_group :group2, [:status, :content]  # status overlaps
+        validation_group :group1, [ :title, :status ]
+        validation_group :group2, [ :status, :content ]  # status overlaps
       end
     end
 
@@ -1153,7 +1153,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
         validate :title, presence: true
         validate :status, presence: true
 
-        validation_group :group1, [:title]
+        validation_group :group1, [ :title ]
       end
     end
 
@@ -1180,8 +1180,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
         validate :status, presence: true
         validate :content, presence: true
 
-        validation_group :title_only, [:title]
-        validation_group :content_only, [:content]
+        validation_group :title_only, [ :title ]
+        validation_group :content_only, [ :content ]
       end
     end
 
@@ -1417,7 +1417,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
 
         # Create 10 groups with 2 fields each
         10.times do |i|
-          validation_group "group_#{i}".to_sym, ["field_#{i * 2}".to_sym, "field_#{i * 2 + 1}".to_sym]
+          validation_group "group_#{i}".to_sym, [ "field_#{i * 2}".to_sym, "field_#{i * 2 + 1}".to_sym ]
         end
       end
     end
@@ -1738,8 +1738,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
         validate :last_name, presence: true
 
         # Group definitions - specify which fields to validate in each step
-        validation_group :step1, [:email, :password]
-        validation_group :step2, [:first_name, :last_name]
+        validation_group :step1, [ :email, :password ]
+        validation_group :step2, [ :first_name, :last_name ]
       end
     end
 
@@ -1774,5 +1774,133 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     article = article_class.new(email: "invalid@")
     assert_not article.valid?
     assert article.errors.attribute_names.include?(:email)
+  end
+
+  # ========================================
+  # ORDER VALIDATOR TESTS
+  # ========================================
+
+  test "order validator should work with :lt comparator" do
+    article_class = create_validatable_class(:ValidatableArticle80) do
+      attr_accessor :min_price, :max_price
+
+      validatable do
+        validate :min_price, order: { second_field: :max_price, comparator: :lt }
+      end
+    end
+
+    # Valid: min_price < max_price
+    article = article_class.new(min_price: 10, max_price: 20)
+    assert article.valid?
+
+    # Invalid: min_price >= max_price
+    article = article_class.new(min_price: 20, max_price: 10)
+    assert_not article.valid?
+    assert_includes article.errors[:min_price], "must be less than max price"
+
+    # Invalid: min_price == max_price
+    article = article_class.new(min_price: 15, max_price: 15)
+    assert_not article.valid?
+  end
+
+  test "order validator should work with :gt comparator" do
+    article_class = create_validatable_class(:ValidatableArticle81) do
+      attr_accessor :current_price, :original_price
+
+      validatable do
+        validate :current_price, order: { second_field: :original_price, comparator: :gt }
+      end
+    end
+
+    # Valid: current_price > original_price
+    article = article_class.new(current_price: 150, original_price: 100)
+    assert article.valid?
+
+    # Invalid: current_price <= original_price
+    article = article_class.new(current_price: 100, original_price: 150)
+    assert_not article.valid?
+    assert_includes article.errors[:current_price], "must be greater than original price"
+
+    # Invalid: current_price == original_price
+    article = article_class.new(current_price: 100, original_price: 100)
+    assert_not article.valid?
+  end
+
+  test "order validator should handle nil values correctly" do
+    article_class = create_validatable_class(:ValidatableArticle82) do
+      attr_accessor :starts_at, :ends_at
+
+      validatable do
+        validate :starts_at, order: { second_field: :ends_at, comparator: :before }
+      end
+    end
+
+    # Both nil - should skip validation (valid)
+    article = article_class.new(starts_at: nil, ends_at: nil)
+    assert article.valid?
+
+    # First nil, second present - should skip validation (valid)
+    article = article_class.new(starts_at: nil, ends_at: Time.current + 1.hour)
+    assert article.valid?
+
+    # First present, second nil - should skip validation (valid)
+    article = article_class.new(starts_at: Time.current, ends_at: nil)
+    assert article.valid?
+
+    # Both present - normal validation
+    starts = Time.current
+    ends = starts + 2.hours
+    article = article_class.new(starts_at: starts, ends_at: ends)
+    assert article.valid?
+  end
+
+  test "order validator should generate correct error messages for all comparators" do
+    # Test :before
+    article_class1 = create_validatable_class(:ValidatableArticle83) do
+      attr_accessor :starts_at, :ends_at
+      validatable { validate :starts_at, order: { second_field: :ends_at, comparator: :before } }
+    end
+    article = article_class1.new(starts_at: Time.current + 1.hour, ends_at: Time.current)
+    assert_not article.valid?
+    assert_includes article.errors[:starts_at], "must be before ends at"
+
+    # Test :after
+    article_class2 = create_validatable_class(:ValidatableArticle84) do
+      attr_accessor :ends_at, :starts_at
+      validatable { validate :ends_at, order: { second_field: :starts_at, comparator: :after } }
+    end
+    article = article_class2.new(ends_at: Time.current, starts_at: Time.current + 1.hour)
+    assert_not article.valid?
+    assert_includes article.errors[:ends_at], "must be after starts at"
+
+    # Test :lteq
+    article_class3 = create_validatable_class(:ValidatableArticle85) do
+      attr_accessor :min_value, :max_value
+      validatable { validate :min_value, order: { second_field: :max_value, comparator: :lteq } }
+    end
+    article = article_class3.new(min_value: 100, max_value: 50)
+    assert_not article.valid?
+    assert_includes article.errors[:min_value], "must be less than or equal to max value"
+
+    # Test :gteq
+    article_class4 = create_validatable_class(:ValidatableArticle86) do
+      attr_accessor :max_value, :min_value
+      validatable { validate :max_value, order: { second_field: :min_value, comparator: :gteq } }
+    end
+    article = article_class4.new(max_value: 50, min_value: 100)
+    assert_not article.valid?
+    assert_includes article.errors[:max_value], "must be greater than or equal to min value"
+  end
+
+  test "order validator should raise error for invalid comparator" do
+    assert_raises(ArgumentError, /Invalid comparator/) do
+      create_validatable_class(:ValidatableArticle87) do
+        attr_accessor :field1, :field2
+
+        validatable do
+          validate :field1, order: { second_field: :field2, comparator: :invalid }
+        end
+      end
+    end
   end
 end

@@ -446,7 +446,7 @@ module BetterModel
 
     test "case insensitive sort scopes are generated for string/text fields" do
       string_fields = Article.sortable_fields.select do |field|
-        [:string, :text].include?(Article.columns_hash[field.to_s]&.type)
+        [ :string, :text ].include?(Article.columns_hash[field.to_s]&.type)
       end
 
       string_fields.each do |field|
@@ -482,7 +482,7 @@ module BetterModel
 
     test "case insensitive sort scopes execute without errors" do
       string_fields = Article.sortable_fields.select do |field|
-        [:string, :text].include?(Article.columns_hash[field.to_s]&.type)
+        [ :string, :text ].include?(Article.columns_hash[field.to_s]&.type)
       end
 
       string_fields.each do |field|

@@ -59,7 +59,7 @@ module BetterModel
           next unless column
 
           # Base predicates available for all column types
-          define_base_predicates(field_name)
+          define_base_predicates(field_name, column.type)
 
           case column.type
           when :string, :text
@@ -142,7 +142,7 @@ module BetterModel
       end
 
       # Genera predicati base: _eq, _not_eq, _present
-      def define_base_predicates(field_name)
+      def define_base_predicates(field_name, column_type = nil)
         table = arel_table
         field = table[field_name]
 
@@ -150,24 +150,26 @@ module BetterModel
         scope :"#{field_name}_eq", ->(value) { where(field.eq(value)) }
         scope :"#{field_name}_not_eq", ->(value) { where(field.not_eq(value)) }
 
-        # Presence
-        scope :"#{field_name}_present", -> { where(field.not_eq(nil)) }
+        # Presence - skip for string/text types as they get specialized version
+        # String types need to check for both nil and empty string
+        unless [ :string, :text ].include?(column_type)
+          scope :"#{field_name}_present", -> { where(field.not_eq(nil)) }
+        end
 
-        register_predicable_scopes(
-          :"#{field_name}_eq",
-          :"#{field_name}_not_eq",
-          :"#{field_name}_present"
-        )
+        scopes_to_register = [ :"#{field_name}_eq", :"#{field_name}_not_eq" ]
+        scopes_to_register << :"#{field_name}_present" unless [ :string, :text ].include?(column_type)
+
+        register_predicable_scopes(*scopes_to_register)
       end
 
       # Genera predicati per campi stringa (12 scope)
       # Base predicates (_eq, _not_eq) are defined separately
-      # _present is redefined here to handle empty strings
+      # _present is defined here to handle both nil and empty strings
       def define_string_predicates(field_name)
         table = arel_table
         field = table[field_name]
 
-        # String-specific presence check (overrides base _present)
+        # String-specific presence check (checks both nil and empty string)
         scope :"#{field_name}_present", -> { where(field.not_eq(nil).and(field.not_eq(""))) }
 
         # Pattern matching (4)
@@ -273,6 +275,10 @@ module BetterModel
       end
 
       # Genera predicati per campi array PostgreSQL (3 scope)
+      #
+      # NOTA: Questo metodo non è coperto da test automatici perché richiede
+      # PostgreSQL. I test vengono eseguiti su SQLite per performance.
+      # Testare manualmente su PostgreSQL con: rails console RAILS_ENV=test
       def define_postgresql_array_predicates(field_name)
         return unless postgresql_adapter?
 
@@ -325,6 +331,10 @@ module BetterModel
       end
 
       # Genera predicati per campi JSONB PostgreSQL (4 scope)
+      #
+      # NOTA: Questo metodo non è coperto da test automatici perché richiede
+      # PostgreSQL con supporto JSONB. I test vengono eseguiti su SQLite per performance.
+      # Testare manualmente su PostgreSQL con: rails console RAILS_ENV=test
       def define_postgresql_jsonb_predicates(field_name)
         return unless postgresql_adapter?
 

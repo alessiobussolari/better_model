@@ -22,7 +22,7 @@ class CreateBetterModelVersions < ActiveRecord::Migration[8.1]
     end
 
     # Indexes for performance
-    add_index :better_model_versions, [:item_type, :item_id], name: "index_versions_on_item"
+    add_index :better_model_versions, [ :item_type, :item_id ], name: "index_versions_on_item"
     add_index :better_model_versions, :created_at
     add_index :better_model_versions, :updated_by_id
     add_index :better_model_versions, :event

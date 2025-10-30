@@ -354,5 +354,84 @@ module BetterModel
       assert child.archivable_enabled?
       assert_equal parent.archivable_config, child.archivable_config
     end
+
+    # ========================================
+    # ERROR HANDLING TESTS - User Tracking
+    # ========================================
+
+    test "archive! should handle user object with id method" do
+      Article.class_eval { archivable }
+      article = Article.create!(title: "Test")
+
+      # Simulate user object with .id method
+      user = Struct.new(:id).new(42)
+
+      article.archive!(by: user)
+
+      assert_equal 42, article.archived_by_id
+    end
+
+    test "archive! should handle direct integer ID" do
+      Article.class_eval { archivable }
+      article = Article.create!(title: "Test")
+
+      # Direct ID (not object)
+      article.archive!(by: 99)
+
+      assert_equal 99, article.archived_by_id
+    end
+
+    test "archive! should not fail when archived_by_id column missing" do
+      # Create a class without archived_by_id column
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel
+
+        # Override respond_to? to simulate missing setter
+        def respond_to?(method, include_private = false)
+          return false if method == :archived_by_id=
+          super
+        end
+
+        archivable
+      end
+
+      article = test_class.create!(title: "Test", created_at: Time.current, updated_at: Time.current)
+
+      # Should not raise error even when trying to set archived_by
+      assert_nothing_raised do
+        article.archive!(by: 42)
+      end
+
+      # archived_at should still be set
+      assert article.archived_at.present?
+    end
+
+    test "archive! should not fail when archive_reason column missing" do
+      # Create a class without archive_reason column
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel
+
+        # Override respond_to? to simulate missing setter
+        def respond_to?(method, include_private = false)
+          return false if method == :archive_reason=
+          super
+        end
+
+        archivable
+      end
+
+      article = test_class.create!(title: "Test", created_at: Time.current, updated_at: Time.current)
+
+      # Should not raise error even when trying to set reason
+      assert_nothing_raised do
+        article.archive!(by: 42, reason: "Obsolete")
+      end
+
+      # archived_at and archived_by_id should still be set
+      assert article.archived_at.present?
+      assert_equal 42, article.archived_by_id
+    end
   end
 end

@@ -91,7 +91,13 @@ class Article < ApplicationRecord
     transition :archive, from: [:draft, :published], to: :archived
   end
 
-  # 8. SEARCHABLE - Configure unified search interface
+  # 8. TRACEABLE - Audit trail with time-travel (opt-in)
+  traceable do
+    track :title, :content, :status, :published_at
+    versions_table :article_versions  # Optional: custom table
+  end
+
+  # 9. SEARCHABLE - Configure unified search interface
   searchable do
     per_page 25
     max_per_page 100
@@ -149,6 +155,17 @@ article.published?       # => true
 article.state_transitions  # History of all transitions
 article.transition_history # Formatted history array
 
+# ⏰ Time travel & rollback (Traceable)
+article.audit_trail              # Full change history
+article.as_of(3.days.ago)        # Reconstruct past state
+article.rollback_to(version)     # Restore to previous version
+article.changes_for(:status)     # Changes for specific field
+
+# 🔍 Query changes
+Article.changed_by(user.id)
+Article.changed_between(1.week.ago, Time.current)
+Article.status_changed_from("draft").to("published")
+
 # 🔎 Unified search with filters, sorting, and pagination
 Article.search(
   { status_eq: "published", view_count_gteq: 50 },
@@ -166,6 +183,7 @@ class Article < ApplicationRecord
   include BetterModel::Statusable    # Only status management
   include BetterModel::Permissible   # Only permissions
   include BetterModel::Archivable    # Only archiving
+  include BetterModel::Traceable     # Only audit trail & time-travel
   include BetterModel::Sortable      # Only sorting
   include BetterModel::Predicable    # Only filtering
   include BetterModel::Validatable   # Only validations
@@ -175,6 +193,24 @@ class Article < ApplicationRecord
   # Define your features...
 end
 ```
+
+## 📋 Features Overview
+
+BetterModel provides nine powerful concerns that work seamlessly together:
+
+### Core Features
+
+- **✨ Statusable** - Declarative status management with lambda-based conditions
+- **🔐 Permissible** - State-based permission system
+- **🗄️ Archivable** - Soft delete with tracking (by user, reason)
+- **⏰ Traceable** 🆕 - Complete audit trail with time-travel and rollback
+- **⬆️ Sortable** - Type-aware sorting scopes
+- **🔍 Predicable** - Advanced filtering with rich predicate system
+- **🔎 Searchable** - Unified search interface (Predicable + Sortable)
+- **✅ Validatable** - Declarative validation DSL with conditional rules
+- **🔄 Stateable** 🆕 - Declarative state machines with guards & callbacks
+
+[See all features in detail →](#-features)
 
 ## ⚙️ Requirements
 
@@ -283,6 +319,27 @@ Define state machines declaratively with transitions, guards, validations, and c
 - 🔒 Thread-safe with immutable configuration
 
 **[📖 Full Documentation →](docs/stateable.md)**
+
+---
+
+### ⏰ Traceable - Audit Trail with Time-Travel
+
+Track all changes to your records with complete audit trail, time-travel capabilities, and rollback support.
+
+**🎯 Key Benefits:**
+- 🎛️ Opt-in activation: only enabled when explicitly configured
+- 📝 Automatic change tracking on create, update, and destroy
+- 👤 User attribution: track who made each change
+- 💬 Change reasons: optional context for changes
+- ⏰ Time-travel: reconstruct object state at any point in history
+- ↩️ Rollback support: restore records to previous versions
+- 🔍 Rich query API: find changes by user, time, or field transitions
+- 📊 Flexible table naming: per-model, shared, or custom tables
+- 🔗 Polymorphic association for efficient storage
+- 💾 Database adapter safety: PostgreSQL, MySQL, SQLite support
+- 🔒 Thread-safe dynamic class creation
+
+**[📖 Full Documentation →](docs/traceable.md)**
 
 ---
 
@@ -487,6 +544,38 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 - 💻 **Source Code:** [GitHub Repository](https://github.com/alessiobussolari/better_model)
 - 📖 **Documentation:** This README and detailed docs in `docs/` directory
 
+## 📚 Complete Documentation
+
+### 📖 Feature Guides
+
+Detailed documentation for each BetterModel concern:
+
+- [**Statusable**](docs/statusable.md) - Status management with derived conditions
+- [**Permissible**](docs/permissible.md) - Permission system based on state
+- [**Archivable**](docs/archivable.md) - Soft delete with comprehensive tracking
+- [**Traceable**](docs/traceable.md) 🆕 - Audit trail, time-travel, and rollback
+- [**Sortable**](docs/sortable.md) - Type-aware sorting system
+- [**Predicable**](docs/predicable.md) - Advanced filtering and predicates
+- [**Searchable**](docs/searchable.md) - Unified search interface
+- [**Validatable**](docs/validatable.md) - Declarative validation system
+- [**Stateable**](docs/stateable.md) 🆕 - State machine with transitions
+
+### 🎓 Advanced Guides
+
+Learn how to master BetterModel in production:
+
+- [**Integration Guide**](docs/integration_guide.md) 🆕 - Combining multiple concerns effectively
+- [**Performance Guide**](docs/performance_guide.md) 🆕 - Optimization strategies and indexing
+- [**Migration Guide**](docs/migration_guide.md) 🆕 - Adding BetterModel to existing apps
+
+### 💡 Quick Links
+
+- [Installation](#-installation)
+- [Quick Start](#-quick-start)
+- [Features Overview](#-features-overview)
+- [Requirements](#%EF%B8%8F-requirements)
+- [Contributing](#-contributing)
+
 ## 🤝 Contributing
 
 We welcome contributions! Here's how you can help:
@@ -531,6 +620,27 @@ bundle exec rake test  # Coverage report in coverage/index.html
 # Run RuboCop
 bundle exec rubocop
 ```
+
+### 📊 Test Coverage Notes
+
+The test suite runs on **SQLite** for performance and portability. Current coverage: **91.45%** (1272 / 1391 lines).
+
+**Database-Specific Features Not Covered:**
+- **Predicable**: PostgreSQL array predicates (`_overlaps`, `_contains`, `_contained_by`) and JSONB predicates (`_has_key`, `_has_any_key`, `_has_all_keys`, `_jsonb_contains`) - lines 278-376 in `lib/better_model/predicable.rb`
+- **Traceable**: PostgreSQL JSONB queries and MySQL JSON_EXTRACT queries for field-specific change tracking - lines 454-489 in `lib/better_model/traceable.rb`
+- **Sortable**: MySQL NULLS emulation with CASE statements - lines 198-203 in `lib/better_model/sortable.rb`
+
+These features are fully implemented with proper SQL sanitization but require manual testing on PostgreSQL/MySQL:
+
+```bash
+# Test on PostgreSQL
+RAILS_ENV=test DATABASE_URL=postgresql://user:pass@localhost/better_model_test rails console
+
+# Test on MySQL
+RAILS_ENV=test DATABASE_URL=mysql2://user:pass@localhost/better_model_test rails console
+```
+
+All code has inline comments marking database-specific sections for maintainability.
 
 ### 📐 Code Guidelines
 

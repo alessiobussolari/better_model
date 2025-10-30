@@ -985,7 +985,7 @@ module BetterModel
       Article.create!(title: "Test", status: "draft")
 
       error = assert_raises(BetterModel::Searchable::InvalidOrderError) do
-        Article.search({}, orders: [:nonexistent_sort_scope])
+        Article.search({}, orders: [ :nonexistent_sort_scope ])
       end
 
       assert_match(/Invalid order scope/, error.message)
@@ -1009,7 +1009,7 @@ module BetterModel
 
     test "search with ActionController::Parameters safely converts to hash" do
       # Simulate ActionController::Parameters (strong parameters)
-      require 'action_controller'
+      require "action_controller"
 
       params = ActionController::Parameters.new({
         title_cont: "test",
@@ -1073,6 +1073,100 @@ module BetterModel
       # Page without per_page should work (no limit)
       result = Article.search({}, pagination: { page: 1 })
       assert_equal 10, result.count
+    end
+
+    # ========================================
+    # SECURITY TESTS - DoS Protection
+    # ========================================
+
+    test "should raise error when page exceeds max_page limit" do
+      # Default max_page is 10,000
+      article = Article.create!(title: "SecurityTest1", status: "draft")
+
+      assert_raises(BetterModel::Searchable::InvalidPaginationError) do
+        Article.search({}, pagination: { page: 10001, per_page: 10 })
+      end
+
+      article.destroy
+    end
+
+    test "should raise error when predicates exceed max_predicates limit" do
+      # Default max_predicates is 100
+      article = Article.create!(title: "SecurityTest2", status: "draft")
+
+      # Create 101 predicates to exceed the limit
+      predicates = {}
+      101.times { |i| predicates["field_#{i}".to_sym] = "value" }
+
+      assert_raises(ArgumentError) do
+        Article.search(predicates)
+      end
+
+      article.destroy
+    end
+
+    test "should raise error when or_conditions exceed max_or_conditions limit" do
+      # Default max_or_conditions is 50
+      article = Article.create!(title: "SecurityTest3", status: "draft")
+
+      # Create 51 OR conditions to exceed the limit
+      or_conditions = []
+      51.times { |i| or_conditions << { title_eq: "Test#{i}" } }
+
+      assert_raises(ArgumentError) do
+        Article.search({ or: or_conditions })
+      end
+
+      article.destroy
+    end
+
+    test "should raise error for unpermitted ActionController::Parameters" do
+      skip "ActionController::Parameters not available" unless defined?(ActionController::Parameters)
+
+      article = Article.create!(title: "SecurityTest4", status: "draft")
+
+      # Create unpermitted parameters
+      params = ActionController::Parameters.new({ title_eq: "SecurityTest4", status_eq: "draft" })
+
+      error = assert_raises(ArgumentError) do
+        Article.search(params)
+      end
+
+      assert_match(/must be explicitly permitted/, error.message)
+
+      article.destroy
+    end
+
+    test "should work with permitted ActionController::Parameters" do
+      skip "ActionController::Parameters not available" unless defined?(ActionController::Parameters)
+
+      article = Article.create!(title: "SecurityTest5", status: "draft")
+
+      # Create permitted parameters
+      params = ActionController::Parameters.new({ title_eq: "SecurityTest5", status_eq: "draft" })
+      params.permit!
+
+      result = Article.search(params)
+      assert_equal 1, result.count
+
+      article.destroy
+    end
+
+    test "should validate security in nested OR conditions" do
+      article = Article.create!(title: "SecurityTest6", status: "draft")
+
+      # Create OR conditions with a security violation (empty value)
+      # Should skip empty values in OR conditions
+      result = Article.search({
+        or: [
+          { title_eq: "SecurityTest6" },
+          { status_eq: "" }  # Security violation: empty value - should be skipped
+        ]
+      })
+
+      assert_equal 1, result.count
+
+      article.destroy
     end
   end
 end

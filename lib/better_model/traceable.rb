@@ -53,6 +53,9 @@ module BetterModel
   module Traceable
     extend ActiveSupport::Concern
 
+    # Thread-safe mutex for dynamic class creation
+    CLASS_CREATION_MUTEX = Mutex.new
+
     included do
       # Validazione ActiveRecord
       unless ancestors.include?(ActiveRecord::Base)
@@ -175,25 +178,36 @@ module BetterModel
 
       # Create or retrieve a Version class for the given table name
       #
+      # Thread-safe implementation using mutex to prevent race conditions
+      # when multiple threads try to create the same class simultaneously.
+      #
       # @param table_name [String] Table name for versions
       # @return [Class] Version class
       def create_version_class_for_table(table_name)
         # Create a unique class name based on table name
         class_name = "#{table_name.camelize.singularize}"
 
-        # Check if class already exists in BetterModel namespace
+        # Fast path: check if class already exists (no lock needed)
         if BetterModel.const_defined?(class_name, false)
           return BetterModel.const_get(class_name)
         end
 
-        # Create new Version class dynamically
-        version_class = Class.new(BetterModel::Version) do
-          self.table_name = table_name
-        end
+        # Slow path: acquire lock and create class
+        CLASS_CREATION_MUTEX.synchronize do
+          # Double-check after acquiring lock (another thread may have created it)
+          if BetterModel.const_defined?(class_name, false)
+            return BetterModel.const_get(class_name)
+          end
 
-        # Register the class in BetterModel namespace
-        BetterModel.const_set(class_name, version_class)
-        version_class
+          # Create new Version class dynamically
+          version_class = Class.new(BetterModel::Version) do
+            self.table_name = table_name
+          end
+
+          # Register the class in BetterModel namespace
+          BetterModel.const_set(class_name, version_class)
+          version_class
+        end
       end
     end
 
@@ -271,14 +285,10 @@ module BetterModel
     def rollback_to(version, updated_by_id: nil, updated_reason: nil)
       raise NotEnabledError unless self.class.traceable_enabled?
 
-      begin
-        version = versions.find(version) if version.is_a?(Integer)
-      rescue ActiveRecord::RecordNotFound
-        raise ArgumentError, "Version not found"
-      end
+      version = versions.find(version) if version.is_a?(Integer)
 
-      raise ArgumentError, "Version not found" unless version
-      raise ArgumentError, "Version does not belong to this record" unless version.item == self
+      raise ActiveRecord::RecordNotFound, "Version not found" unless version
+      raise ActiveRecord::RecordNotFound, "Version does not belong to this record" unless version.item == self
 
       # Apply changes from version
       if version.object_changes
@@ -352,7 +362,7 @@ module BetterModel
     # Get final state for destroyed records
     def tracked_final_state
       self.class.traceable_fields.each_with_object({}) do |field, hash|
-        hash[field.to_s] = [send(field), nil]
+        hash[field.to_s] = [ send(field), nil ]
       end
     end
 
@@ -427,17 +437,59 @@ module BetterModel
 
     private
 
+    # Check if database supports JSON/JSONB queries
+    def postgres?
+      ActiveRecord::Base.connection.adapter_name.downcase == "postgresql"
+    end
+
+    def mysql?
+      adapter = ActiveRecord::Base.connection.adapter_name.downcase
+      adapter.include?("mysql") || adapter == "trilogy"
+    end
+
     def execute_query
-      query = @model_class
-              .joins(:versions)
-              .where("#{@table_name}.object_changes->>'#{@field}' IS NOT NULL")
+      # Base query
+      query = @model_class.joins(:versions)
 
-      if @from_value
-        query = query.where("#{@table_name}.object_changes->>'#{@field}' LIKE ?", "%#{@from_value}%")
-      end
+      # NOTA: I blocchi PostgreSQL e MySQL qui sotto non sono coperti da test
+      # automatici perché i test vengono eseguiti su SQLite per performance.
+      # Testare manualmente su PostgreSQL/MySQL con: rails console RAILS_ENV=test
 
-      if @to_value
-        query = query.where("#{@table_name}.object_changes->>'#{@field}' LIKE ?", "%#{@to_value}%")
+      # PostgreSQL: Use JSONB operators for better performance
+      if postgres?
+        query = query.where("#{@table_name}.object_changes ? :field", field: @field)
+
+        if @from_value
+          query = query.where("#{@table_name}.object_changes->>'#{@field}' LIKE ?", "%#{@from_value}%")
+        end
+
+        if @to_value
+          query = query.where("#{@table_name}.object_changes->>'#{@field}' LIKE ?", "%#{@to_value}%")
+        end
+      # MySQL 5.7+: Use JSON_EXTRACT
+      elsif mysql?
+        query = query.where("JSON_EXTRACT(#{@table_name}.object_changes, '$.#{@field}') IS NOT NULL")
+
+        if @from_value
+          query = query.where("JSON_EXTRACT(#{@table_name}.object_changes, '$.#{@field}') LIKE ?", "%#{@from_value}%")
+        end
+
+        if @to_value
+          query = query.where("JSON_EXTRACT(#{@table_name}.object_changes, '$.#{@field}') LIKE ?", "%#{@to_value}%")
+        end
+      # SQLite or fallback: Use text-based search (limited functionality)
+      else
+        Rails.logger.warn "Traceable field-specific queries may have limited functionality on #{ActiveRecord::Base.connection.adapter_name}"
+
+        query = query.where("#{@table_name}.object_changes LIKE ?", "%\"#{@field}\"%")
+
+        if @from_value
+          query = query.where("#{@table_name}.object_changes LIKE ?", "%#{@from_value}%")
+        end
+
+        if @to_value
+          query = query.where("#{@table_name}.object_changes LIKE ?", "%#{@to_value}%")
+        end
       end
 
       query.distinct

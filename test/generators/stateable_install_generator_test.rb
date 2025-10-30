@@ -39,19 +39,19 @@ module BetterModel
   # ============================================================================
 
   test "accepts custom table name via --table-name option" do
-    run_generator ["--table-name=custom_transitions"]
+    run_generator [ "--table-name=custom_transitions" ]
     assert_migration "db/migrate/create_custom_transitions.rb"
   end
 
   test "custom table name affects migration class name" do
-    run_generator ["--table-name=order_transitions"]
+    run_generator [ "--table-name=order_transitions" ]
     assert_migration "db/migrate/create_order_transitions.rb" do |migration|
       assert_match(/class CreateOrderTransitions/, migration)
     end
   end
 
   test "custom table name affects create_table statement" do
-    run_generator ["--table-name=article_transitions"]
+    run_generator [ "--table-name=article_transitions" ]
     assert_migration "db/migrate/create_article_transitions.rb" do |migration|
       assert_match(/create_table :article_transitions/, migration)
     end
@@ -161,7 +161,7 @@ module BetterModel
   # ============================================================================
 
   test "custom table name affects all indexes" do
-    run_generator ["--table-name=custom_transitions"]
+    run_generator [ "--table-name=custom_transitions" ]
     assert_migration "db/migrate/create_custom_transitions.rb" do |migration|
       assert_match(/add_index :custom_transitions, \[:transitionable_type, :transitionable_id\]/, migration)
       assert_match(/add_index :custom_transitions, :event/, migration)
@@ -172,7 +172,7 @@ module BetterModel
   end
 
   test "custom table name affects composite index name" do
-    run_generator ["--table-name=order_history"]
+    run_generator [ "--table-name=order_history" ]
     assert_migration "db/migrate/create_order_history.rb" do |migration|
       assert_match(/name: "index_order_history_on_transitionable"/, migration)
     end

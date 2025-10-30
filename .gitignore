@@ -25,3 +25,4 @@
 *.swo
 *~
 *.bak
+/test/dummy/log/
