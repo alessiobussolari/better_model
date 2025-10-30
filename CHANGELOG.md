@@ -36,10 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced Traceable documentation with table naming options and examples
 
 #### Testing & Coverage
-- **Total tests**: 424 (was 358, +66 tests)
-- **Code coverage**: 85.07% (maintained above 80% threshold)
-- **New test suite**: `validatable_test.rb` with 20 comprehensive tests
-- **All tests passing**: 0 failures, 0 errors, 11 skips
+- **Total tests**: 701 (476 unit tests + 225 manual integration tests)
+  - Unit tests: 476 automated tests with 1187 assertions
+  - Manual tests: 225 integration tests covering real-world scenarios
+  - New Validatable test suite: 72 unit tests + 20 manual tests = 92 comprehensive tests
+- **Code coverage**: 85.35% (909/1065 lines covered, maintained above 80% threshold)
+- **Pass rate**: 100% - All tests passing (0 failures, 0 errors, 11 skips)
+- **Test execution time**: ~6.4s for unit tests, ~8s for manual tests
 
 ## [1.0.0] - 2025-10-29
 
