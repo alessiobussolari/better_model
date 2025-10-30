@@ -115,7 +115,7 @@ module BetterModel
 
           # Applica default scope SOLO se configurato
           if archivable_config[:skip_archived_by_default]
-            default_scope -> { not_archived }
+            default_scope -> { where(archived_at: nil) }
           end
         end
       end
@@ -124,19 +124,19 @@ module BetterModel
       #
       # @return [ActiveRecord::Relation]
       def archived_only
-        raise NotEnabledError unless archivable_enabled?
+        raise ArchivableNotEnabledError unless archivable_enabled?
         unscoped.archived
       end
 
       # Helper: alias per archived_at_today
       def archived_today
-        raise NotEnabledError unless archivable_enabled?
+        raise ArchivableNotEnabledError unless archivable_enabled?
         archived_at_today
       end
 
       # Helper: alias per archived_at_this_week
       def archived_this_week
-        raise NotEnabledError unless archivable_enabled?
+        raise ArchivableNotEnabledError unless archivable_enabled?
         archived_at_this_week
       end
 
@@ -145,7 +145,7 @@ module BetterModel
       # @param duration [ActiveSupport::Duration] Durata (es: 7.days)
       # @return [ActiveRecord::Relation]
       def archived_recently(duration = 7.days)
-        raise NotEnabledError unless archivable_enabled?
+        raise ArchivableNotEnabledError unless archivable_enabled?
         archived_at_within(duration)
       end
 
@@ -164,10 +164,10 @@ module BetterModel
     # @param by [Integer, Object] ID utente o oggetto user (opzionale)
     # @param reason [String] Motivo dell'archiviazione (opzionale)
     # @return [self]
-    # @raise [NotEnabledError] se archivable non è attivo
+    # @raise [ArchivableNotEnabledError] se archivable non è attivo
     # @raise [AlreadyArchivedError] se già archiviato
     def archive!(by: nil, reason: nil)
-      raise NotEnabledError unless self.class.archivable_enabled?
+      raise ArchivableNotEnabledError unless self.class.archivable_enabled?
       raise AlreadyArchivedError, "Record is already archived" if archived?
 
       self.archived_at = Time.current
@@ -186,10 +186,10 @@ module BetterModel
     # Ripristina record archiviato
     #
     # @return [self]
-    # @raise [NotEnabledError] se archivable non è attivo
+    # @raise [ArchivableNotEnabledError] se archivable non è attivo
     # @raise [NotArchivedError] se non archiviato
     def restore!
-      raise NotEnabledError unless self.class.archivable_enabled?
+      raise ArchivableNotEnabledError unless self.class.archivable_enabled?
       raise NotArchivedError, "Record is not archived" unless archived?
 
       self.archived_at = nil
@@ -241,7 +241,7 @@ module BetterModel
   class AlreadyArchivedError < ArchivableError; end
   class NotArchivedError < ArchivableError; end
 
-  class NotEnabledError < ArchivableError
+  class ArchivableNotEnabledError < ArchivableError
     def initialize(msg = nil)
       super(msg || "Archivable is not enabled. Add 'archivable do...end' to your model.")
     end

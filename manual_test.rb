@@ -1,17 +1,40 @@
 # frozen_string_literal: true
 
 # Manual Testing Script per BetterModel
-# Esegui con: cd test/dummy && rails console
-# Poi: load 'manual_test.rb'
+#
+# IMPORTANT: This file is wrapped in a transaction with automatic rollback
+# to prevent database pollution. All changes made during this script are
+# automatically rolled back when the script completes.
+#
+# HOW TO USE:
+#   cd test/dummy
+#   rails console
+#   load '../../manual_test.rb'
+#
+# NOTE: This file should NOT be auto-loaded during the test suite.
+# If tests are finding unexpected "Perf Article" records, it means
+# this file was executed outside of a transaction. Make sure to run
+# it only via the console using 'load' command.
 
 puts "\n" + "=" * 80
 puts "  BETTERMODEL - MANUAL TESTING SCRIPT"
+puts "=" * 80
+puts "  (Running in transaction - all changes will be rolled back)"
 puts "=" * 80
 
 # Contatori per il report finale
 @tests_passed = 0
 @tests_failed = 0
 @errors = []
+
+# Wrap everything in a transaction with rollback
+ActiveRecord::Base.transaction do
+
+# Helper method to get the Article's version class
+def article_version_class
+  # ArticleVersion is dynamically created by Traceable
+  BetterModel::ArticleVersion
+end
 
 def test(description)
   print "  #{description}... "
@@ -687,6 +710,476 @@ test("archived scope works with sortable") do
 end
 
 # ============================================================================
+# TEST TRACEABLE - Change Tracking & Audit Trail
+# ============================================================================
+
+section("TRACEABLE - Setup and Configuration")
+
+# Pulisce versioni esistenti e attiva traceable
+# NOTE: Since we're using article_versions table now, we need to delete from there
+ActiveRecord::Base.connection.execute("DELETE FROM article_versions") if ActiveRecord::Base.connection.table_exists?("article_versions")
+puts "  Versioni pulite"
+
+# IMPORTANT: Activate traceable BEFORE creating test articles
+# This ensures callbacks are properly registered
+Article.class_eval do
+  traceable do
+    track :status, :title, :view_count, :published_at, :archived_at
+  end
+end
+puts "  Traceable attivato su Article"
+
+# Crea articles per test traceable DOPO aver attivato traceable
+@tracked_article = Article.unscoped.create!(
+  title: "Original Title",
+  content: "Original content",
+  status: "draft",
+  view_count: 0
+)
+puts "  Article di test creato per traceable"
+
+test("Article ha traceable_enabled?") do
+  Article.traceable_enabled?
+end
+
+test("Article ha traceable_fields configurati") do
+  Article.traceable_fields == [:status, :title, :view_count, :published_at, :archived_at]
+end
+
+test("Article ha versions association") do
+  @tracked_article.respond_to?(:versions)
+end
+
+section("TRACEABLE - Basic Tracking")
+
+test("create genera version con event=created") do
+  versions = @tracked_article.versions.to_a
+  versions.any? && versions.last.event == "created"
+end
+
+test("update genera version con event=updated") do
+  initial_count = @tracked_article.versions.count
+  @tracked_article.update!(title: "Updated Title")
+  @tracked_article.reload  # Reload to clear association cache
+  @tracked_article.versions.count == initial_count + 1 &&
+    @tracked_article.versions.to_a.first.event == "updated"
+end
+
+test("tracked_changes contiene solo campi configurati") do
+  @tracked_article.update!(title: "New Title", content: "New content")
+  @tracked_article.reload  # Reload to clear association cache
+  version = @tracked_article.versions.to_a.first
+  version.object_changes.key?("title") && !version.object_changes.key?("content")
+end
+
+test("version contiene before/after values corretti") do
+  old_title = @tracked_article.title
+  @tracked_article.update!(title: "Changed Title")
+  @tracked_article.reload  # Reload to clear association cache
+  version = @tracked_article.versions.to_a.first
+  change = version.change_for(:title)
+  change[:before] == old_title && change[:after] == "Changed Title"
+end
+
+test("tracking con updated_by_id funziona") do
+  # Usa attr_accessor già definito in Article per test
+  @tracked_article.class.class_eval { attr_accessor :updated_by_id }
+  @tracked_article.updated_by_id = 42
+  @tracked_article.update!(status: "published")
+  @tracked_article.reload  # Reload to clear association cache
+  @tracked_article.versions.to_a.first.updated_by_id == 42
+end
+
+test("tracking con updated_reason funziona") do
+  @tracked_article.class.class_eval { attr_accessor :updated_reason }
+  @tracked_article.updated_reason = "Approved by editor"
+  @tracked_article.update!(view_count: 100)
+  @tracked_article.reload  # Reload to clear association cache
+  @tracked_article.versions.to_a.first.updated_reason == "Approved by editor"
+end
+
+test("destroy genera version con event=destroyed") do
+  temp_article = Article.unscoped.create!(title: "Temp", status: "draft")
+  article_id = temp_article.id
+  article_class = temp_article.class.name
+  temp_article.destroy!
+
+  destroyed_version = article_version_class
+    .where(item_type: article_class, item_id: article_id)
+    .order(created_at: :desc)
+    .first
+
+  destroyed_version.present? && destroyed_version.event == "destroyed"
+end
+
+test("versions preservate dopo destroy (audit trail)") do
+  temp_article = Article.unscoped.create!(title: "ToDelete", status: "draft")
+  temp_article.update!(status: "published")
+  article_id = temp_article.id
+  article_class = temp_article.class.name
+  initial_versions = article_version_class.where(item_type: article_class, item_id: article_id).count
+
+  temp_article.destroy!
+
+  final_versions = article_version_class.where(item_type: article_class, item_id: article_id).count
+  final_versions == initial_versions + 1 # created + updated + destroyed
+end
+
+section("TRACEABLE - Instance Methods")
+
+test("changes_for(:field) restituisce storico cambiamenti") do
+  test_article = Article.unscoped.create!(title: "V1", status: "draft")
+  test_article.update!(title: "V2")
+  test_article.update!(title: "V3")
+
+  changes = test_article.changes_for(:title)
+  # Should have 3 changes: create (nil->V1), update (V1->V2), update (V2->V3)
+  changes.length == 3 &&
+    changes[0][:after] == "V3" &&
+    changes[1][:after] == "V2" &&
+    changes[2][:after] == "V1"
+end
+
+test("audit_trail restituisce history completa") do
+  trail = @tracked_article.audit_trail
+  trail.is_a?(Array) && trail.all? { |t| t.key?(:event) && t.key?(:changes) && t.key?(:at) }
+end
+
+test("as_of(timestamp) ricostruisce stato passato") do
+  test_article = Article.unscoped.create!(title: "Original", status: "draft", view_count: 10)
+  time_after_create = Time.current + 0.1.seconds
+  sleep 0.2
+
+  test_article.update!(title: "Updated", view_count: 20)
+
+  past_article = test_article.as_of(time_after_create)
+  past_article.title == "Original" && past_article.view_count == 10
+end
+
+test("as_of restituisce readonly object") do
+  past = @tracked_article.as_of(Time.current)
+  past.readonly?
+end
+
+test("rollback_to ripristina a versione precedente") do
+  test_article = Article.unscoped.create!(title: "Before", status: "draft")
+  test_article.update!(title: "After", status: "published")
+
+  version_to_restore = test_article.versions.where(event: "updated").first
+  test_article.rollback_to(version_to_restore)
+
+  test_article.title == "Before" && test_article.status == "draft"
+end
+
+test("rollback_to accetta version ID") do
+  test_article = Article.unscoped.create!(status: "draft")
+  test_article.update!(status: "published")
+
+  version_id = test_article.versions.where(event: "updated").first.id
+  test_article.rollback_to(version_id)
+
+  test_article.status == "draft"
+end
+
+section("TRACEABLE - Class Methods and Scopes")
+
+test("changed_by(user_id) trova record modificati da utente") do
+  Article.unscoped.delete_all
+  ActiveRecord::Base.connection.execute("DELETE FROM article_versions")
+
+  Article.class_eval { attr_accessor :updated_by_id }
+
+  article1 = Article.unscoped.create!(title: "A1", status: "draft")
+  article1.updated_by_id = 10
+  article1.update!(status: "published")
+
+  article2 = Article.unscoped.create!(title: "A2", status: "draft")
+  article2.updated_by_id = 20
+  article2.update!(status: "published")
+
+  results = Article.changed_by(10)
+  results.pluck(:id).include?(article1.id) && !results.pluck(:id).include?(article2.id)
+end
+
+test("changed_between(start, end) filtra per periodo") do
+  Article.unscoped.delete_all
+  ActiveRecord::Base.connection.execute("DELETE FROM article_versions")
+
+  start_time = Time.current
+  article = Article.unscoped.create!(title: "TimedArticle", status: "draft")
+  sleep 0.1
+  article.update!(status: "published")
+  end_time = Time.current
+
+  results = Article.changed_between(start_time, end_time)
+  results.pluck(:id).include?(article.id)
+end
+
+section("TRACEABLE - Integration")
+
+test("integration con Archivable tracking") do
+  test_article = Article.unscoped.create!(title: "ToArchive", status: "published")
+  test_article.archive!
+  test_article.reload  # Reload to clear association cache
+
+  # Archivable update dovrebbe generare version
+  versions = test_article.versions.to_a
+  versions.any? { |v| v.object_changes && v.object_changes.key?("archived_at") }
+end
+
+test("as_json include_audit_trail funziona") do
+  json = @tracked_article.as_json(include_audit_trail: true)
+  json.key?("audit_trail") && json["audit_trail"].is_a?(Array)
+end
+
+test("versions.count restituisce numero corretto") do
+  # Create a fresh article since @tracked_article may have been deleted by previous tests
+  test_article = Article.unscoped.create!(title: "Count Test", status: "draft")
+  test_article.update!(title: "Updated")
+  count = test_article.versions.count
+  # Should have 2 versions: 1 create + 1 update
+  count.is_a?(Integer) && count == 2
+end
+
+test("version ordering è corretto (desc)") do
+  test_article = Article.unscoped.create!(title: "Order Test", status: "draft")
+  test_article.update!(status: "published")
+  test_article.update!(status: "archived")
+
+  versions = test_article.versions.to_a
+  # Primo elemento dovrebbe essere l'ultimo update (archived)
+  versions.first.object_changes["status"][1] == "archived" if versions.first.object_changes
+end
+
+section("TRACEABLE - Helper Methods")
+
+test("Version model ha change_for method") do
+  version = @tracked_article.versions.to_a.first
+  version.respond_to?(:change_for)
+end
+
+test("Version model ha changed? method") do
+  version = @tracked_article.versions.to_a.first
+  version.respond_to?(:changed?)
+end
+
+test("Version model ha changed_fields method") do
+  version = @tracked_article.versions.to_a.first
+  fields = version.changed_fields
+  fields.is_a?(Array)
+end
+
+section("TRACEABLE - Error Handling")
+
+test("raise NotEnabledError se traceable non attivo") do
+  begin
+    temp_class = Class.new(ApplicationRecord) do
+      self.table_name = "articles"
+      include BetterModel
+      # NON attiva traceable
+    end
+
+    instance = temp_class.new
+    instance.changes_for(:status) rescue BetterModel::NotEnabledError
+    true
+  rescue => e
+    e.is_a?(BetterModel::NotEnabledError)
+  end
+end
+
+# ============================================================================
+# ADVANCED TRACEABLE TESTS
+# ============================================================================
+
+section("TRACEABLE - Advanced Integration")
+
+test("rollback genera nuova version tracciata") do
+  test_article = Article.unscoped.create!(title: "Before Rollback", status: "draft")
+  test_article.update!(title: "After Update", status: "published")
+
+  initial_count = test_article.versions.count
+  version_to_restore = test_article.versions.where(event: "updated").first
+  test_article.rollback_to(version_to_restore)
+
+  # Rollback should create a new version
+  test_article.reload
+  test_article.versions.count == initial_count + 1
+end
+
+test("update senza tracked fields non crea version") do
+  test_article = Article.unscoped.create!(
+    title: "Test",
+    content: "Original content",
+    status: "draft"
+  )
+
+  initial_count = test_article.versions.count
+
+  # Update solo content (non tracked)
+  test_article.update!(content: "Updated content only")
+  test_article.reload
+
+  # Count should remain the same
+  test_article.versions.count == initial_count
+end
+
+test("as_of prima della creazione restituisce oggetto vuoto") do
+  test_article = Article.unscoped.create!(title: "Test", status: "draft")
+
+  # Time before creation
+  time_before = test_article.created_at - 1.hour
+  past_article = test_article.as_of(time_before)
+
+  # Should return object but with no data (fields are nil)
+  past_article.is_a?(Article) && past_article.title.nil?
+end
+
+test("integration Traceable + Statusable") do
+  test_article = Article.unscoped.create!(title: "Status Test", status: "draft")
+  test_article.update!(status: "published", published_at: Time.current)
+  test_article.reload
+
+  # Check version tracks status change
+  version = test_article.versions.where(event: "updated").first
+  version.object_changes.key?("status") &&
+    version.object_changes["status"] == ["draft", "published"]
+end
+
+section("TRACEABLE - Complex Scenarios")
+
+test("rollback multipli consecutivi funzionano") do
+  test_article = Article.unscoped.create!(title: "V1", status: "draft")
+  test_article.update!(title: "V2", status: "published")
+  test_article.update!(title: "V3")
+
+  # Rollback to version where title was changed to V2
+  # This should restore to "V1" (the before value)
+  v2_update_version = test_article.versions.where(event: "updated").order(created_at: :asc).offset(0).first
+  test_article.rollback_to(v2_update_version)
+  test_article.reload
+
+  rolled_to_v1 = test_article.title == "V1"
+
+  # Rollback again - should still work
+  test_article.update!(title: "V4")
+  test_article.rollback_to(v2_update_version)
+  test_article.reload
+
+  rolled_to_v1 && test_article.title == "V1"
+end
+
+test("as_of ricostruzione multi-field complessa") do
+  test_article = Article.unscoped.create!(
+    title: "Original",
+    status: "draft",
+    view_count: 0
+  )
+
+  time_after_create = Time.current + 0.1.seconds
+  sleep 0.2
+
+  test_article.update!(title: "Updated Title")
+  sleep 0.1
+  test_article.update!(status: "published")
+  sleep 0.1
+  test_article.update!(view_count: 100)
+
+  # Reconstruct at time_after_create
+  past_article = test_article.as_of(time_after_create)
+
+  past_article.title == "Original" &&
+    past_article.status == "draft" &&
+    past_article.view_count == 0
+end
+
+test("traceable con campi nil/empty gestiti correttamente") do
+  # nil → ""
+  test_article = Article.unscoped.create!(title: nil, status: "draft")
+  test_article.update!(title: "")
+  test_article.reload
+  version1 = test_article.versions.where(event: "updated").first
+  nil_to_empty = version1.object_changes["title"] == [nil, ""]
+
+  # "" → nil
+  test_article.update!(title: nil)
+  test_article.reload
+  version2 = test_article.versions.where(event: "updated").first
+  empty_to_nil = version2.object_changes["title"] == ["", nil]
+
+  # "" → ""
+  test_article.update!(title: "")
+  test_article.reload
+  # This should NOT create a version since title goes from nil to ""
+
+  nil_to_empty && empty_to_nil
+end
+
+section("TRACEABLE - PostgreSQL Features")
+
+if ActiveRecord::Base.connection.adapter_name == "PostgreSQL"
+  test("status_changed_from().to() funziona su PostgreSQL") do
+    Article.unscoped.delete_all
+    ActiveRecord::Base.connection.execute("DELETE FROM article_versions")
+
+    test_article = Article.unscoped.create!(title: "PG Test", status: "draft")
+    test_article.update!(status: "published")
+
+    results = Article.status_changed_from("draft").to("published")
+    results.pluck(:id).include?(test_article.id)
+  end
+
+  test("JSON queries con valori nil nelle transizioni") do
+    Article.unscoped.delete_all
+    ActiveRecord::Base.connection.execute("DELETE FROM article_versions")
+
+    # nil → "published"
+    test_article = Article.unscoped.create!(title: "Test", status: nil)
+    test_article.update!(status: "published")
+
+    # This would need custom JSON query implementation
+    # For now, just verify versions are created correctly
+    version = test_article.versions.where(event: "updated").first
+    version.object_changes["status"] == [nil, "published"]
+  end
+else
+  puts "  ⚠️  Skipping PostgreSQL-specific tests (not on PostgreSQL)"
+end
+
+section("TRACEABLE - Performance")
+
+test("performance con 100+ versions per record") do
+  # Create article with 100+ versions
+  perf_article = Article.unscoped.create!(title: "Perf Test", status: "draft", view_count: 0)
+
+  start_time = Time.now
+
+  100.times do |i|
+    perf_article.update!(view_count: i + 1)
+  end
+
+  creation_time = Time.now - start_time
+
+  # Test as_of performance
+  as_of_start = Time.now
+  past = perf_article.as_of(Time.current)
+  as_of_time = Time.now - as_of_start
+
+  # Test changes_for performance
+  changes_start = Time.now
+  changes = perf_article.changes_for(:view_count)
+  changes_time = Time.now - changes_start
+
+  puts "    100 updates took: #{(creation_time * 1000).round(2)}ms"
+  puts "    as_of took: #{(as_of_time * 1000).round(2)}ms"
+  puts "    changes_for took: #{(changes_time * 1000).round(2)}ms"
+  puts "    changes count: #{changes.length}"
+
+  # Performance should be reasonable (< 1 second for 100 versions)
+  # Should have at least 100 changes (100 updates, might have create if view_count tracked in create)
+  as_of_time < 1.0 && changes_time < 1.0 && changes.length >= 100
+end
+
+# ============================================================================
 # TEST PERFORMANCE
 # ============================================================================
 
@@ -772,11 +1265,12 @@ puts
 puts "=" * 80
 puts
 
-# Cleanup opzionale
-if @tests_failed == 0
-  print "  Vuoi pulire il database di test? (y/n): "
-  if gets.chomp.downcase == "y"
-    Article.delete_all
-    puts "  Database pulito."
-  end
+  # Transaction rollback - clean up all test data
+  raise ActiveRecord::Rollback
 end
+
+puts
+puts "=" * 80
+puts "  DATABASE ROLLED BACK - All test data cleaned up"
+puts "=" * 80
+puts

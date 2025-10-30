@@ -10,7 +10,21 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_01_29_000003) do
+ActiveRecord::Schema[8.1].define(version: 2025_10_30_002121) do
+  create_table "article_versions", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "event", null: false
+    t.integer "item_id", null: false
+    t.string "item_type", null: false
+    t.json "object_changes"
+    t.integer "updated_by_id"
+    t.string "updated_reason"
+    t.index ["created_at"], name: "index_article_versions_on_created_at"
+    t.index ["event"], name: "index_article_versions_on_event"
+    t.index ["item_type", "item_id"], name: "index_article_versions_on_item"
+    t.index ["updated_by_id"], name: "index_article_versions_on_updated_by_id"
+  end
+
   create_table "articles", force: :cascade do |t|
     t.string "archive_reason"
     t.datetime "archived_at"
@@ -25,6 +39,6 @@ ActiveRecord::Schema[8.1].define(version: 2025_01_29_000003) do
     t.string "title"
     t.datetime "updated_at", null: false
     t.integer "view_count", default: 0
-    t.index [ "archived_at" ], name: "index_articles_on_archived_at"
+    t.index ["archived_at"], name: "index_articles_on_archived_at"
   end
 end

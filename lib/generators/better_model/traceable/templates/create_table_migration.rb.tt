@@ -1,0 +1,28 @@
+class Create<%= versions_table_name.camelize %> < ActiveRecord::Migration[<%= ActiveRecord::Migration.current_version %>]
+  def change
+    create_table :<%= versions_table_name %> do |t|
+      # Polymorphic association to tracked models
+      t.string :item_type, null: false
+      t.integer :item_id, null: false
+
+      # Event type: created, updated, destroyed
+      t.string :event, null: false
+
+      # Changes stored as JSON (before/after values)
+      # SQLite uses json, PostgreSQL can use jsonb
+      t.json :object_changes
+
+      # Optional tracking fields
+      t.integer :updated_by_id
+      t.string :updated_reason
+
+      t.datetime :created_at, null: false
+    end
+
+    # Indexes for performance
+    add_index :<%= versions_table_name %>, [ :item_type, :item_id ], name: "index_<%= versions_table_name %>_on_item"
+    add_index :<%= versions_table_name %>, :created_at
+    add_index :<%= versions_table_name %>, :updated_by_id
+    add_index :<%= versions_table_name %>, :event
+  end
+end

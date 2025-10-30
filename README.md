@@ -243,6 +243,147 @@ Orchestrate Predicable and Sortable into a powerful, secure search interface wit
 
 ---
 
+### 📜 Traceable - Audit Trail & Change Tracking
+
+Track all changes to your records with comprehensive audit trail functionality, time-travel queries, and rollback capabilities.
+
+**Key Benefits:**
+- Opt-in activation: only enabled when explicitly configured
+- Automatic change tracking on create/update/destroy
+- Time-travel: reconstruct record state at any point in time
+- Rollback: restore to previous versions
+- Audit trail with who/why tracking
+- Query changes by user, date range, or field transitions
+- Flexible table naming: per-model tables (default), shared table, or custom names
+
+**[📖 Full Documentation →](docs/traceable.md)**
+
+#### Quick Setup
+
+**Step 1: Create the versions table**
+
+By default, each model gets its own versions table (`{model}_versions`):
+
+```bash
+# Creates migration for article_versions table
+rails g better_model:traceable Article --create-table
+rails db:migrate
+```
+
+Or use a custom table name:
+
+```bash
+# Creates migration for custom table name
+rails g better_model:traceable Article --create-table --table-name=audit_log
+rails db:migrate
+```
+
+**Step 2: Enable in your model**
+
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  # Activate traceable (opt-in)
+  traceable do
+    track :status, :title, :published_at  # Fields to track
+    # versions_table 'audit_log'  # Optional: custom table (default: article_versions)
+  end
+end
+```
+
+**Usage:**
+
+```ruby
+# Automatic tracking on changes
+article.update!(status: "published", updated_by_id: user.id, updated_reason: "Approved")
+
+# Query version history
+article.versions                              # All versions (ordered desc)
+article.changes_for(:status)                  # Changes for specific field
+article.audit_trail                           # Full formatted history
+
+# Time-travel: reconstruct state at specific time
+past_article = article.as_of(3.days.ago)
+past_article.status                           # => "draft" (what it was 3 days ago)
+
+# Rollback to previous version
+version = article.versions.where(event: "updated").first
+article.rollback_to(version, updated_by_id: user.id, updated_reason: "Mistake")
+
+# Class-level queries
+Article.changed_by(user.id)                   # Records changed by user
+Article.changed_between(1.week.ago, Time.current)  # Changes in period
+Article.status_changed_from("draft").to("published")  # Specific transitions (PostgreSQL)
+
+# Integration with as_json
+article.as_json(include_audit_trail: true)    # Include full history in JSON
+```
+
+**Database Schema:**
+
+By default, each model gets its own versions table (e.g., `article_versions` for Article model).
+You can also use a shared table across multiple models or a custom table name.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `item_type` | string | Polymorphic model name |
+| `item_id` | integer | Polymorphic record ID |
+| `event` | string | Event type: created/updated/destroyed |
+| `object_changes` | json | Before/after values for tracked fields |
+| `updated_by_id` | integer | Optional: user who made the change |
+| `updated_reason` | string | Optional: reason for the change |
+| `created_at` | datetime | When the change occurred |
+
+**Table Naming Options:**
+
+```ruby
+# Option 1: Per-model table (default)
+class Article < ApplicationRecord
+  traceable do
+    track :status
+    # Uses article_versions table automatically
+  end
+end
+
+# Option 2: Custom table name
+class Article < ApplicationRecord
+  traceable do
+    track :status
+    versions_table 'audit_log'  # Uses audit_log table
+  end
+end
+
+# Option 3: Shared table across models
+class Article < ApplicationRecord
+  traceable do
+    track :status
+    versions_table 'versions'  # Shared table
+  end
+end
+
+class User < ApplicationRecord
+  traceable do
+    track :email
+    versions_table 'versions'  # Same shared table
+  end
+end
+```
+
+**Optional Tracking:**
+
+To track who made changes and why, simply set attributes before saving:
+
+```ruby
+article.updated_by_id = current_user.id
+article.updated_reason = "Fixed typo"
+article.update!(title: "Corrected Title")
+
+# The version will automatically include updated_by_id and updated_reason
+```
+
+---
+
 ## Version & Changelog
 
 **Current Version:** 1.0.0

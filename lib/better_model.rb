@@ -6,6 +6,8 @@ require "better_model/sortable"
 require "better_model/predicable"
 require "better_model/searchable"
 require "better_model/archivable"
+require "better_model/version_record"
+require "better_model/traceable"
 
 module BetterModel
   extend ActiveSupport::Concern
@@ -18,6 +20,7 @@ module BetterModel
     include BetterModel::Predicable
     include BetterModel::Searchable
     include BetterModel::Archivable
+    include BetterModel::Traceable
     # Future concerns will be added here:
     # include BetterModel::Validatable
   end

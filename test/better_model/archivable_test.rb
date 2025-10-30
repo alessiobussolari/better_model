@@ -307,10 +307,10 @@ module BetterModel
     test "should define custom error classes" do
       assert defined?(BetterModel::AlreadyArchivedError)
       assert defined?(BetterModel::NotArchivedError)
-      assert defined?(BetterModel::NotEnabledError)
+      assert defined?(BetterModel::ArchivableNotEnabledError)
     end
 
-    test "should raise NotEnabledError if archivable not configured" do
+    test "should raise ArchivableNotEnabledError if archivable not configured" do
       # Crea una classe SENZA archivable configurato
       test_class = Class.new(ApplicationRecord) do
         self.table_name = "articles"
@@ -320,7 +320,7 @@ module BetterModel
 
       article = test_class.create!(title: "Test")
 
-      error = assert_raises(BetterModel::NotEnabledError) do
+      error = assert_raises(BetterModel::ArchivableNotEnabledError) do
         article.archive!
       end
 
