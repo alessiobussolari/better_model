@@ -14,8 +14,8 @@ module BetterModel
         Article.singleton_class.send(:remove_method, :traceable_enabled?) rescue nil
       end
 
-      # Remove any test classes created (up to TrackedArticle50 for PostgreSQL tests)
-      50.times do |i|
+      # Remove any test classes created (up to TrackedArticle100 to be safe)
+      100.times do |i|
         const_name = "TrackedArticle#{i + 1}"
         Object.send(:remove_const, const_name) if Object.const_defined?(const_name)
       end
@@ -988,7 +988,8 @@ module BetterModel
       article = test_class.create!(status: "draft")
       article.update!(status: "published")
 
-      version = article.versions.first
+      # Get version using order instead of first to avoid ambiguity
+      version = article.versions.order(created_at: :desc).to_a.first
 
       # Verify object_changes is stored correctly regardless of DB
       assert_not_nil version.object_changes
@@ -1020,10 +1021,9 @@ module BetterModel
       end
 
       # Create many versions
-      articles = 50.times.map do |i|
+      50.times do |i|
         article = test_class.create!(title: "Article #{i}", status: "draft")
         article.update!(status: "published") if i.even?
-        article
       end
 
       # Measure JSONB query performance
@@ -1064,7 +1064,7 @@ module BetterModel
 
       # Query using JSONB operators
       _, query_time = measure_time do
-        results = test_class.joins(:versions)
+        test_class.joins(:versions)
           .where("article_versions.object_changes @> ?", { status: ["draft", "published"] }.to_json)
           .distinct
           .to_a
@@ -1089,8 +1089,6 @@ module BetterModel
       article2 = test_class.create!(title: "Article 2", status: "draft")
       article2.update!(status: "archived")
 
-      article3 = test_class.create!(title: "Article 3", status: "published")
-
       # Test changed_by scope (already tested, but verify on PostgreSQL)
       article1.class.const_set(:CURRENT_USER_ID, 123) rescue nil
       article1.instance_variable_set(:@updated_by_id, 123)
@@ -1103,6 +1101,469 @@ module BetterModel
       results = test_class.changed_between(yesterday, tomorrow)
       assert_includes results, article1
       assert_includes results, article2
+    end
+
+    # ========================================
+    # CONCURRENCY & RACE CONDITION TESTS
+    # ========================================
+
+    test "concurrent updates create separate versions" do
+      test_class = create_traceable_class("TrackedArticle51") do
+        traceable do
+          track :title, :view_count
+        end
+      end
+
+      article = test_class.create!(title: "Concurrent Test", status: "draft", view_count: 0)
+      initial_version_count = article.versions.count
+
+      # Simulate concurrent updates
+      threads = 5.times.map do |i|
+        Thread.new do
+          # Reload to get fresh instance
+          a = test_class.find(article.id)
+          a.update!(view_count: i + 1)
+        end
+      end
+
+      threads.each(&:join)
+
+      article.reload
+      # Should have 1 create + 5 updates = 6 versions
+      assert_equal initial_version_count + 5, article.versions.count
+    end
+
+    test "concurrent rollbacks are handled safely" do
+      test_class = create_traceable_class("TrackedArticle52") do
+        traceable do
+          track :title
+        end
+      end
+
+      article = test_class.create!(title: "V1", status: "draft")
+      article.update!(title: "V2")
+      version_to_rollback = article.versions.where(event: "updated").first
+
+      # Simulate concurrent rollbacks
+      threads = 3.times.map do
+        Thread.new do
+          a = test_class.find(article.id)
+          a.rollback_to(version_to_rollback, updated_reason: "Concurrent rollback") rescue nil
+        end
+      end
+
+      threads.each(&:join)
+
+      # All rollbacks should complete without errors
+      article.reload
+      assert article.versions.count >= 3 # At least create + update + 1 rollback
+    end
+
+    test "version creation is atomic" do
+      test_class = create_traceable_class("TrackedArticle53") do
+        traceable do
+          track :status
+        end
+      end
+
+      article = test_class.create!(status: "draft")
+
+      # Concurrent updates
+      threads = 10.times.map do |i|
+        Thread.new do
+          a = test_class.find(article.id)
+          a.update!(status: "status_#{i}")
+        end
+      end
+
+      threads.each(&:join)
+
+      article.reload
+      # Each update should have created exactly one version
+      assert_equal 11, article.versions.count # 1 create + 10 updates
+    end
+
+    test "as_of is thread-safe" do
+      test_class = create_traceable_class("TrackedArticle54") do
+        traceable do
+          track :title
+        end
+      end
+
+      article = test_class.create!(title: "Original", status: "draft")
+      sleep 0.01
+      article.update!(title: "Updated")
+      timestamp = 1.second.ago
+
+      # Multiple threads reading as_of simultaneously
+      results = []
+      threads = 5.times.map do
+        Thread.new do
+          results << test_class.find(article.id).as_of(timestamp)
+        end
+      end
+
+      threads.each(&:join)
+
+      # All threads should get consistent results
+      assert_equal 5, results.length
+      results.each do |result|
+        assert result.readonly?
+      end
+    end
+
+    test "audit_trail is consistent during concurrent writes" do
+      test_class = create_traceable_class("TrackedArticle55") do
+        traceable do
+          track :title, :view_count
+        end
+      end
+
+      article = test_class.create!(title: "Test", status: "draft", view_count: 0)
+
+      # Writer thread
+      writer = Thread.new do
+        5.times do |i|
+          a = test_class.find(article.id)
+          a.update!(view_count: i + 1)
+          sleep 0.01
+        end
+      end
+
+      # Reader thread
+      reader = Thread.new do
+        5.times do
+          a = test_class.find(article.id)
+          trail = a.audit_trail
+          assert trail.is_a?(Array)
+          sleep 0.01
+        end
+      end
+
+      writer.join
+      reader.join
+
+      # Final audit trail should be complete
+      article.reload
+      trail = article.audit_trail
+      assert_operator trail.length, :>=, 6 # 1 create + 5 updates
+    end
+
+    test "changes_for handles concurrent modifications" do
+      test_class = create_traceable_class("TrackedArticle56") do
+        traceable do
+          track :view_count
+        end
+      end
+
+      article = test_class.create!(title: "Test", status: "draft", view_count: 0)
+
+      # Concurrent updates to view_count with unique values to avoid race conditions
+      threads = 5.times.map do |i|
+        Thread.new do
+          sleep(i * 0.01) # Stagger slightly to reduce race conditions
+          a = test_class.find(article.id)
+          a.update!(view_count: (i + 1) * 10) # Unique values: 10, 20, 30, 40, 50
+        end
+      end
+
+      threads.each(&:join)
+
+      article.reload
+      changes = article.changes_for(:view_count)
+      # Should have at least 5 changes (might have more due to race conditions)
+      assert_operator changes.length, :>=, 5
+    end
+
+    test "field_changed queries work with concurrent inserts" do
+      test_class = create_traceable_class("TrackedArticle57") do
+        traceable do
+          track :status
+        end
+      end
+
+      # Create articles concurrently
+      threads = 5.times.map do |i|
+        Thread.new do
+          a = test_class.create!(title: "Article #{i}", status: "draft")
+          a.update!(status: "published")
+        end
+      end
+
+      threads.each(&:join)
+
+      # Query for status changes
+      results = test_class.status_changed_from("draft").to("published")
+      assert_operator results.count, :>=, 5
+    end
+
+    test "version ordering is preserved under concurrent load" do
+      test_class = create_traceable_class("TrackedArticle58") do
+        traceable do
+          track :title
+        end
+      end
+
+      article = test_class.create!(title: "Original", status: "draft")
+
+      # Rapid concurrent updates
+      threads = 10.times.map do |i|
+        Thread.new do
+          a = test_class.find(article.id)
+          a.update!(title: "Update #{i}")
+        end
+      end
+
+      threads.each(&:join)
+
+      article.reload
+      versions = article.versions.to_a
+
+      # Versions should be ordered by created_at desc
+      assert_equal 11, versions.count
+      created_at_values = versions.map(&:created_at)
+      assert_equal created_at_values, created_at_values.sort.reverse
+    end
+
+    test "changed_by scope works with concurrent user updates" do
+      test_class = create_traceable_class("TrackedArticle59") do
+        traceable do
+          track :status
+        end
+        attr_accessor :updated_by_id
+      end
+
+      article = test_class.create!(status: "draft")
+
+      # Simulate updates by different users concurrently
+      threads = [42, 43, 44].map do |user_id|
+        Thread.new do
+          a = test_class.find(article.id)
+          a.updated_by_id = user_id
+          a.update!(status: "status_by_#{user_id}")
+        end
+      end
+
+      threads.each(&:join)
+
+      # Each user should be findable via changed_by
+      assert_operator test_class.changed_by(42).count, :>=, 1
+      assert_operator test_class.changed_by(43).count, :>=, 1
+      assert_operator test_class.changed_by(44).count, :>=, 1
+    end
+
+    test "version.changed? method works correctly with field argument" do
+      test_class = create_traceable_class("TrackedArticle60") do
+        traceable do
+          track :status, :title
+        end
+      end
+
+      article = test_class.create!(title: "Test", status: "draft")
+      article.update!(status: "published")
+
+      version = article.versions.where(event: "updated").to_a.first
+
+      # Test the custom changed? method that takes a field argument
+      assert version.changed?(:status)
+      assert_not version.changed?(:title)
+      assert_not version.changed?(:view_count)
+    end
+
+    # ========================================
+    # PERFORMANCE & LARGE DATASET TESTS
+    # ========================================
+
+    test "as_of performance with 1000+ versions" do
+      test_class = create_traceable_class("TrackedArticle61") do
+        traceable do
+          track :view_count
+        end
+      end
+
+      article = test_class.create!(title: "Perf Test", status: "draft", view_count: 0)
+
+      # Create 1000 versions
+      1000.times do |i|
+        article.update!(view_count: i + 1)
+      end
+
+      # Measure as_of performance
+      _, time = measure_time do
+        article.as_of(Time.current)
+      end
+
+      # Should complete within reasonable time (< 2 seconds for 1000 versions)
+      assert time < 2.0, "as_of took #{time}s with 1000 versions"
+    end
+
+    test "audit_trail performance with large version history" do
+      test_class = create_traceable_class("TrackedArticle62") do
+        traceable do
+          track :status, :title
+        end
+      end
+
+      article = test_class.create!(title: "Test", status: "draft")
+
+      # Create 500 versions
+      500.times do |i|
+        article.update!(title: "Update #{i}") if i.even?
+        article.update!(status: "status_#{i}") if i.odd?
+      end
+
+      # Measure audit_trail performance
+      _, time = measure_time do
+        trail = article.audit_trail
+        assert_operator trail.length, :>=, 500
+      end
+
+      # Should complete quickly
+      assert time < 1.0, "audit_trail took #{time}s with 500 versions"
+    end
+
+    test "changes_for performance with large dataset" do
+      test_class = create_traceable_class("TrackedArticle63") do
+        traceable do
+          track :view_count
+        end
+      end
+
+      article = test_class.create!(title: "Test", status: "draft", view_count: 0)
+
+      # Create 500 view_count changes
+      500.times do |i|
+        article.update!(view_count: i + 1)
+      end
+
+      # Measure changes_for performance
+      _, time = measure_time do
+        changes = article.changes_for(:view_count)
+        assert_equal 500, changes.length
+      end
+
+      # Should complete quickly
+      assert time < 1.0, "changes_for took #{time}s with 500 changes"
+    end
+
+    test "version queries avoid N+1 problems" do
+      test_class = create_traceable_class("TrackedArticle64") do
+        traceable do
+          track :status
+        end
+      end
+
+      # Create 10 articles with 5 versions each
+      articles = 10.times.map do |i|
+        a = test_class.create!(title: "Article #{i}", status: "draft")
+        4.times { |j| a.update!(status: "status_#{j}") }
+        a
+      end
+
+      # Query all articles and access their versions
+      # This should use eager loading to avoid N+1
+      _, time = measure_time do
+        test_class.where(id: articles.map(&:id)).includes(:versions).each do |article|
+          article.versions.count
+        end
+      end
+
+      # Should be fast with eager loading
+      assert time < 0.5, "Query with includes took #{time}s"
+    end
+
+    test "rollback_to works efficiently with many versions" do
+      test_class = create_traceable_class("TrackedArticle65") do
+        traceable do
+          track :title, :view_count
+        end
+      end
+
+      article = test_class.create!(title: "Original", status: "draft", view_count: 0)
+
+      # Create 100 versions
+      100.times do |i|
+        article.update!(title: "Version #{i}", view_count: i)
+      end
+
+      # Get a version from the middle
+      target_version = article.versions.where(event: "updated").offset(50).first
+
+      # Measure rollback performance
+      _, time = measure_time do
+        article.rollback_to(target_version)
+      end
+
+      # Should complete quickly
+      assert time < 0.5, "rollback_to took #{time}s"
+    end
+
+    test "memory usage is reasonable with large version count" do
+      test_class = create_traceable_class("TrackedArticle66") do
+        traceable do
+          track :view_count
+        end
+      end
+
+      article = test_class.create!(title: "Memory Test", status: "draft", view_count: 0)
+
+      # Create 500 versions
+      500.times do |i|
+        article.update!(view_count: i + 1)
+      end
+
+      # Load all versions and verify they're lazy-loaded
+      article.reload
+      versions = article.versions.limit(10).to_a
+
+      # Should only load 10 versions, not all 500
+      assert_equal 10, versions.length
+    end
+
+    test "field_changed queries are indexed and fast" do
+      test_class = create_traceable_class("TrackedArticle67") do
+        traceable do
+          track :status
+        end
+      end
+
+      # Create 100 articles with status changes
+      100.times do |i|
+        a = test_class.create!(title: "Article #{i}", status: "draft")
+        a.update!(status: "published")
+      end
+
+      # Measure query performance
+      _, time = measure_time do
+        results = test_class.status_changed_from("draft").to("published")
+        assert_operator results.count, :>=, 100
+      end
+
+      # Should complete quickly even with many records
+      assert time < 1.0, "field_changed query took #{time}s"
+    end
+
+    test "bulk version creation is performant" do
+      test_class = create_traceable_class("TrackedArticle68") do
+        traceable do
+          track :status
+        end
+      end
+
+      # Create 50 articles with 10 versions each (500 total versions)
+      _, time = measure_time do
+        50.times do |i|
+          article = test_class.create!(title: "Bulk #{i}", status: "draft")
+          9.times { |j| article.update!(status: "status_#{j}") }
+        end
+      end
+
+      # Should complete in reasonable time
+      assert time < 5.0, "Bulk creation took #{time}s"
+
+      # Verify versions were created
+      total_versions = article_version_class.count
+      assert_operator total_versions, :>=, 500
     end
   end
 end

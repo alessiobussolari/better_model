@@ -1,6 +1,6 @@
 # BetterModel
 
-BetterModel is a Rails engine gem (Rails 8.1+) that provides powerful extensions for ActiveRecord models, including declarative status management, permissions, archiving, sorting, filtering, and unified search capabilities.
+BetterModel is a Rails engine gem (Rails 8.1+) that provides powerful extensions for ActiveRecord models, including declarative status management, permissions, validations, archiving, change tracking, sorting, filtering, and unified search capabilities.
 
 ## Installation
 
@@ -52,7 +52,28 @@ class Article < ApplicationRecord
     skip_archived_by_default true  # Hide archived records by default
   end
 
-  # 6. SEARCHABLE - Configure unified search interface
+  # 6. VALIDATABLE - Declarative validation system (opt-in)
+  validatable do
+    # Basic validations
+    validate :title, :content, presence: true
+
+    # Conditional validations
+    validate_if :is_published? do
+      validate :published_at, presence: true
+    end
+
+    # Cross-field validations
+    validate_order :starts_at, :before, :ends_at
+
+    # Business rules
+    validate_business_rule :valid_category
+
+    # Validation groups (multi-step forms)
+    validation_group :step1, [:title, :content]
+    validation_group :step2, [:published_at]
+  end
+
+  # 7. SEARCHABLE - Configure unified search interface
   searchable do
     per_page 25
     max_per_page 100
@@ -96,6 +117,11 @@ Article.archived
 Article.not_archived
 Article.archived_recently(7.days)
 
+# Validate with groups (multi-step forms)
+article.valid?(:step1)  # Validate only step1 fields
+article.valid?(:step2)  # Validate only step2 fields
+article.errors_for_group(:step1)  # Get errors for step1 only
+
 # Unified search with filters, sorting, and pagination
 Article.search(
   { status_eq: "published", view_count_gteq: 50 },
@@ -115,6 +141,7 @@ class Article < ApplicationRecord
   include BetterModel::Archivable    # Only archiving
   include BetterModel::Sortable      # Only sorting
   include BetterModel::Predicable    # Only filtering
+  include BetterModel::Validatable   # Only validations
   include BetterModel::Searchable    # Only search (requires Predicable & Sortable)
 
   # Define your features...
@@ -145,7 +172,7 @@ BetterModel works with all databases supported by ActiveRecord:
 
 ## Features
 
-BetterModel provides six powerful concerns that work together seamlessly:
+BetterModel provides seven powerful concerns that work together seamlessly:
 
 ### 📋 Statusable - Declarative Status Management
 
@@ -192,6 +219,23 @@ Soft-delete records with archive tracking, audit trails, and restoration capabil
 - Thread-safe with immutable configuration
 
 **[📖 Full Documentation →](docs/archivable.md)**
+
+---
+
+### ✅ Validatable - Declarative Validation System
+
+Define validations declaratively with support for conditional rules, cross-field validation, business rules, and validation groups.
+
+**Key Benefits:**
+- Opt-in activation: only enabled when explicitly configured
+- Declarative DSL for all validation types
+- Conditional validations: `validate_if` / `validate_unless`
+- Cross-field validations: `validate_order` for date/number comparisons
+- Business rules: delegate complex logic to custom methods
+- Validation groups: partial validation for multi-step forms
+- Thread-safe with immutable configuration
+
+**[📖 Full Documentation →](docs/validatable.md)**
 
 ---
 

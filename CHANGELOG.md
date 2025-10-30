@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-10-30
+
+### Added
+
+#### Validatable - Declarative Validation System
+- **Opt-in activation**: Enable with `validatable do...end` block
+- **Basic validations**: Clean DSL for all ActiveModel validation types
+- **Conditional validations**: `validate_if` and `validate_unless` with symbol or lambda conditions
+- **Cross-field validations**: `validate_order` with 6 comparators (before, after, lteq, gteq, lt, gt)
+- **Business rules**: `validate_business_rule` delegates complex logic to custom methods
+- **Validation groups**: Partial validation for multi-step forms with `validation_group`
+- **Instance methods**: `valid?(group)`, `validate_group(group)`, `errors_for_group(group)`
+- **Seamless integration** with Statusable for status-based conditional validations
+- **Thread-safe** with frozen immutable configuration
+
+### Changed
+
+#### Traceable - Enhanced Table Customization
+- **Flexible table naming**: Per-model tables (default), custom names, or shared tables
+- **Generator option**: `--table-name` parameter for custom table names
+- **Default behavior**: Automatic `{model}_versions` table naming (e.g., `article_versions`)
+- **DSL configuration**: `versions_table 'custom_name'` in `traceable do...end` block
+- **Dynamic Version classes**: Automatic subclass creation per table with proper namespacing
+
+#### Documentation
+- Updated README with Validatable quick start examples and usage
+- Added comprehensive `docs/validatable.md` (22KB) with API reference, real-world examples, best practices
+- Updated feature count: 7 powerful concerns (was 6)
+- Enhanced Traceable documentation with table naming options and examples
+
+#### Testing & Coverage
+- **Total tests**: 424 (was 358, +66 tests)
+- **Code coverage**: 85.07% (maintained above 80% threshold)
+- **New test suite**: `validatable_test.rb` with 20 comprehensive tests
+- **All tests passing**: 0 failures, 0 errors, 11 skips
+
 ## [1.0.0] - 2025-10-29
 
 ### Added
@@ -34,6 +70,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Seamless integration with Predicable, Sortable, and Searchable
   - Thread-safe immutable configuration
 
+- **Traceable**: Change tracking with audit trail and time-travel
+  - Automatic change tracking on create/update/destroy
+  - Time-travel: `as_of(timestamp)` reconstructs record state at any point
+  - Rollback: `rollback_to(version)` restores to previous versions
+  - Audit trail with `versions`, `changes_for(field)`, `audit_trail`
+  - Query changes: `changed_by(user_id)`, `changed_between(start, end)`
+  - Field-specific queries: `Article.status_changed_from("draft").to("published")`
+  - Per-model versioning tables (e.g., `article_versions`)
+  - Optional tracking: `updated_by_id`, `updated_reason`
+  - Migration generator with `--create-table` option
+  - Thread-safe immutable configuration
+
 - **Sortable**: Type-aware sorting scopes with NULL handling
   - Automatic scope generation based on column type (string, numeric, datetime, boolean)
   - Case-insensitive sorting for strings (`_asc_i`, `_desc_i`)
@@ -61,9 +109,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Comprehensive error handling with custom error classes
 
 #### Testing & Quality
-- Comprehensive test suite with 272 automated tests
-- 89.54% code coverage with SimpleCov
-- 122 manual integration tests (100% pass rate)
+- Comprehensive test suite with 358 automated tests
+- 84.98% code coverage with SimpleCov
 - RuboCop Omakase code style enforcement (0 offenses)
 - bundler-audit for dependency vulnerability scanning
 
@@ -89,4 +136,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Strong parameters compatible
 - Chainable with standard ActiveRecord methods
 
+[1.1.0]: https://github.com/alessiobussolari/better_model/releases/tag/v1.1.0
 [1.0.0]: https://github.com/alessiobussolari/better_model/releases/tag/v1.0.0

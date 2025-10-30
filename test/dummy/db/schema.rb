@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_10_30_002121) do
+ActiveRecord::Schema[8.1].define(version: 2025_10_30_055750) do
   create_table "article_versions", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "event", null: false
@@ -31,10 +31,14 @@ ActiveRecord::Schema[8.1].define(version: 2025_10_30_002121) do
     t.integer "archived_by_id"
     t.text "content"
     t.datetime "created_at", null: false
+    t.datetime "ends_at"
     t.datetime "expires_at"
     t.boolean "featured", default: false
+    t.integer "max_views"
     t.datetime "published_at"
     t.datetime "scheduled_at"
+    t.datetime "scheduled_for"
+    t.datetime "starts_at"
     t.string "status", default: "draft"
     t.string "title"
     t.datetime "updated_at", null: false
