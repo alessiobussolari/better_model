@@ -1,0 +1,9 @@
+class AddStateableTo<%= table_name.camelize %> < ActiveRecord::Migration[<%= ActiveRecord::Migration.current_version %>]
+  def change
+    change_table :<%= table_name %> do |t|
+      t.string :state, null: false, default: "<%= initial_state_value %>"
+    end
+
+    add_index :<%= table_name %>, :state
+  end
+end

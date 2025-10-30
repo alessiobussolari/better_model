@@ -1,0 +1,38 @@
+===============================================================================
+
+Stateable column has been added to your model!
+
+Next steps:
+
+1. Run the migration:
+   $ bin/rails db:migrate
+
+2. Add Stateable configuration to your model:
+
+   class <%= model_name %> < ApplicationRecord
+     include BetterModel
+
+     stateable do
+       # Define states
+       state :<%= initial_state_value %>, initial: true
+       state :confirmed
+       state :completed
+
+       # Define transitions
+       transition :confirm, from: :<%= initial_state_value %>, to: :confirmed do
+         guard { valid? }
+         before { prepare_confirmation }
+         after { send_notification }
+       end
+
+       transition :complete, from: :confirmed, to: :completed
+     end
+   end
+
+3. Don't forget to create the state_transitions table (once per app):
+   $ bin/rails generate better_model:stateable:install
+   $ bin/rails db:migrate
+
+For more information, see: docs/stateable.md
+
+===============================================================================

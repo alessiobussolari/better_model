@@ -12,6 +12,12 @@ require "better_model/validatable"
 require "better_model/validatable/configurator"
 require "better_model/validatable/order_validator"
 require "better_model/validatable/business_rule_validator"
+require "better_model/state_transition"
+require "better_model/stateable"
+require "better_model/stateable/configurator"
+require "better_model/stateable/errors"
+require "better_model/stateable/guard"
+require "better_model/stateable/transition"
 
 module BetterModel
   extend ActiveSupport::Concern
@@ -26,5 +32,6 @@ module BetterModel
     include BetterModel::Archivable
     include BetterModel::Traceable
     include BetterModel::Validatable
+    include BetterModel::Stateable
   end
 end

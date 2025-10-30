@@ -421,5 +421,203 @@ module BetterModel
       assert test_class.respond_to?(:sort_content_asc_i)
       assert test_class.respond_to?(:sort_content_desc_i)
     end
+
+    # ========================================
+    # COVERAGE TESTS - Opzione B: Riflessione
+    # ========================================
+
+    test "all sort scopes are generated and registered for each field" do
+      Article.sortable_fields.each do |field|
+        # Verifica esistenza scope _asc
+        assert Article.respond_to?(:"sort_#{field}_asc"),
+               "Expected Article to have sort_#{field}_asc scope"
+
+        # Verifica esistenza scope _desc
+        assert Article.respond_to?(:"sort_#{field}_desc"),
+               "Expected Article to have sort_#{field}_desc scope"
+
+        # Verifica registrazione negli scope
+        assert_includes Article.sortable_scopes, :"sort_#{field}_asc",
+                        "Expected sort_#{field}_asc to be registered in sortable_scopes"
+        assert_includes Article.sortable_scopes, :"sort_#{field}_desc",
+                        "Expected sort_#{field}_desc to be registered in sortable_scopes"
+      end
+    end
+
+    test "case insensitive sort scopes are generated for string/text fields" do
+      string_fields = Article.sortable_fields.select do |field|
+        [:string, :text].include?(Article.columns_hash[field.to_s]&.type)
+      end
+
+      string_fields.each do |field|
+        # Verifica esistenza scope case-insensitive
+        assert Article.respond_to?(:"sort_#{field}_asc_i"),
+               "Expected Article to have sort_#{field}_asc_i scope"
+        assert Article.respond_to?(:"sort_#{field}_desc_i"),
+               "Expected Article to have sort_#{field}_desc_i scope"
+
+        # Verifica registrazione
+        assert_includes Article.sortable_scopes, :"sort_#{field}_asc_i"
+        assert_includes Article.sortable_scopes, :"sort_#{field}_desc_i"
+      end
+    end
+
+    # ========================================
+    # COVERAGE TESTS - Opzione C: Esecuzione
+    # ========================================
+
+    test "all sort scopes execute without errors" do
+      Article.sortable_fields.each do |field|
+        # Test _asc
+        result = Article.send(:"sort_#{field}_asc")
+        assert result.is_a?(ActiveRecord::Relation),
+               "Expected sort_#{field}_asc to return ActiveRecord::Relation"
+
+        # Test _desc
+        result = Article.send(:"sort_#{field}_desc")
+        assert result.is_a?(ActiveRecord::Relation),
+               "Expected sort_#{field}_desc to return ActiveRecord::Relation"
+      end
+    end
+
+    test "case insensitive sort scopes execute without errors" do
+      string_fields = Article.sortable_fields.select do |field|
+        [:string, :text].include?(Article.columns_hash[field.to_s]&.type)
+      end
+
+      string_fields.each do |field|
+        # Test case-insensitive scopes
+        assert_nothing_raised { Article.send(:"sort_#{field}_asc_i").to_a }
+        assert_nothing_raised { Article.send(:"sort_#{field}_desc_i").to_a }
+      end
+    end
+
+    test "sort scopes can be chained" do
+      # Verifica che i sort scope siano chainabili
+      result = Article.status_eq("published").sort_title_asc
+      assert result.is_a?(ActiveRecord::Relation)
+
+      # Test chain multipla
+      result = Article.sort_created_at_desc.view_count_gt(50)
+      assert result.is_a?(ActiveRecord::Relation)
+    end
+
+    test "sort scopes actually order results correctly" do
+      # Crea alcuni articoli con diversi titoli
+      Article.create!(title: "Alpha", status: "draft")
+      Article.create!(title: "Zeta", status: "draft")
+      Article.create!(title: "Beta", status: "draft")
+
+      # Test ordinamento ascendente
+      titles_asc = Article.sort_title_asc.pluck(:title)
+      assert titles_asc.index("Alpha") < titles_asc.index("Beta")
+      assert titles_asc.index("Beta") < titles_asc.index("Zeta")
+
+      # Test ordinamento discendente
+      titles_desc = Article.sort_title_desc.pluck(:title)
+      assert titles_desc.index("Zeta") < titles_desc.index("Beta")
+      assert titles_desc.index("Beta") < titles_desc.index("Alpha")
+    end
+
+    # ========================================
+    # COVERAGE TESTS - NULL Handling
+    # ========================================
+
+    test "nulls_order_sql generates correct SQL for SQLite/PostgreSQL" do
+      # Test the SQLite/PostgreSQL path (lines 195-196)
+      field_name = :view_count
+
+      # ASC NULLS LAST
+      sql_asc_last = Article.send(:nulls_order_sql, field_name, "ASC", "LAST")
+      if ActiveRecord::Base.connection.adapter_name.match?(/PostgreSQL|SQLite/)
+        # Match with or without quotes (SQLite quotes, PostgreSQL may not)
+        assert_match(/view_count.*ASC NULLS LAST/i, sql_asc_last)
+      else
+        assert_match(/CASE WHEN/, sql_asc_last)
+      end
+
+      # DESC NULLS FIRST
+      sql_desc_first = Article.send(:nulls_order_sql, field_name, "DESC", "FIRST")
+      if ActiveRecord::Base.connection.adapter_name.match?(/PostgreSQL|SQLite/)
+        assert_match(/view_count.*DESC NULLS FIRST/i, sql_desc_first)
+      else
+        assert_match(/CASE WHEN/, sql_desc_first)
+      end
+    end
+
+    test "sort_field_asc_nulls_last orders NULL values last" do
+      # Create articles with mixed NULL and non-NULL values
+      Article.create!(title: "Null Article", status: "draft", view_count: nil)
+      Article.create!(title: "Article 50", status: "draft", view_count: 50)
+      Article.create!(title: "Article 100", status: "draft", view_count: 100)
+      Article.create!(title: "Null Article 2", status: "draft", view_count: nil)
+
+      # Sort with nulls last
+      results = Article.sort_view_count_asc_nulls_last.pluck(:id, :view_count)
+
+      # Verify NULL values are at the end
+      non_null_count = results.count { |id, count| count.present? }
+      null_count = results.count { |id, count| count.nil? }
+
+      assert_equal 2, non_null_count
+      assert_equal 2, null_count
+
+      # First two should have values, last two should be NULL
+      assert_not_nil results[0][1], "First result should not be NULL"
+      assert_not_nil results[1][1], "Second result should not be NULL"
+      assert_nil results[2][1], "Third result should be NULL"
+      assert_nil results[3][1], "Fourth result should be NULL"
+
+      # Non-NULL values should be sorted ascending
+      assert results[0][1] < results[1][1], "Non-NULL values should be sorted ascending"
+    end
+
+    test "sort_field_desc_nulls_last orders NULL values last in descending order" do
+      Article.create!(title: "Null Article", status: "draft", view_count: nil)
+      Article.create!(title: "Article 50", status: "draft", view_count: 50)
+      Article.create!(title: "Article 100", status: "draft", view_count: 100)
+
+      results = Article.sort_view_count_desc_nulls_last.pluck(:id, :view_count)
+
+      # First two should have values (100, 50), last should be NULL
+      assert_not_nil results[0][1]
+      assert_not_nil results[1][1]
+      assert_nil results[2][1]
+
+      # Non-NULL values should be sorted descending
+      assert results[0][1] > results[1][1], "Non-NULL values should be sorted descending"
+    end
+
+    test "sort_field_asc_nulls_first orders NULL values first" do
+      Article.create!(title: "Article 50", status: "draft", view_count: 50)
+      Article.create!(title: "Null Article", status: "draft", view_count: nil)
+      Article.create!(title: "Article 100", status: "draft", view_count: 100)
+
+      results = Article.sort_view_count_asc_nulls_first.pluck(:id, :view_count)
+
+      # First should be NULL, next two should have values (50, 100)
+      assert_nil results[0][1]
+      assert_not_nil results[1][1]
+      assert_not_nil results[2][1]
+
+      # Non-NULL values should be sorted ascending
+      assert results[1][1] < results[2][1], "Non-NULL values should be sorted ascending"
+    end
+
+    test "sort_field_desc_nulls_first orders NULL values first in descending order" do
+      Article.create!(title: "Article 50", status: "draft", view_count: 50)
+      Article.create!(title: "Article 100", status: "draft", view_count: 100)
+      Article.create!(title: "Null Article", status: "draft", view_count: nil)
+
+      results = Article.sort_view_count_desc_nulls_first.pluck(:id, :view_count)
+
+      # First should be NULL, next two should have values (100, 50)
+      assert_nil results[0][1]
+      assert_not_nil results[1][1]
+      assert_not_nil results[2][1]
+
+      # Non-NULL values should be sorted descending
+      assert results[1][1] > results[2][1], "Non-NULL values should be sorted descending"
+    end
   end
 end

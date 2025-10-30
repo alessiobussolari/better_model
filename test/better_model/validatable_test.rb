@@ -1445,7 +1445,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
         # Simulate complex business logic
         100.times do |i|
           # Some computation
-          result = i * 2
+          i * 2
         end
 
         errors.add(:base, "Complex validation failed") if title.nil?
@@ -1559,5 +1559,220 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
 
     assert_includes article.errors[:title], "must be provided"
     assert article.errors[:content].any? { |msg| msg.include?("needs at least") }
+  end
+
+  # ========================================
+  # COVERAGE TESTS - Complex Conditions & Edge Cases
+  # ========================================
+
+  test "nested validate_if conditions with multiple levels" do
+    article_class = create_validatable_class(:ValidatableArticle72) do
+      attr_accessor :level1, :level2
+
+      is :level1_active, -> { level1 == true }
+      is :level2_active, -> { level2 == true }
+
+      validatable do
+        validate_if :is_level1_active? do
+          validate :title, presence: true
+
+          validate_if :is_level2_active? do
+            validate :content, presence: true
+          end
+        end
+      end
+    end
+
+    # Level1 false - no validations
+    article = article_class.new(level1: false, level2: false)
+    assert article.valid?
+
+    # Level1 true, Level2 false - only title required
+    article = article_class.new(level1: true, level2: false, title: nil, content: nil)
+    assert_not article.valid?
+    assert article.errors.attribute_names.include?(:title)
+    refute article.errors.attribute_names.include?(:content)
+
+    # Level1 true, Level2 true - both required
+    article = article_class.new(level1: true, level2: true, title: "Title", content: nil)
+    assert_not article.valid?
+    assert article.errors.attribute_names.include?(:content)
+  end
+
+  test "business rule with nil values" do
+    article_class = create_validatable_class(:ValidatableArticle73) do
+      attr_accessor :max_value, :current_value
+
+      validatable do
+        validate_business_rule :check_max_value
+      end
+
+      def check_max_value
+        return if max_value.nil? || current_value.nil?
+
+        if current_value > max_value
+          errors.add(:current_value, "cannot exceed max_value")
+        end
+      end
+    end
+
+    # Both nil - should be valid
+    article = article_class.new(max_value: nil, current_value: nil)
+    assert article.valid?
+
+    # One nil - should be valid
+    article = article_class.new(max_value: 100, current_value: nil)
+    assert article.valid?
+
+    # Both present and valid
+    article = article_class.new(max_value: 100, current_value: 50)
+    assert article.valid?
+
+    # Both present and invalid
+    article = article_class.new(max_value: 100, current_value: 150)
+    assert_not article.valid?
+    assert_includes article.errors[:current_value], "cannot exceed max_value"
+  end
+
+  test "business rule that raises exception" do
+    article_class = create_validatable_class(:ValidatableArticle74) do
+      validatable do
+        validate_business_rule :check_that_raises
+      end
+
+      def check_that_raises
+        raise "Business rule error"
+      end
+    end
+
+    article = article_class.new(title: "Test")
+
+    # Exception should be propagated
+    assert_raises(RuntimeError, /Business rule error/) do
+      article.valid?
+    end
+  end
+
+  test "validate_order with nil values" do
+    article_class = create_validatable_class(:ValidatableArticle75) do
+      attr_accessor :start_date, :end_date
+
+      validatable do
+        validate_order :start_date, :before, :end_date
+      end
+    end
+
+    # Both nil - should be valid
+    article = article_class.new(start_date: nil, end_date: nil)
+    assert article.valid?
+
+    # One nil - should be valid
+    article = article_class.new(start_date: Date.today, end_date: nil)
+    assert article.valid?
+
+    # Both present and valid
+    article = article_class.new(start_date: Date.today, end_date: Date.tomorrow)
+    assert article.valid?
+
+    # Both present and invalid
+    article = article_class.new(start_date: Date.tomorrow, end_date: Date.today)
+    assert_not article.valid?
+  end
+
+  test "validate_order with same values" do
+    article_class = create_validatable_class(:ValidatableArticle76) do
+      attr_accessor :start_date, :end_date
+
+      validatable do
+        validate_order :start_date, :before, :end_date
+      end
+    end
+
+    # Same date should be invalid for :before
+    article = article_class.new(start_date: Date.today, end_date: Date.today)
+    assert_not article.valid?
+    assert article.errors.attribute_names.include?(:start_date)
+  end
+
+  test "complex conditional validation with multiple conditions" do
+    article_class = create_validatable_class(:ValidatableArticle77) do
+      attr_accessor :condition1, :condition2
+
+      validatable do
+        validate_if -> { condition1 && condition2 } do
+          validate :title, presence: true, length: { minimum: 5 }
+        end
+
+        validate_unless -> { condition1 || condition2 } do
+          validate :content, presence: true
+        end
+      end
+    end
+
+    # Both false - content required
+    article = article_class.new(condition1: false, condition2: false, content: nil)
+    assert_not article.valid?
+    assert article.errors.attribute_names.include?(:content)
+
+    # One true - no validations
+    article = article_class.new(condition1: true, condition2: false, title: nil, content: nil)
+    assert article.valid?
+
+    # Both true - title required and must be >= 5 chars
+    article = article_class.new(condition1: true, condition2: true, title: "Hi")
+    assert_not article.valid?
+    assert article.errors.attribute_names.include?(:title)
+  end
+
+  test "validation group with multiple steps" do
+    article_class = create_validatable_class(:ValidatableArticle78) do
+      attr_accessor :email, :password, :first_name, :last_name
+
+      validatable do
+        # Step 1 validations - basic authentication
+        validate :email, presence: true
+        validate :password, presence: true
+
+        # Step 2 validations - personal info
+        validate :first_name, presence: true
+        validate :last_name, presence: true
+
+        # Group definitions - specify which fields to validate in each step
+        validation_group :step1, [:email, :password]
+        validation_group :step2, [:first_name, :last_name]
+      end
+    end
+
+    # Step 1 - only email and password
+    article = article_class.new(email: "test@example.com", password: "secret")
+    assert article.valid?(:step1), "Step 1 should pass with email and password"
+
+    # Step 1 should fail without email
+    article = article_class.new(password: "secret")
+    assert_not article.valid?(:step1)
+    assert article.errors.attribute_names.include?(:email)
+
+    # Step 2 - only first_name and last_name
+    article = article_class.new(first_name: "John", last_name: "Doe")
+    assert article.valid?(:step2), "Step 2 should pass with names"
+
+    # Step 2 should fail without last_name
+    article = article_class.new(first_name: "John")
+    assert_not article.valid?(:step2)
+    assert article.errors.attribute_names.include?(:last_name)
+  end
+
+  test "format validation with invalid regex" do
+    article_class = create_validatable_class(:ValidatableArticle79) do
+      attr_accessor :email
+
+      validatable do
+        validate :email, format: { with: /\A[\w+\-.]+@[a-z\d\-]+(\.[a-z\d\-]+)*\.[a-z]+\z/i }
+      end
+    end
+
+    article = article_class.new(email: "invalid@")
+    assert_not article.valid?
+    assert article.errors.attribute_names.include?(:email)
   end
 end

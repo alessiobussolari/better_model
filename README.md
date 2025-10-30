@@ -1,8 +1,8 @@
-# BetterModel
+# BetterModel 🚀
 
-BetterModel is a Rails engine gem (Rails 8.1+) that provides powerful extensions for ActiveRecord models, including declarative status management, permissions, validations, archiving, change tracking, sorting, filtering, and unified search capabilities.
+BetterModel is a Rails engine gem (Rails 8.1+) that provides powerful extensions for ActiveRecord models, including declarative status management, permissions, state machines, validations, archiving, change tracking, sorting, filtering, and unified search capabilities.
 
-## Installation
+## 📦 Installation
 
 Add this line to your application's Gemfile:
 
@@ -20,7 +20,7 @@ Or install it yourself as:
 $ gem install better_model
 ```
 
-## Quick Start
+## ⚡ Quick Start
 
 Simply include `BetterModel` in your model to get all features:
 
@@ -73,7 +73,25 @@ class Article < ApplicationRecord
     validation_group :step2, [:published_at]
   end
 
-  # 7. SEARCHABLE - Configure unified search interface
+  # 7. STATEABLE - Declarative state machine (opt-in)
+  stateable do
+    # Define states
+    state :draft, initial: true
+    state :published
+    state :archived
+
+    # Define transitions with guards and callbacks
+    transition :publish, from: :draft, to: :published do
+      guard { valid? }
+      guard if: :is_ready_for_publishing?  # Statusable integration
+      before { set_published_at }
+      after { notify_subscribers }
+    end
+
+    transition :archive, from: [:draft, :published], to: :archived
+  end
+
+  # 8. SEARCHABLE - Configure unified search interface
   searchable do
     per_page 25
     max_per_page 100
@@ -83,46 +101,55 @@ class Article < ApplicationRecord
 end
 ```
 
-Now you can use all the features:
+💡 **Now you can use all the features:**
 
 ```ruby
-# Check statuses
+# ✅ Check statuses
 article.is?(:draft)          # => true/false
 article.is_published?        # => true/false
 article.statuses             # => { draft: true, published: false, ... }
 
-# Check permissions
+# 🔐 Check permissions
 article.permit?(:edit)       # => true/false
 article.permit_delete?       # => true/false
 article.permissions          # => { edit: true, delete: true, ... }
 
-# Sort
+# ⬆️ Sort
 Article.sort_title_asc
 Article.sort_view_count_desc
 Article.sort_published_at_desc
 
-# Filter with predicates
+# 🔍 Filter with predicates
 Article.status_eq("published")
 Article.title_cont("Rails")
 Article.view_count_gteq(100)
 Article.published_at_present
 
-# Archive records
+# 🗄️ Archive records
 article.archive!(by: current_user, reason: "Outdated")
 article.archived?  # => true
 article.restore!
 
-# Query archived records
+# 📂 Query archived records
 Article.archived
 Article.not_archived
 Article.archived_recently(7.days)
 
-# Validate with groups (multi-step forms)
+# ✅ Validate with groups (multi-step forms)
 article.valid?(:step1)  # Validate only step1 fields
 article.valid?(:step2)  # Validate only step2 fields
 article.errors_for_group(:step1)  # Get errors for step1 only
 
-# Unified search with filters, sorting, and pagination
+# 🔄 State machine transitions
+article.state            # => "draft"
+article.draft?           # => true
+article.can_publish?     # => true (checks guards)
+article.publish!         # Executes transition with guards & callbacks
+article.published?       # => true
+article.state_transitions  # History of all transitions
+article.transition_history # Formatted history array
+
+# 🔎 Unified search with filters, sorting, and pagination
 Article.search(
   { status_eq: "published", view_count_gteq: 50 },
   orders: [:sort_published_at_desc],
@@ -130,7 +157,7 @@ Article.search(
 )
 ```
 
-### Including Individual Concerns (Advanced)
+### 🎯 Including Individual Concerns (Advanced)
 
 If you only need specific features, you can include individual concerns:
 
@@ -142,19 +169,20 @@ class Article < ApplicationRecord
   include BetterModel::Sortable      # Only sorting
   include BetterModel::Predicable    # Only filtering
   include BetterModel::Validatable   # Only validations
+  include BetterModel::Stateable     # Only state machine
   include BetterModel::Searchable    # Only search (requires Predicable & Sortable)
 
   # Define your features...
 end
 ```
 
-## Requirements
+## ⚙️ Requirements
 
 - **Ruby:** 3.0 or higher
 - **Rails:** 8.1 or higher
 - **ActiveRecord:** Included with Rails
 
-## Database Compatibility
+## 💾 Database Compatibility
 
 BetterModel works with all databases supported by ActiveRecord:
 
@@ -170,20 +198,20 @@ BetterModel works with all databases supported by ActiveRecord:
 - Array predicates: `overlaps`, `contains`, `contained_by`
 - JSONB predicates: `has_key`, `has_any_key`, `has_all_keys`, `jsonb_contains`
 
-## Features
+## 📚 Features
 
-BetterModel provides seven powerful concerns that work together seamlessly:
+BetterModel provides eight powerful concerns that work together seamlessly:
 
 ### 📋 Statusable - Declarative Status Management
 
 Define derived statuses dynamically based on model attributes - no database columns needed!
 
-**Key Benefits:**
-- Declarative DSL with clear, readable conditions
-- Statuses calculated in real-time from model attributes
-- Reference other statuses in conditions
-- Automatic method generation (`is_draft?`, `is_published?`)
-- Thread-safe with immutable registry
+**🎯 Key Benefits:**
+- ✨ Declarative DSL with clear, readable conditions
+- ⚡ Statuses calculated in real-time from model attributes
+- 🔗 Reference other statuses in conditions
+- 🤖 Automatic method generation (`is_draft?`, `is_published?`)
+- 🔒 Thread-safe with immutable registry
 
 **[📖 Full Documentation →](docs/statusable.md)**
 
@@ -193,12 +221,12 @@ Define derived statuses dynamically based on model attributes - no database colu
 
 Define permissions dynamically based on model state and statuses - perfect for authorization logic!
 
-**Key Benefits:**
-- Declarative DSL following Statusable pattern
-- Permissions calculated from model state
-- Reference statuses in permission logic
-- Automatic method generation (`permit_edit?`, `permit_delete?`)
-- Thread-safe with immutable registry
+**🎯 Key Benefits:**
+- ✨ Declarative DSL following Statusable pattern
+- ⚡ Permissions calculated from model state
+- 🔗 Reference statuses in permission logic
+- 🤖 Automatic method generation (`permit_edit?`, `permit_delete?`)
+- 🔒 Thread-safe with immutable registry
 
 **[📖 Full Documentation →](docs/permissible.md)**
 
@@ -208,15 +236,15 @@ Define permissions dynamically based on model state and statuses - perfect for a
 
 Soft-delete records with archive tracking, audit trails, and restoration capabilities.
 
-**Key Benefits:**
-- Opt-in activation: only enabled when explicitly configured
-- Archive and restore methods with optional tracking
-- Status methods: `archived?` and `active?`
-- Semantic scopes: `archived`, `not_archived`, `archived_only`
-- Helper predicates: `archived_today`, `archived_this_week`, `archived_recently`
-- Optional default scope to hide archived records
-- Migration generator with flexible options
-- Thread-safe with immutable configuration
+**🎯 Key Benefits:**
+- 🎛️ Opt-in activation: only enabled when explicitly configured
+- 🔄 Archive and restore methods with optional tracking
+- ✅ Status methods: `archived?` and `active?`
+- 🔍 Semantic scopes: `archived`, `not_archived`, `archived_only`
+- 🛠️ Helper predicates: `archived_today`, `archived_this_week`, `archived_recently`
+- 👻 Optional default scope to hide archived records
+- 🚀 Migration generator with flexible options
+- 🔒 Thread-safe with immutable configuration
 
 **[📖 Full Documentation →](docs/archivable.md)**
 
@@ -226,16 +254,35 @@ Soft-delete records with archive tracking, audit trails, and restoration capabil
 
 Define validations declaratively with support for conditional rules, cross-field validation, business rules, and validation groups.
 
-**Key Benefits:**
-- Opt-in activation: only enabled when explicitly configured
-- Declarative DSL for all validation types
-- Conditional validations: `validate_if` / `validate_unless`
-- Cross-field validations: `validate_order` for date/number comparisons
-- Business rules: delegate complex logic to custom methods
-- Validation groups: partial validation for multi-step forms
-- Thread-safe with immutable configuration
+**🎯 Key Benefits:**
+- 🎛️ Opt-in activation: only enabled when explicitly configured
+- ✨ Declarative DSL for all validation types
+- 🔀 Conditional validations: `validate_if` / `validate_unless`
+- 🔗 Cross-field validations: `validate_order` for date/number comparisons
+- 💼 Business rules: delegate complex logic to custom methods
+- 📋 Validation groups: partial validation for multi-step forms
+- 🔒 Thread-safe with immutable configuration
 
 **[📖 Full Documentation →](docs/validatable.md)**
+
+---
+
+### 🔄 Stateable - Declarative State Machine
+
+Define state machines declaratively with transitions, guards, validations, and callbacks for robust workflow management.
+
+**🎯 Key Benefits:**
+- 🎛️ Opt-in activation: only enabled when explicitly configured
+- ✨ Declarative DSL for states and transitions
+- 🛡️ Guards: preconditions with lambda, methods, or Statusable predicates
+- ✅ Validations: custom validation logic per transition
+- 🔗 Callbacks: before/after/around hooks for each transition
+- 📜 State history tracking with customizable table names
+- 🤖 Dynamic methods: `pending?`, `confirm!`, `can_confirm?`
+- 🔗 Integration with Statusable for complex guard logic
+- 🔒 Thread-safe with immutable configuration
+
+**[📖 Full Documentation →](docs/stateable.md)**
 
 ---
 
@@ -243,12 +290,12 @@ Define validations declaratively with support for conditional rules, cross-field
 
 Generate intelligent sorting scopes automatically with database-specific optimizations and NULL handling.
 
-**Key Benefits:**
-- Type-aware scope generation (string, numeric, datetime, boolean)
-- Case-insensitive sorting for strings
-- Database-specific NULLS FIRST/LAST support
-- Sort by multiple fields with chaining
-- Optimized queries with proper indexing support
+**🎯 Key Benefits:**
+- 🎯 Type-aware scope generation (string, numeric, datetime, boolean)
+- 🔤 Case-insensitive sorting for strings
+- 💾 Database-specific NULLS FIRST/LAST support
+- 🔗 Sort by multiple fields with chaining
+- ⚡ Optimized queries with proper indexing support
 
 **[📖 Full Documentation →](docs/sortable.md)**
 
@@ -258,13 +305,13 @@ Generate intelligent sorting scopes automatically with database-specific optimiz
 
 Generate comprehensive predicate scopes for filtering and searching with support for all data types.
 
-**Key Benefits:**
-- Complete coverage: string, numeric, datetime, boolean, null predicates
-- Type-safe predicates based on column type
-- Case-insensitive string matching
-- Range queries (between) for numerics and dates
-- PostgreSQL array and JSONB support
-- Chainable with standard ActiveRecord queries
+**🎯 Key Benefits:**
+- ✅ Complete coverage: string, numeric, datetime, boolean, null predicates
+- 🔒 Type-safe predicates based on column type
+- 🔤 Case-insensitive string matching
+- 📊 Range queries (between) for numerics and dates
+- 🐘 PostgreSQL array and JSONB support
+- 🔗 Chainable with standard ActiveRecord queries
 
 **[📖 Full Documentation →](docs/predicable.md)**
 
@@ -274,14 +321,14 @@ Generate comprehensive predicate scopes for filtering and searching with support
 
 Orchestrate Predicable and Sortable into a powerful, secure search interface with pagination and security.
 
-**Key Benefits:**
-- Unified API: single `search()` method for all operations
-- OR conditions for complex logic
-- Built-in pagination with DoS protection (max_per_page)
-- Security enforcement with required predicates
-- Default ordering configuration
-- Strong parameters integration
-- Type-safe validation of all parameters
+**🎯 Key Benefits:**
+- 🎯 Unified API: single `search()` method for all operations
+- 🔀 OR conditions for complex logic
+- 📄 Built-in pagination with DoS protection (max_per_page)
+- 🔒 Security enforcement with required predicates
+- ⚙️ Default ordering configuration
+- 💪 Strong parameters integration
+- ✅ Type-safe validation of all parameters
 
 **[📖 Full Documentation →](docs/searchable.md)**
 
@@ -291,20 +338,20 @@ Orchestrate Predicable and Sortable into a powerful, secure search interface wit
 
 Track all changes to your records with comprehensive audit trail functionality, time-travel queries, and rollback capabilities.
 
-**Key Benefits:**
-- Opt-in activation: only enabled when explicitly configured
-- Automatic change tracking on create/update/destroy
-- Time-travel: reconstruct record state at any point in time
-- Rollback: restore to previous versions
-- Audit trail with who/why tracking
-- Query changes by user, date range, or field transitions
-- Flexible table naming: per-model tables (default), shared table, or custom names
+**🎯 Key Benefits:**
+- 🎛️ Opt-in activation: only enabled when explicitly configured
+- 🤖 Automatic change tracking on create/update/destroy
+- ⏰ Time-travel: reconstruct record state at any point in time
+- ↩️ Rollback: restore to previous versions
+- 📝 Audit trail with who/why tracking
+- 🔍 Query changes by user, date range, or field transitions
+- 🗂️ Flexible table naming: per-model tables (default), shared table, or custom names
 
 **[📖 Full Documentation →](docs/traceable.md)**
 
-#### Quick Setup
+#### 🚀 Quick Setup
 
-**Step 1: Create the versions table**
+**1️⃣ Step 1: Create the versions table**
 
 By default, each model gets its own versions table (`{model}_versions`):
 
@@ -322,7 +369,7 @@ rails g better_model:traceable Article --create-table --table-name=audit_log
 rails db:migrate
 ```
 
-**Step 2: Enable in your model**
+**2️⃣ Step 2: Enable in your model**
 
 ```ruby
 class Article < ApplicationRecord
@@ -336,35 +383,35 @@ class Article < ApplicationRecord
 end
 ```
 
-**Usage:**
+**💡 Usage:**
 
 ```ruby
-# Automatic tracking on changes
+# 🤖 Automatic tracking on changes
 article.update!(status: "published", updated_by_id: user.id, updated_reason: "Approved")
 
-# Query version history
+# 🔍 Query version history
 article.versions                              # All versions (ordered desc)
 article.changes_for(:status)                  # Changes for specific field
 article.audit_trail                           # Full formatted history
 
-# Time-travel: reconstruct state at specific time
+# ⏰ Time-travel: reconstruct state at specific time
 past_article = article.as_of(3.days.ago)
 past_article.status                           # => "draft" (what it was 3 days ago)
 
-# Rollback to previous version
+# ↩️ Rollback to previous version
 version = article.versions.where(event: "updated").first
 article.rollback_to(version, updated_by_id: user.id, updated_reason: "Mistake")
 
-# Class-level queries
+# 📊 Class-level queries
 Article.changed_by(user.id)                   # Records changed by user
 Article.changed_between(1.week.ago, Time.current)  # Changes in period
 Article.status_changed_from("draft").to("published")  # Specific transitions (PostgreSQL)
 
-# Integration with as_json
+# 📦 Integration with as_json
 article.as_json(include_audit_trail: true)    # Include full history in JSON
 ```
 
-**Database Schema:**
+**💾 Database Schema:**
 
 By default, each model gets its own versions table (e.g., `article_versions` for Article model).
 You can also use a shared table across multiple models or a custom table name.
@@ -379,10 +426,10 @@ You can also use a shared table across multiple models or a custom table name.
 | `updated_reason` | string | Optional: reason for the change |
 | `created_at` | datetime | When the change occurred |
 
-**Table Naming Options:**
+**🗂️ Table Naming Options:**
 
 ```ruby
-# Option 1: Per-model table (default)
+# 1️⃣ Option 1: Per-model table (default)
 class Article < ApplicationRecord
   traceable do
     track :status
@@ -390,7 +437,7 @@ class Article < ApplicationRecord
   end
 end
 
-# Option 2: Custom table name
+# 2️⃣ Option 2: Custom table name
 class Article < ApplicationRecord
   traceable do
     track :status
@@ -398,7 +445,7 @@ class Article < ApplicationRecord
   end
 end
 
-# Option 3: Shared table across models
+# 3️⃣ Option 3: Shared table across models
 class Article < ApplicationRecord
   traceable do
     track :status
@@ -414,7 +461,7 @@ class User < ApplicationRecord
 end
 ```
 
-**Optional Tracking:**
+**📝 Optional Tracking:**
 
 To track who made changes and why, simply set attributes before saving:
 
@@ -428,44 +475,44 @@ article.update!(title: "Corrected Title")
 
 ---
 
-## Version & Changelog
+## 📌 Version & Changelog
 
 **Current Version:** 1.0.0
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
-## Support & Community
+## 💬 Support & Community
 
-- **Issues & Bugs:** [GitHub Issues](https://github.com/alessiobussolari/better_model/issues)
-- **Source Code:** [GitHub Repository](https://github.com/alessiobussolari/better_model)
-- **Documentation:** This README and detailed docs in `docs/` directory
+- 🐛 **Issues & Bugs:** [GitHub Issues](https://github.com/alessiobussolari/better_model/issues)
+- 💻 **Source Code:** [GitHub Repository](https://github.com/alessiobussolari/better_model)
+- 📖 **Documentation:** This README and detailed docs in `docs/` directory
 
-## Contributing
+## 🤝 Contributing
 
 We welcome contributions! Here's how you can help:
 
-### Reporting Bugs
+### 🐛 Reporting Bugs
 
-1. Check if the issue already exists in [GitHub Issues](https://github.com/alessiobussolari/better_model/issues)
-2. Create a new issue with:
+1. ✅ Check if the issue already exists in [GitHub Issues](https://github.com/alessiobussolari/better_model/issues)
+2. 📝 Create a new issue with:
    - Clear description of the problem
    - Steps to reproduce
    - Expected vs actual behavior
    - Ruby/Rails versions
    - Database adapter
 
-### Submitting Pull Requests
+### 🚀 Submitting Pull Requests
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes with tests
-4. Run the test suite (`bundle exec rake test`)
-5. Ensure RuboCop passes (`bundle exec rubocop`)
-6. Commit your changes (`git commit -m 'Add amazing feature'`)
-7. Push to the branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
+1. 🍴 Fork the repository
+2. 🌿 Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. ✍️ Make your changes with tests
+4. 🧪 Run the test suite (`bundle exec rake test`)
+5. 💅 Ensure RuboCop passes (`bundle exec rubocop`)
+6. 💾 Commit your changes (`git commit -m 'Add amazing feature'`)
+7. 📤 Push to the branch (`git push origin feature/amazing-feature`)
+8. 🎉 Open a Pull Request
 
-### Development Setup
+### 🔧 Development Setup
 
 ```bash
 # Clone your fork
@@ -485,13 +532,13 @@ bundle exec rake test  # Coverage report in coverage/index.html
 bundle exec rubocop
 ```
 
-### Code Guidelines
+### 📐 Code Guidelines
 
-- Follow the existing code style (enforced by RuboCop Omakase)
-- Write tests for new features
-- Update documentation (README) for user-facing changes
-- Keep pull requests focused (one feature/fix per PR)
+- ✨ Follow the existing code style (enforced by RuboCop Omakase)
+- 🧪 Write tests for new features
+- 📝 Update documentation (README) for user-facing changes
+- 🎯 Keep pull requests focused (one feature/fix per PR)
 
-## License
+## 📝 License
 
 The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).

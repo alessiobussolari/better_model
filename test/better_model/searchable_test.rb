@@ -731,5 +731,348 @@ module BetterModel
         end
       end
     end
+
+    # ========================================
+    # COVERAGE TESTS - DoS Protection
+    # ========================================
+
+    test "validate_query_complexity raises error when too many predicates" do
+      # Create 101 predicates to exceed default max (100)
+      predicates = {}
+      101.times { |i| predicates["field_#{i}".to_sym] = "value" }
+
+      error = assert_raises(ArgumentError) do
+        Article.search(predicates)
+      end
+
+      assert_match(/Query too complex/, error.message)
+      assert_match(/exceeds maximum of 100/, error.message)
+    end
+
+    test "validate_query_complexity respects custom max_predicates" do
+      # Create a model with custom max_predicates = 5
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Searchable
+
+        searchable do
+          max_predicates 5
+        end
+      end
+
+      # 6 predicates should exceed the limit of 5
+      predicates = {}
+      6.times { |i| predicates["field_#{i}".to_sym] = "value" }
+
+      error = assert_raises(ArgumentError) do
+        test_class.search(predicates)
+      end
+
+      assert_match(/exceeds maximum of 5/, error.message)
+    end
+
+    test "validate_query_complexity raises error when too many OR conditions" do
+      # Create 51 OR conditions to exceed default max (50)
+      or_conditions = []
+      51.times { |i| or_conditions << { "field_#{i}".to_sym => "value" } }
+
+      error = assert_raises(ArgumentError) do
+        Article.search({ or: or_conditions })
+      end
+
+      assert_match(/OR conditions exceeds maximum of 50/, error.message)
+    end
+
+    test "validate_query_complexity respects custom max_or_conditions" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Searchable
+
+        searchable do
+          max_or_conditions 3
+        end
+      end
+
+      # 4 OR conditions should exceed the limit of 3
+      or_conditions = []
+      4.times { |i| or_conditions << { "field_#{i}".to_sym => "value" } }
+
+      error = assert_raises(ArgumentError) do
+        test_class.search({ or: or_conditions })
+      end
+
+      assert_match(/OR conditions exceeds maximum of 3/, error.message)
+    end
+
+    test "validate_query_complexity counts predicates inside OR conditions" do
+      # Test that predicates inside OR conditions are counted toward total
+      # 50 regular predicates + 40 OR conditions (with 2 predicates each = 80) = 130 total (exceeds 100)
+      predicates = {}
+      50.times { |i| predicates["field_#{i}".to_sym] = "value" }
+
+      or_conditions = []
+      # Create 40 OR conditions (within the 50 limit) but each has 2 predicates
+      40.times do |i|
+        or_conditions << {
+          "or_field_a_#{i}".to_sym => "value",
+          "or_field_b_#{i}".to_sym => "value"
+        }
+      end
+
+      # Merge or_conditions into predicates hash
+      predicates[:or] = or_conditions
+
+      error = assert_raises(ArgumentError) do
+        Article.search(predicates)
+      end
+
+      assert_match(/total predicates.*exceeds maximum of 100/, error.message)
+    end
+
+    test "apply_pagination raises error when page exceeds max_page" do
+      # Default max_page is 10,000
+      error = assert_raises(BetterModel::Searchable::InvalidPaginationError) do
+        Article.search(pagination: { page: 10_001, per_page: 10 })
+      end
+
+      assert_match(/page must be <= 10000/, error.message)
+      assert_match(/DoS protection/, error.message)
+    end
+
+    test "apply_pagination respects custom max_page" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Searchable
+
+        searchable do
+          max_page 100
+        end
+      end
+
+      error = assert_raises(BetterModel::Searchable::InvalidPaginationError) do
+        test_class.search(pagination: { page: 101, per_page: 10 })
+      end
+
+      assert_match(/page must be <= 100/, error.message)
+    end
+
+    test "apply_pagination respects max_per_page limit" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Searchable
+
+        searchable do
+          max_per_page 50
+        end
+      end
+
+      # Request 1000 per_page, should be capped at 50
+      Article.create!(title: "Test 1", status: "draft")
+      Article.create!(title: "Test 2", status: "draft")
+      Article.create!(title: "Test 3", status: "draft")
+
+      result = test_class.search(pagination: { page: 1, per_page: 1000 })
+
+      # Verify limit was applied (check SQL)
+      sql = result.to_sql
+      assert_match(/LIMIT 50/, sql)
+    end
+
+    # ========================================
+    # COVERAGE TESTS - Complex OR Conditions
+    # ========================================
+
+    test "search with nested OR conditions" do
+      article1 = Article.create!(title: "Ruby Programming", status: "draft")
+      article2 = Article.create!(title: "Rails Guide", status: "published")
+      Article.create!(title: "Python Basics", status: "draft")
+
+      # Search with OR: (title contains "Ruby" OR title contains "Rails")
+      results = Article.search({
+        or: [
+          { title_cont: "Ruby" },
+          { title_cont: "Rails" }
+        ]
+      })
+
+      assert_equal 2, results.count
+      assert_includes results, article1
+      assert_includes results, article2
+    end
+
+    test "search with OR combined with AND conditions" do
+      article1 = Article.create!(title: "Ruby Tutorial", status: "draft")
+      article2 = Article.create!(title: "Rails Tutorial", status: "published")
+      article3 = Article.create!(title: "Python Tutorial", status: "draft")
+
+      # Search: status = draft AND (title contains "Ruby" OR title contains "Python")
+      results = Article.search({
+        status_eq: "draft",
+        or: [
+          { title_cont: "Ruby" },
+          { title_cont: "Python" }
+        ]
+      })
+
+      assert_equal 2, results.count
+      assert_includes results, article1
+      assert_includes results, article3
+      refute_includes results, article2
+    end
+
+    test "search with empty OR conditions array" do
+      Article.create!(title: "Test", status: "draft")
+
+      # Empty OR should be ignored
+      results = Article.search({
+        status_eq: "draft",
+        or: []
+      })
+
+      assert_equal 1, results.count
+    end
+
+    test "search with OR containing multiple predicates per condition" do
+      article1 = Article.create!(title: "Ruby", status: "published", view_count: 100)
+      article2 = Article.create!(title: "Rails", status: "draft", view_count: 50)
+      Article.create!(title: "Python", status: "published", view_count: 75)
+
+      # OR: (title="Ruby" AND status="published") OR (title="Rails" AND status="draft")
+      results = Article.search({
+        or: [
+          { title_eq: "Ruby", status_eq: "published" },
+          { title_eq: "Rails", status_eq: "draft" }
+        ]
+      })
+
+      assert_equal 2, results.count
+      assert_includes results, article1
+      assert_includes results, article2
+    end
+
+    test "search with chained OR conditions" do
+      Article.create!(title: "A", status: "draft", view_count: 10)
+      article2 = Article.create!(title: "B", status: "published", view_count: 20)
+      Article.create!(title: "C", status: "archived", view_count: 30)
+
+      # Complex chain: (status=draft OR status=published) AND view_count > 15
+      results = Article.search({
+        view_count_gt: 15,
+        or: [
+          { status_eq: "draft" },
+          { status_eq: "published" }
+        ]
+      })
+
+      assert_equal 1, results.count
+      assert_includes results, article2
+    end
+
+    # ========================================
+    # COVERAGE TESTS - Security Validation
+    # ========================================
+
+    test "search rejects unknown keyword arguments" do
+      error = assert_raises(ArgumentError) do
+        Article.search({ title_cont: "test" }, unknown_param: "value")
+      end
+
+      assert_match(/Unknown keyword arguments: unknown_param/, error.message)
+      assert_match(/Did you mean to pass/, error.message)
+    end
+
+    test "search with invalid order scope raises error" do
+      Article.create!(title: "Test", status: "draft")
+
+      error = assert_raises(BetterModel::Searchable::InvalidOrderError) do
+        Article.search({}, orders: [:nonexistent_sort_scope])
+      end
+
+      assert_match(/Invalid order scope/, error.message)
+    end
+
+    test "search validates predicates against predicable scopes" do
+      Article.create!(title: "Test", status: "draft")
+
+      # This should work - valid predicate
+      assert_nothing_raised do
+        Article.search({ title_cont: "test" })
+      end
+
+      # Invalid predicate should raise InvalidPredicateError
+      error = assert_raises(BetterModel::Searchable::InvalidPredicateError) do
+        Article.search({ nonexistent_predicate: "value" })
+      end
+
+      assert_match(/Invalid predicate scope/, error.message)
+    end
+
+    test "search with ActionController::Parameters safely converts to hash" do
+      # Simulate ActionController::Parameters (strong parameters)
+      require 'action_controller'
+
+      params = ActionController::Parameters.new({
+        title_cont: "test",
+        status_eq: "draft",
+        forbidden_param: "should_be_filtered"
+      })
+
+      Article.create!(title: "Test Article", status: "draft")
+
+      # Should handle ActionController::Parameters
+      assert_nothing_raised do
+        # Note: Need to permit params first
+        Article.search(params.permit(:title_cont, :status_eq))
+      end
+    end
+
+    test "search with very long predicate values" do
+      Article.create!(title: "Test", status: "draft")
+
+      # Very long search string (potential DoS via long queries)
+      long_string = "a" * 10000
+
+      # Should not crash
+      assert_nothing_raised do
+        Article.search({ title_cont: long_string }).to_a
+      end
+    end
+
+    test "search with special characters in predicates" do
+      Article.create!(title: "Test's Article", status: "draft")
+
+      # Special characters should be properly escaped
+      assert_nothing_raised do
+        Article.search({ title_cont: "Test's" }).to_a
+        Article.search({ title_cont: "%; DROP TABLE articles;--" }).to_a
+        Article.search({ status_cont: "draft" }).to_a
+      end
+    end
+
+    test "search with nil predicates" do
+      Article.create!(title: "Test", status: "draft")
+
+      # Nil predicates should be handled gracefully
+      result = Article.search({ title_cont: nil })
+      assert result.is_a?(ActiveRecord::Relation)
+    end
+
+    test "search with pagination edge cases" do
+      10.times { |i| Article.create!(title: "Article #{i}", status: "draft") }
+
+      # Page 0 should raise error
+      assert_raises(BetterModel::Searchable::InvalidPaginationError) do
+        Article.search({}, pagination: { page: 0, per_page: 10 })
+      end
+
+      # Negative per_page should raise error
+      assert_raises(BetterModel::Searchable::InvalidPaginationError) do
+        Article.search({}, pagination: { page: 1, per_page: -1 })
+      end
+
+      # Page without per_page should work (no limit)
+      result = Article.search({}, pagination: { page: 1 })
+      assert_equal 10, result.count
+    end
   end
 end
