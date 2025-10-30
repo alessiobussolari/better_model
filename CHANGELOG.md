@@ -5,6 +5,82 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-10-30
+
+### Added
+
+#### Thread-Safety Improvements
+- **CLASS_CREATION_MUTEX**: Thread-safe dynamic class creation in Traceable and Stateable
+- **Double-checked locking pattern**: Optimal performance with thread safety
+- **Thread-safety test suite**:
+  - Traceable: 6 comprehensive concurrency tests
+  - Stateable: 8 comprehensive concurrency tests
+- Concurrent version/transition class creation tests
+- Multiple table name handling tests
+
+#### Database Adapter Safety
+- **PostgreSQL support**: JSONB operators for optimal query performance in Traceable
+- **MySQL/Trilogy support**: JSON_EXTRACT functions for change queries
+- **SQLite fallback**: Graceful degradation with logging
+- **Adapter detection**: `postgres?` and `mysql?` methods in ChangeQuery
+- Cross-database compatibility for field change tracking
+
+#### Documentation
+- **Traceable guide** (23.6 KB): Complete documentation with time-travel, rollback, and query scopes
+- **Stateable guide** (25.8 KB): State machine documentation with guards, validations, and callbacks
+- **Integration guide** (21.2 KB): Patterns for combining multiple concerns effectively
+- **Performance guide** (19.5 KB): Database indexing, query optimization, N+1 prevention
+- **Migration guide** (23.4 KB): Adding BetterModel to existing applications
+- **Total documentation**: 113+ KB of comprehensive guides
+- Updated README with Traceable examples and complete documentation links
+- Features Overview section in README
+- Complete Documentation section with links to all 12 guides
+
+### Changed
+
+#### README Enhancements
+- Added Traceable to Quick Start section with time-travel example
+- Added Traceable usage examples (audit trail, rollback, change queries)
+- Created Features Overview section with all 9 concerns
+- Added Complete Documentation section linking to all guides
+- Enhanced Traceable section in detailed Features
+
+#### Code Improvements
+- Improved exception handling in Traceable rollback methods
+- Better error messages for version validation failures
+- Enhanced ChangeQuery architecture with adapter-specific optimizations
+
+### Fixed
+- Removed inconsistent exception types in rollback validation tests
+- Fixed method redefinition warnings in thread-safety tests
+- Cleaned up redundant test files (documentation structure tests, adapter tests)
+
+### Testing & Quality
+
+#### Test Suite
+- **Total tests**: 654 (+26 from v1.1.0)
+  - Added 15 thread-safety tests (Traceable + Stateable)
+  - Removed 24 unnecessary tests (documentation structure, non-runnable adapter tests)
+- **Code coverage**: 91.45% (1272/1391 lines covered)
+- **Pass rate**: 100% - All tests passing
+  - 0 failures
+  - 0 errors
+  - 0 skips
+  - 0 warnings in project code
+- **Test execution time**: ~6.6s for full test suite
+
+#### Code Quality
+- **RuboCop**: 100% compliant (0 offenses)
+- **Test files**: 83 files inspected
+- All auto-correctable style violations fixed
+
+### Technical Details
+
+#### Database Schema Updates
+- Added test tables for thread-safety verification
+- Enhanced schema with version/transition tracking tables
+- Improved indexing strategy documentation
+
 ## [1.1.0] - 2025-10-30
 
 ### Added
