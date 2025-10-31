@@ -812,3 +812,13 @@ All code has inline comments marking database-specific sections for maintainabil
 ## 📝 License
 
 The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+
+---
+
+<div align="center">
+
+**Made with ❤️ by [Alessio Bussolari](https://github.com/alessiobussolari)**
+
+[Report Bug](https://github.com/alessiobussolari/better_model/issues) · [Request Feature](https://github.com/alessiobussolari/better_model/issues) · [Documentation](https://github.com/alessiobussolari/better_model)
+
+</div>
