@@ -349,3 +349,41 @@ end
 ---
 
 [← Back to Examples Index](README.md) | [Next: Permissible Examples →](02_permissible.md)
+
+## Integration Examples
+
+### With Permissible
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  is :draft, -> { status == "draft" }
+  is :published, -> { status == "published" }
+  is :owner, -> { user_id == Current.user&.id }
+
+  # Permissions based on statuses
+  permit :edit, -> { is?(:draft) && is?(:owner) }
+  permit :publish, -> { is?(:draft) && is?(:owner) }
+```
+
+### With Stateable
+```ruby
+# States can use statuses in guards
+stateable do
+  state :draft, initial: true
+  state :published
+
+  transition :publish, from: :draft, to: :published do
+    guard { is?(:draft) }  # Use status check
+  end
+end
+```
+
+### With Searchable
+```ruby
+# Filter by status
+predicates :status
+Article.search({ status_eq: "published" })
+```
+
+[← Back to Examples Index](README.md) | [Next: Permissible Examples →](02_permissible.md)

@@ -4,6 +4,16 @@ class Article < ApplicationRecord
   include BetterModel
   include BetterModel::Searchable
 
+  # Serialize tags as array (for SQLite compatibility)
+  # In PostgreSQL, this would be a native array column
+  serialize :tags, coder: JSON, type: Array
+
+  # Configure Taggable
+  taggable do
+    tag_field :tags
+    normalize true
+  end
+
   # Define various statuses for testing
   is :draft, -> { status == "draft" }
   is :published, -> { status == "published" && published_at.present? }

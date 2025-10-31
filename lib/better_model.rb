@@ -18,6 +18,7 @@ require "better_model/stateable/configurator"
 require "better_model/stateable/errors"
 require "better_model/stateable/guard"
 require "better_model/stateable/transition"
+require "better_model/taggable"
 
 module BetterModel
   extend ActiveSupport::Concern
@@ -33,5 +34,6 @@ module BetterModel
     include BetterModel::Traceable
     include BetterModel::Validatable
     include BetterModel::Stateable
+    include BetterModel::Taggable
   end
 end

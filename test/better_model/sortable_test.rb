@@ -70,55 +70,43 @@ module BetterModel
     end
 
     test "sort_title_asc orders by title ascending" do
-      article1 = Article.create!(title: "Zebra", content: "Test", status: "draft")
-      article2 = Article.create!(title: "Apple", content: "Test", status: "draft")
-      article3 = Article.create!(title: "Mango", content: "Test", status: "draft")
+      Article.create!(title: "Zebra", content: "Test", status: "draft")
+      Article.create!(title: "Apple", content: "Test", status: "draft")
+      Article.create!(title: "Mango", content: "Test", status: "draft")
 
       results = Article.sort_title_asc.pluck(:title)
       assert_equal [ "Apple", "Mango", "Zebra" ], results
 
-      article1.destroy
-      article2.destroy
-      article3.destroy
     end
 
     test "sort_title_desc orders by title descending" do
-      article1 = Article.create!(title: "Zebra", content: "Test", status: "draft")
-      article2 = Article.create!(title: "Apple", content: "Test", status: "draft")
-      article3 = Article.create!(title: "Mango", content: "Test", status: "draft")
+      Article.create!(title: "Zebra", content: "Test", status: "draft")
+      Article.create!(title: "Apple", content: "Test", status: "draft")
+      Article.create!(title: "Mango", content: "Test", status: "draft")
 
       results = Article.sort_title_desc.pluck(:title)
       assert_equal [ "Zebra", "Mango", "Apple" ], results
 
-      article1.destroy
-      article2.destroy
-      article3.destroy
     end
 
     test "sort_title_asc_i orders case-insensitive ascending" do
-      article1 = Article.create!(title: "zebra", content: "Test", status: "draft")
-      article2 = Article.create!(title: "Apple", content: "Test", status: "draft")
-      article3 = Article.create!(title: "MANGO", content: "Test", status: "draft")
+      Article.create!(title: "zebra", content: "Test", status: "draft")
+      Article.create!(title: "Apple", content: "Test", status: "draft")
+      Article.create!(title: "MANGO", content: "Test", status: "draft")
 
       results = Article.sort_title_asc_i.pluck(:title)
       assert_equal [ "Apple", "MANGO", "zebra" ], results
 
-      article1.destroy
-      article2.destroy
-      article3.destroy
     end
 
     test "sort_title_desc_i orders case-insensitive descending" do
-      article1 = Article.create!(title: "zebra", content: "Test", status: "draft")
-      article2 = Article.create!(title: "Apple", content: "Test", status: "draft")
-      article3 = Article.create!(title: "MANGO", content: "Test", status: "draft")
+      Article.create!(title: "zebra", content: "Test", status: "draft")
+      Article.create!(title: "Apple", content: "Test", status: "draft")
+      Article.create!(title: "MANGO", content: "Test", status: "draft")
 
       results = Article.sort_title_desc_i.pluck(:title)
       assert_equal [ "zebra", "MANGO", "Apple" ], results
 
-      article1.destroy
-      article2.destroy
-      article3.destroy
     end
 
     # Test Numeric sorting scopes
@@ -139,55 +127,43 @@ module BetterModel
     end
 
     test "sort_view_count_asc orders by view_count ascending" do
-      article1 = Article.create!(title: "High", content: "Test", status: "draft", view_count: 100)
-      article2 = Article.create!(title: "Low", content: "Test", status: "draft", view_count: 10)
-      article3 = Article.create!(title: "Medium", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "High", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "Low", content: "Test", status: "draft", view_count: 10)
+      Article.create!(title: "Medium", content: "Test", status: "draft", view_count: 50)
 
       results = Article.sort_view_count_asc.pluck(:view_count)
       assert_equal [ 10, 50, 100 ], results
 
-      article1.destroy
-      article2.destroy
-      article3.destroy
     end
 
     test "sort_view_count_desc orders by view_count descending" do
-      article1 = Article.create!(title: "High", content: "Test", status: "draft", view_count: 100)
-      article2 = Article.create!(title: "Low", content: "Test", status: "draft", view_count: 10)
-      article3 = Article.create!(title: "Medium", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "High", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "Low", content: "Test", status: "draft", view_count: 10)
+      Article.create!(title: "Medium", content: "Test", status: "draft", view_count: 50)
 
       results = Article.sort_view_count_desc.pluck(:view_count)
       assert_equal [ 100, 50, 10 ], results
 
-      article1.destroy
-      article2.destroy
-      article3.destroy
     end
 
     test "sort_view_count_desc_nulls_last puts NULL values at end" do
-      article1 = Article.create!(title: "With views", content: "Test", status: "draft", view_count: 50)
-      article2 = Article.create!(title: "No views", content: "Test", status: "draft", view_count: nil)
-      article3 = Article.create!(title: "More views", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "With views", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "No views", content: "Test", status: "draft", view_count: nil)
+      Article.create!(title: "More views", content: "Test", status: "draft", view_count: 100)
 
       results = Article.sort_view_count_desc_nulls_last.pluck(:view_count)
       assert_equal [ 100, 50, nil ], results
 
-      article1.destroy
-      article2.destroy
-      article3.destroy
     end
 
     test "sort_view_count_asc_nulls_first puts NULL values at start" do
-      article1 = Article.create!(title: "With views", content: "Test", status: "draft", view_count: 50)
-      article2 = Article.create!(title: "No views", content: "Test", status: "draft", view_count: nil)
-      article3 = Article.create!(title: "Fewer views", content: "Test", status: "draft", view_count: 10)
+      Article.create!(title: "With views", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "No views", content: "Test", status: "draft", view_count: nil)
+      Article.create!(title: "Fewer views", content: "Test", status: "draft", view_count: 10)
 
       results = Article.sort_view_count_asc_nulls_first.pluck(:view_count)
       assert_equal [ nil, 10, 50 ], results
 
-      article1.destroy
-      article2.destroy
-      article3.destroy
     end
 
     # Test Date sorting scopes
@@ -206,29 +182,23 @@ module BetterModel
     end
 
     test "sort_published_at_newest orders dates descending (most recent first)" do
-      article1 = Article.create!(title: "Old", content: "Test", status: "draft", published_at: 3.days.ago)
-      article2 = Article.create!(title: "Recent", content: "Test", status: "draft", published_at: 1.day.ago)
-      article3 = Article.create!(title: "Middle", content: "Test", status: "draft", published_at: 2.days.ago)
+      Article.create!(title: "Old", content: "Test", status: "draft", published_at: 3.days.ago)
+      Article.create!(title: "Recent", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "Middle", content: "Test", status: "draft", published_at: 2.days.ago)
 
       results = Article.sort_published_at_newest.pluck(:title)
       assert_equal [ "Recent", "Middle", "Old" ], results
 
-      article1.destroy
-      article2.destroy
-      article3.destroy
     end
 
     test "sort_published_at_oldest orders dates ascending (oldest first)" do
-      article1 = Article.create!(title: "Old", content: "Test", status: "draft", published_at: 3.days.ago)
-      article2 = Article.create!(title: "Recent", content: "Test", status: "draft", published_at: 1.day.ago)
-      article3 = Article.create!(title: "Middle", content: "Test", status: "draft", published_at: 2.days.ago)
+      Article.create!(title: "Old", content: "Test", status: "draft", published_at: 3.days.ago)
+      Article.create!(title: "Recent", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "Middle", content: "Test", status: "draft", published_at: 2.days.ago)
 
       results = Article.sort_published_at_oldest.pluck(:title)
       assert_equal [ "Old", "Middle", "Recent" ], results
 
-      article1.destroy
-      article2.destroy
-      article3.destroy
     end
 
     # Test registry tracking
@@ -287,17 +257,14 @@ module BetterModel
 
     # Test chaining
     test "can chain multiple sort scopes" do
-      article1 = Article.create!(title: "A", content: "Test", status: "draft", view_count: 100, published_at: 1.day.ago)
-      article2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: 100, published_at: 2.days.ago)
-      article3 = Article.create!(title: "C", content: "Test", status: "draft", view_count: 50, published_at: 3.days.ago)
+      Article.create!(title: "A", content: "Test", status: "draft", view_count: 100, published_at: 1.day.ago)
+      Article.create!(title: "B", content: "Test", status: "draft", view_count: 100, published_at: 2.days.ago)
+      Article.create!(title: "C", content: "Test", status: "draft", view_count: 50, published_at: 3.days.ago)
 
       # Order by view_count desc, then by published_at newest
       results = Article.sort_view_count_desc.sort_published_at_newest.pluck(:title)
       assert_equal [ "A", "B", "C" ], results
 
-      article1.destroy
-      article2.destroy
-      article3.destroy
     end
 
     # Test instance methods
@@ -384,14 +351,12 @@ module BetterModel
     end
 
     test "Article sorts correctly with real data" do
-      a1 = Article.create!(title: "Zebra", content: "Test", status: "draft", view_count: 100)
-      a2 = Article.create!(title: "Apple", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "Zebra", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "Apple", content: "Test", status: "draft", view_count: 50)
 
       assert_equal [ "Apple", "Zebra" ], Article.sort_title_asc.pluck(:title)
       assert_equal [ 100, 50 ], Article.sort_view_count_desc.pluck(:view_count)
 
-      a1.destroy
-      a2.destroy
     end
 
     # Test validation errors for coverage

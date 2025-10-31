@@ -66,6 +66,7 @@ module BetterModel
       class_attribute :traceable_enabled, default: false
       class_attribute :traceable_config, default: {}.freeze
       class_attribute :traceable_fields, default: [].freeze
+      class_attribute :traceable_sensitive_fields, default: {}.freeze
       class_attribute :traceable_table_name, default: nil
       class_attribute :_traceable_setup_done, default: false
     end
@@ -88,6 +89,7 @@ module BetterModel
           configurator.instance_eval(&block)
           self.traceable_config = configurator.to_h.freeze
           self.traceable_fields = configurator.fields.freeze
+          self.traceable_sensitive_fields = configurator.sensitive_fields.freeze
           self.traceable_table_name = configurator.table_name
         end
 
@@ -282,7 +284,7 @@ module BetterModel
     # @param updated_by_id [Integer] User ID performing rollback
     # @param updated_reason [String] Reason for rollback
     # @return [self]
-    def rollback_to(version, updated_by_id: nil, updated_reason: nil)
+    def rollback_to(version, updated_by_id: nil, updated_reason: nil, allow_sensitive: false)
       raise NotEnabledError unless self.class.traceable_enabled?
 
       version = versions.find(version) if version.is_a?(Integer)
@@ -292,8 +294,23 @@ module BetterModel
 
       # Apply changes from version
       if version.object_changes
-        version.object_changes.each do |field, (before_value, _after_value)|
-          send("#{field}=", before_value) if respond_to?("#{field}=")
+        version.object_changes.each do |field, (before_value, after_value)|
+          field_sym = field.to_sym
+
+          # Check if field is sensitive
+          if self.class.traceable_sensitive_fields.key?(field_sym)
+            unless allow_sensitive
+              Rails.logger.warn "[BetterModel::Traceable] Skipping sensitive field '#{field}' in rollback. Use allow_sensitive: true to rollback sensitive fields."
+              next
+            end
+
+            Rails.logger.warn "[BetterModel::Traceable] Rolling back sensitive field '#{field}' - allowed by allow_sensitive flag"
+          end
+
+          # For 'created' events, use after_value (the value at creation)
+          # For 'updated' events, use before_value (the value before the update)
+          rollback_value = version.event == "created" ? after_value : before_value
+          send("#{field}=", rollback_value) if respond_to?("#{field}=")
         end
       end
 
@@ -350,19 +367,103 @@ module BetterModel
     def tracked_changes
       return {} if self.class.traceable_fields.empty?
 
-      if saved_changes.any?
+      raw_changes = if saved_changes.any?
         # After save: use saved_changes
         saved_changes.slice(*self.class.traceable_fields.map(&:to_s))
       else
         # Before save: use changes
         changes.slice(*self.class.traceable_fields.map(&:to_s))
       end
+
+      # Apply redaction to sensitive fields
+      apply_redaction_to_changes(raw_changes)
     end
 
     # Get final state for destroyed records
     def tracked_final_state
-      self.class.traceable_fields.each_with_object({}) do |field, hash|
+      raw_state = self.class.traceable_fields.each_with_object({}) do |field, hash|
         hash[field.to_s] = [ send(field), nil ]
+      end
+
+      # Apply redaction to sensitive fields
+      apply_redaction_to_changes(raw_state)
+    end
+
+    # Apply redaction to changes hash based on sensitive field configuration
+    #
+    # @param changes_hash [Hash] Hash of field changes {field => [old, new]}
+    # @return [Hash] Redacted changes hash
+    def apply_redaction_to_changes(changes_hash)
+      return changes_hash if self.class.traceable_sensitive_fields.empty?
+
+      changes_hash.each_with_object({}) do |(field, values), result|
+        field_sym = field.to_sym
+
+        if self.class.traceable_sensitive_fields.key?(field_sym)
+          level = self.class.traceable_sensitive_fields[field_sym]
+          result[field] = [
+            redact_value(field_sym, values[0], level),
+            redact_value(field_sym, values[1], level)
+          ]
+        else
+          result[field] = values
+        end
+      end
+    end
+
+    # Redact a single value based on sensitivity level
+    #
+    # @param field [Symbol] Field name
+    # @param value [Object] Value to redact
+    # @param level [Symbol] Sensitivity level (:full, :partial, :hash)
+    # @return [String] Redacted value
+    def redact_value(field, value, level)
+      return "[REDACTED]" if value.nil? && level == :full
+
+      case level
+      when :full
+        "[REDACTED]"
+      when :partial
+        redact_partial(field, value)
+      when :hash
+        require "digest"
+        "sha256:#{Digest::SHA256.hexdigest(value.to_s)}"
+      else
+        value  # Fallback to original value
+      end
+    end
+
+    # Partially redact a value based on field patterns
+    #
+    # @param field [Symbol] Field name
+    # @param value [Object] Value to partially redact
+    # @return [String] Partially redacted value
+    def redact_partial(field, value)
+      return "[REDACTED]" if value.blank?
+
+      str = value.to_s
+
+      # Credit card pattern (13-19 digits)
+      if str.gsub(/\D/, "").match?(/^\d{13,19}$/)
+        digits = str.gsub(/\D/, "")
+        "****#{digits[-4..-1]}"
+      # Email pattern
+      elsif str.include?("@")
+        parts = str.split("@")
+        username_length = parts.first.length
+        masked_username = username_length <= 3 ? "***" : "#{parts.first[0]}***"
+        "#{masked_username}@#{parts.last}"
+      # SSN pattern (US: XXX-XX-XXXX or XXXXXXXXX)
+      elsif str.gsub(/\D/, "").match?(/^\d{9}$/)
+        digits = str.gsub(/\D/, "")
+        "***-**-#{digits[-4..-1]}"
+      # Phone pattern (10+ digits)
+      elsif str.gsub(/\D/, "").match?(/^\d{10,}$/)
+        digits = str.gsub(/\D/, "")
+        "***-***-#{digits[-4..-1]}"
+      # Default: show only length
+      else
+        "[REDACTED:#{str.length}chars]"
       end
     end
 
@@ -388,19 +489,32 @@ module BetterModel
 
   # Configurator per traceable DSL
   class TraceableConfigurator
-    attr_reader :fields, :table_name
+    attr_reader :fields, :table_name, :sensitive_fields
 
     def initialize(model_class)
       @model_class = model_class
       @fields = []
+      @sensitive_fields = {}
       @table_name = nil
     end
 
     # Specify which fields to track
     #
     # @param field_names [Array<Symbol>] Field names to track
-    def track(*field_names)
-      @fields.concat(field_names)
+    # @param sensitive [Symbol, nil] Sensitivity level (:full, :partial, :hash)
+    #
+    # @example Normal tracking
+    #   track :title, :status
+    #
+    # @example Sensitive tracking
+    #   track :password, sensitive: :full
+    #   track :email, sensitive: :partial
+    #   track :ssn, sensitive: :hash
+    def track(*field_names, sensitive: nil)
+      field_names.each do |field|
+        @fields << field
+        @sensitive_fields[field] = sensitive if sensitive
+      end
     end
 
     # Specify custom table name for versions
@@ -411,7 +525,7 @@ module BetterModel
     end
 
     def to_h
-      { fields: @fields, table_name: @table_name }
+      { fields: @fields, sensitive_fields: @sensitive_fields, table_name: @table_name }
     end
   end
 

@@ -85,164 +85,129 @@ module BetterModel
     end
 
     test "title_eq filters by exact match" do
-      a1 = Article.create!(title: "Ruby", content: "Test", status: "draft")
-      a2 = Article.create!(title: "Rails", content: "Test", status: "draft")
+      Article.create!(title: "Ruby", content: "Test", status: "draft")
+      Article.create!(title: "Rails", content: "Test", status: "draft")
 
       results = Article.title_eq("Ruby").pluck(:title)
       assert_equal [ "Ruby" ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "title_not_eq filters by non-match" do
-      a1 = Article.create!(title: "Ruby", content: "Test", status: "draft")
-      a2 = Article.create!(title: "Rails", content: "Test", status: "draft")
+      Article.create!(title: "Ruby", content: "Test", status: "draft")
+      Article.create!(title: "Rails", content: "Test", status: "draft")
 
       results = Article.title_not_eq("Ruby").pluck(:title)
       assert_equal [ "Rails" ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "title_start filters by prefix" do
-      a1 = Article.create!(title: "Ruby on Rails", content: "Test", status: "draft")
-      a2 = Article.create!(title: "Python Guide", content: "Test", status: "draft")
-      a3 = Article.create!(title: "Ruby Gems", content: "Test", status: "draft")
+      Article.create!(title: "Ruby on Rails", content: "Test", status: "draft")
+      Article.create!(title: "Python Guide", content: "Test", status: "draft")
+      Article.create!(title: "Ruby Gems", content: "Test", status: "draft")
 
       results = Article.title_start("Ruby").pluck(:title).sort
       assert_equal [ "Ruby Gems", "Ruby on Rails" ], results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "title_end filters by suffix" do
-      a1 = Article.create!(title: "Learning Rails", content: "Test", status: "draft")
-      a2 = Article.create!(title: "Python Guide", content: "Test", status: "draft")
-      a3 = Article.create!(title: "Ruby on Rails", content: "Test", status: "draft")
+      Article.create!(title: "Learning Rails", content: "Test", status: "draft")
+      Article.create!(title: "Python Guide", content: "Test", status: "draft")
+      Article.create!(title: "Ruby on Rails", content: "Test", status: "draft")
 
       results = Article.title_end("Rails").pluck(:title)
       assert_equal [ "Learning Rails", "Ruby on Rails" ], results.sort
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "title_cont filters by substring" do
-      a1 = Article.create!(title: "Ruby on Rails", content: "Test", status: "draft")
-      a2 = Article.create!(title: "Python Guide", content: "Test", status: "draft")
-      a3 = Article.create!(title: "Rails Tutorial", content: "Test", status: "draft")
+      Article.create!(title: "Ruby on Rails", content: "Test", status: "draft")
+      Article.create!(title: "Python Guide", content: "Test", status: "draft")
+      Article.create!(title: "Rails Tutorial", content: "Test", status: "draft")
 
       results = Article.title_cont("Rails").pluck(:title)
       assert_equal [ "Rails Tutorial", "Ruby on Rails" ], results.sort
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "title_i_cont filters case-insensitive" do
-      a1 = Article.create!(title: "Ruby on RAILS", content: "Test", status: "draft")
-      a2 = Article.create!(title: "Python Guide", content: "Test", status: "draft")
-      a3 = Article.create!(title: "rails tutorial", content: "Test", status: "draft")
+      Article.create!(title: "Ruby on RAILS", content: "Test", status: "draft")
+      Article.create!(title: "Python Guide", content: "Test", status: "draft")
+      Article.create!(title: "rails tutorial", content: "Test", status: "draft")
 
       results = Article.title_i_cont("rails").pluck(:title)
       assert_equal [ "Ruby on RAILS", "rails tutorial" ], results.sort
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "title_not_cont filters by not containing substring" do
-      a1 = Article.create!(title: "Ruby on Rails", content: "Test", status: "draft")
-      a2 = Article.create!(title: "Python Guide", content: "Test", status: "draft")
+      Article.create!(title: "Ruby on Rails", content: "Test", status: "draft")
+      Article.create!(title: "Python Guide", content: "Test", status: "draft")
 
       results = Article.title_not_cont("Rails").pluck(:title)
       assert_equal [ "Python Guide" ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "title_not_i_cont filters case-insensitive not containing" do
-      a1 = Article.create!(title: "Ruby on RAILS", content: "Test", status: "draft")
-      a2 = Article.create!(title: "Python Guide", content: "Test", status: "draft")
+      Article.create!(title: "Ruby on RAILS", content: "Test", status: "draft")
+      Article.create!(title: "Python Guide", content: "Test", status: "draft")
 
       results = Article.title_not_i_cont("rails").pluck(:title)
       assert_equal [ "Python Guide" ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "title_in filters by array of values" do
-      a1 = Article.create!(title: "Ruby", content: "Test", status: "draft")
-      a2 = Article.create!(title: "Rails", content: "Test", status: "draft")
-      a3 = Article.create!(title: "Python", content: "Test", status: "draft")
+      Article.create!(title: "Ruby", content: "Test", status: "draft")
+      Article.create!(title: "Rails", content: "Test", status: "draft")
+      Article.create!(title: "Python", content: "Test", status: "draft")
 
       results = Article.title_in([ "Ruby", "Rails" ]).pluck(:title)
       assert_equal [ "Rails", "Ruby" ], results.sort
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "title_not_in filters by not in array" do
-      a1 = Article.create!(title: "Ruby", content: "Test", status: "draft")
-      a2 = Article.create!(title: "Rails", content: "Test", status: "draft")
-      a3 = Article.create!(title: "Python", content: "Test", status: "draft")
+      Article.create!(title: "Ruby", content: "Test", status: "draft")
+      Article.create!(title: "Rails", content: "Test", status: "draft")
+      Article.create!(title: "Python", content: "Test", status: "draft")
 
       results = Article.title_not_in([ "Ruby", "Rails" ]).pluck(:title)
       assert_equal [ "Python" ], results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "title_present filters non-null and non-empty" do
-      a1 = Article.create!(title: "Ruby", content: "Test", status: "draft")
-      a2 = Article.create!(title: "", content: "Test", status: "draft")
-      a3 = Article.create!(title: nil, content: "Test", status: "draft")
+      Article.create!(title: "Ruby", content: "Test", status: "draft")
+      Article.create!(title: "", content: "Test", status: "draft")
+      Article.create!(title: nil, content: "Test", status: "draft")
 
       results = Article.title_present.pluck(:title)
       assert_equal [ "Ruby" ], results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "title_blank filters null or empty" do
-      a1 = Article.create!(title: "Ruby", content: "Test", status: "draft")
-      a2 = Article.create!(title: "", content: "Test", status: "draft")
-      a3 = Article.create!(title: nil, content: "Test", status: "draft")
+      Article.create!(title: "Ruby", content: "Test", status: "draft")
+      Article.create!(title: "", content: "Test", status: "draft")
+      Article.create!(title: nil, content: "Test", status: "draft")
 
       results = Article.title_blank.count
       assert_equal 2, results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "title_null filters only null" do
-      a1 = Article.create!(title: "Ruby", content: "Test", status: "draft")
-      a2 = Article.create!(title: "", content: "Test", status: "draft")
-      a3 = Article.create!(title: nil, content: "Test", status: "draft")
+      Article.create!(title: "Ruby", content: "Test", status: "draft")
+      Article.create!(title: "", content: "Test", status: "draft")
+      Article.create!(title: nil, content: "Test", status: "draft")
 
       results = Article.title_null.count
       assert_equal 1, results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     # Test Numeric predicates
@@ -266,114 +231,90 @@ module BetterModel
     end
 
     test "view_count_eq filters by exact value" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
 
       results = Article.view_count_eq(100).pluck(:view_count)
       assert_equal [ 100 ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "view_count_not_eq filters by not equal" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
 
       results = Article.view_count_not_eq(100).pluck(:view_count)
       assert_equal [ 50 ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "view_count_lt filters less than" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
-      a3 = Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
+      Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
 
       results = Article.view_count_lt(75).pluck(:view_count)
       assert_equal [ 25, 50 ], results.sort
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "view_count_lteq filters less than or equal" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
-      a3 = Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
+      Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
 
       results = Article.view_count_lteq(50).pluck(:view_count)
       assert_equal [ 25, 50 ], results.sort
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "view_count_gt filters greater than" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
-      a3 = Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
+      Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
 
       results = Article.view_count_gt(40).pluck(:view_count)
       assert_equal [ 50, 100 ], results.sort
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "view_count_gteq filters greater than or equal" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
-      a3 = Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
+      Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
 
       results = Article.view_count_gteq(50).pluck(:view_count)
       assert_equal [ 50, 100 ], results.sort
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "view_count_in filters by array" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
-      a3 = Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
+      Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
 
       results = Article.view_count_in([ 50, 100 ]).pluck(:view_count)
       assert_equal [ 50, 100 ], results.sort
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "view_count_not_in filters by not in array" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
-      a3 = Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
+      Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "B", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "C", content: "Test", status: "draft", view_count: 25)
 
       results = Article.view_count_not_in([ 50, 100 ]).pluck(:view_count)
       assert_equal [ 25 ], results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "view_count_present filters non-null" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", view_count: nil)
+      Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "B", content: "Test", status: "draft", view_count: nil)
 
       results = Article.view_count_present.pluck(:view_count)
       assert_equal [ 100 ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     # Test Boolean predicates
@@ -393,58 +334,48 @@ module BetterModel
     end
 
     test "featured_eq filters by boolean value" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", featured: true)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", featured: false)
+      Article.create!(title: "A", content: "Test", status: "draft", featured: true)
+      Article.create!(title: "B", content: "Test", status: "draft", featured: false)
 
       results = Article.featured_eq(true).pluck(:featured)
       assert_equal [ true ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "featured_not_eq filters by not equal boolean" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", featured: true)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", featured: false)
+      Article.create!(title: "A", content: "Test", status: "draft", featured: true)
+      Article.create!(title: "B", content: "Test", status: "draft", featured: false)
 
       results = Article.featured_not_eq(true).pluck(:featured)
       assert_equal [ false ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "featured_true filters true values" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", featured: true)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", featured: false)
+      Article.create!(title: "A", content: "Test", status: "draft", featured: true)
+      Article.create!(title: "B", content: "Test", status: "draft", featured: false)
 
       results = Article.featured_true.pluck(:featured)
       assert_equal [ true ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "featured_false filters false values" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", featured: true)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", featured: false)
+      Article.create!(title: "A", content: "Test", status: "draft", featured: true)
+      Article.create!(title: "B", content: "Test", status: "draft", featured: false)
 
       results = Article.featured_false.pluck(:featured)
       assert_equal [ false ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "featured_present filters non-null" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", featured: true)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", featured: nil)
+      Article.create!(title: "A", content: "Test", status: "draft", featured: true)
+      Article.create!(title: "B", content: "Test", status: "draft", featured: nil)
 
       results = Article.featured_present.count
       assert_equal 1, results
 
-      a1.destroy
-      a2.destroy
     end
 
     # Test Date predicates
@@ -472,150 +403,122 @@ module BetterModel
 
     test "published_at_eq filters by exact date" do
       date = 1.day.ago
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", published_at: date)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", published_at: 2.days.ago)
+      Article.create!(title: "A", content: "Test", status: "draft", published_at: date)
+      Article.create!(title: "B", content: "Test", status: "draft", published_at: 2.days.ago)
 
       results = Article.published_at_eq(date).count
       assert_equal 1, results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_not_eq filters by not equal date" do
       date = 1.day.ago
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", published_at: date)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", published_at: 2.days.ago)
+      Article.create!(title: "A", content: "Test", status: "draft", published_at: date)
+      Article.create!(title: "B", content: "Test", status: "draft", published_at: 2.days.ago)
 
       results = Article.published_at_not_eq(date).count
       assert_equal 1, results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_lt filters before date" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", published_at: 3.days.ago)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "A", content: "Test", status: "draft", published_at: 3.days.ago)
+      Article.create!(title: "B", content: "Test", status: "draft", published_at: 1.day.ago)
 
       results = Article.published_at_lt(2.days.ago).count
       assert_equal 1, results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_lteq filters before or equal date" do
       date = 2.days.ago
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", published_at: 3.days.ago)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", published_at: date)
-      a3 = Article.create!(title: "C", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "A", content: "Test", status: "draft", published_at: 3.days.ago)
+      Article.create!(title: "B", content: "Test", status: "draft", published_at: date)
+      Article.create!(title: "C", content: "Test", status: "draft", published_at: 1.day.ago)
 
       results = Article.published_at_lteq(date).count
       assert_equal 2, results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "published_at_gt filters after date" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", published_at: 3.days.ago)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "A", content: "Test", status: "draft", published_at: 3.days.ago)
+      Article.create!(title: "B", content: "Test", status: "draft", published_at: 1.day.ago)
 
       results = Article.published_at_gt(2.days.ago).count
       assert_equal 1, results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_gteq filters after or equal date" do
       date = 2.days.ago
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", published_at: 3.days.ago)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", published_at: date)
-      a3 = Article.create!(title: "C", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "A", content: "Test", status: "draft", published_at: 3.days.ago)
+      Article.create!(title: "B", content: "Test", status: "draft", published_at: date)
+      Article.create!(title: "C", content: "Test", status: "draft", published_at: 1.day.ago)
 
       results = Article.published_at_gteq(date).count
       assert_equal 2, results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "published_at_in filters by array of dates" do
       date1 = 1.day.ago
       date2 = 2.days.ago
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", published_at: date1)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", published_at: date2)
-      a3 = Article.create!(title: "C", content: "Test", status: "draft", published_at: 3.days.ago)
+      Article.create!(title: "A", content: "Test", status: "draft", published_at: date1)
+      Article.create!(title: "B", content: "Test", status: "draft", published_at: date2)
+      Article.create!(title: "C", content: "Test", status: "draft", published_at: 3.days.ago)
 
       results = Article.published_at_in([ date1, date2 ]).count
       assert_equal 2, results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "published_at_not_in filters by not in array" do
       date1 = 1.day.ago
       date2 = 2.days.ago
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", published_at: date1)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", published_at: date2)
-      a3 = Article.create!(title: "C", content: "Test", status: "draft", published_at: 3.days.ago)
+      Article.create!(title: "A", content: "Test", status: "draft", published_at: date1)
+      Article.create!(title: "B", content: "Test", status: "draft", published_at: date2)
+      Article.create!(title: "C", content: "Test", status: "draft", published_at: 3.days.ago)
 
       results = Article.published_at_not_in([ date1, date2 ]).count
       assert_equal 1, results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "published_at_present filters non-null" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", published_at: 1.day.ago)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", published_at: nil)
+      Article.create!(title: "A", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "B", content: "Test", status: "draft", published_at: nil)
 
       results = Article.published_at_present.count
       assert_equal 1, results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_blank filters null" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", published_at: 1.day.ago)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", published_at: nil)
+      Article.create!(title: "A", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "B", content: "Test", status: "draft", published_at: nil)
 
       results = Article.published_at_blank.count
       assert_equal 1, results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_null filters null" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", published_at: 1.day.ago)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", published_at: nil)
+      Article.create!(title: "A", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "B", content: "Test", status: "draft", published_at: nil)
 
       results = Article.published_at_null.count
       assert_equal 1, results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_not_null filters non-null" do
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", published_at: 1.day.ago)
-      a2 = Article.create!(title: "B", content: "Test", status: "draft", published_at: nil)
+      Article.create!(title: "A", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "B", content: "Test", status: "draft", published_at: nil)
 
       results = Article.published_at_not_null.count
       assert_equal 1, results
 
-      a1.destroy
-      a2.destroy
     end
 
     # Test Complex Predicates
@@ -647,19 +550,16 @@ module BetterModel
         end
       end
 
-      a1 = test_class.create!(title: "Recent Popular", content: "Test", status: "draft",
-                               view_count: 150, published_at: 3.days.ago)
-      a2 = test_class.create!(title: "Old Popular", content: "Test", status: "draft",
-                               view_count: 150, published_at: 10.days.ago)
-      a3 = test_class.create!(title: "Recent Unpopular", content: "Test", status: "draft",
-                               view_count: 50, published_at: 3.days.ago)
+      test_class.create!(title: "Recent Popular", content: "Test", status: "draft",
+                         view_count: 150, published_at: 3.days.ago)
+      test_class.create!(title: "Old Popular", content: "Test", status: "draft",
+                         view_count: 150, published_at: 10.days.ago)
+      test_class.create!(title: "Recent Unpopular", content: "Test", status: "draft",
+                         view_count: 50, published_at: 3.days.ago)
 
       results = test_class.recent_popular(7, 100).pluck(:title)
       assert_equal [ "Recent Popular" ], results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "register_complex_predicate requires block" do
@@ -772,29 +672,23 @@ module BetterModel
 
     # Test chaining
     test "can chain multiple predicate scopes" do
-      a1 = Article.create!(title: "Ruby on Rails", content: "Test", status: "draft", view_count: 100)
-      a2 = Article.create!(title: "Python Guide", content: "Test", status: "draft", view_count: 150)
-      a3 = Article.create!(title: "Ruby Gems", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "Ruby on Rails", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "Python Guide", content: "Test", status: "draft", view_count: 150)
+      Article.create!(title: "Ruby Gems", content: "Test", status: "draft", view_count: 50)
 
       results = Article.title_cont("Ruby").view_count_gt(75).pluck(:title)
       assert_equal [ "Ruby on Rails" ], results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "can chain with sorting scopes" do
-      a1 = Article.create!(title: "Ruby B", content: "Test", status: "draft", view_count: 100)
-      a2 = Article.create!(title: "Ruby A", content: "Test", status: "draft", view_count: 150)
-      a3 = Article.create!(title: "Python", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "Ruby B", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "Ruby A", content: "Test", status: "draft", view_count: 150)
+      Article.create!(title: "Python", content: "Test", status: "draft", view_count: 50)
 
       results = Article.title_cont("Ruby").sort_view_count_desc.pluck(:title)
       assert_equal [ "Ruby A", "Ruby B" ], results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     # Test multiple fields
@@ -847,181 +741,147 @@ module BetterModel
 
     # Test Complex Predicates: Range Queries (_between, _not_between)
     test "view_count_between filters within numeric range" do
-      a1 = Article.create!(title: "Low", content: "Test", status: "draft", view_count: 50)
-      a2 = Article.create!(title: "Medium", content: "Test", status: "draft", view_count: 100)
-      a3 = Article.create!(title: "High", content: "Test", status: "draft", view_count: 200)
+      Article.create!(title: "Low", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "Medium", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "High", content: "Test", status: "draft", view_count: 200)
 
       results = Article.view_count_between(75, 150).pluck(:view_count)
       assert_equal [ 100 ], results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "view_count_not_between filters outside numeric range" do
-      a1 = Article.create!(title: "Low", content: "Test", status: "draft", view_count: 50)
-      a2 = Article.create!(title: "Medium", content: "Test", status: "draft", view_count: 100)
-      a3 = Article.create!(title: "High", content: "Test", status: "draft", view_count: 200)
+      Article.create!(title: "Low", content: "Test", status: "draft", view_count: 50)
+      Article.create!(title: "Medium", content: "Test", status: "draft", view_count: 100)
+      Article.create!(title: "High", content: "Test", status: "draft", view_count: 200)
 
       results = Article.view_count_not_between(75, 150).pluck(:view_count).sort
       assert_equal [ 50, 200 ], results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "published_at_between filters within date range" do
-      a1 = Article.create!(title: "Old", content: "Test", status: "draft", published_at: 10.days.ago)
-      a2 = Article.create!(title: "Mid", content: "Test", status: "draft", published_at: 5.days.ago)
-      a3 = Article.create!(title: "Recent", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "Old", content: "Test", status: "draft", published_at: 10.days.ago)
+      Article.create!(title: "Mid", content: "Test", status: "draft", published_at: 5.days.ago)
+      Article.create!(title: "Recent", content: "Test", status: "draft", published_at: 1.day.ago)
 
       results = Article.published_at_between(7.days.ago, 3.days.ago).count
       assert_equal 1, results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     test "published_at_not_between filters outside date range" do
-      a1 = Article.create!(title: "Old", content: "Test", status: "draft", published_at: 10.days.ago)
-      a2 = Article.create!(title: "Mid", content: "Test", status: "draft", published_at: 5.days.ago)
-      a3 = Article.create!(title: "Recent", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "Old", content: "Test", status: "draft", published_at: 10.days.ago)
+      Article.create!(title: "Mid", content: "Test", status: "draft", published_at: 5.days.ago)
+      Article.create!(title: "Recent", content: "Test", status: "draft", published_at: 1.day.ago)
 
       results = Article.published_at_not_between(7.days.ago, 3.days.ago).count
       assert_equal 2, results
 
-      a1.destroy
-      a2.destroy
-      a3.destroy
     end
 
     # Test Date Convenience Predicates
     test "published_at_today filters today's records" do
-      a1 = Article.create!(title: "Today", content: "Test", status: "draft", published_at: Time.current)
-      a2 = Article.create!(title: "Yesterday", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "Today", content: "Test", status: "draft", published_at: Time.current)
+      Article.create!(title: "Yesterday", content: "Test", status: "draft", published_at: 1.day.ago)
 
       results = Article.published_at_today.pluck(:title)
       assert_equal [ "Today" ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_yesterday filters yesterday's records" do
-      a1 = Article.create!(title: "Today", content: "Test", status: "draft", published_at: Time.current)
-      a2 = Article.create!(title: "Yesterday", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "Today", content: "Test", status: "draft", published_at: Time.current)
+      Article.create!(title: "Yesterday", content: "Test", status: "draft", published_at: 1.day.ago)
 
       results = Article.published_at_yesterday.pluck(:title)
       assert_equal [ "Yesterday" ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_this_week filters this week's records" do
-      a1 = Article.create!(title: "This week", content: "Test", status: "draft", published_at: 2.days.ago)
-      a2 = Article.create!(title: "Last week", content: "Test", status: "draft", published_at: 10.days.ago)
+      Article.create!(title: "This week", content: "Test", status: "draft", published_at: 2.days.ago)
+      Article.create!(title: "Last week", content: "Test", status: "draft", published_at: 10.days.ago)
 
       results = Article.published_at_this_week.pluck(:title)
       assert_includes results, "This week"
       refute_includes results, "Last week"
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_this_month filters this month's records" do
-      a1 = Article.create!(title: "This month", content: "Test", status: "draft", published_at: 5.days.ago)
-      a2 = Article.create!(title: "Last month", content: "Test", status: "draft", published_at: 40.days.ago)
+      Article.create!(title: "This month", content: "Test", status: "draft", published_at: 5.days.ago)
+      Article.create!(title: "Last month", content: "Test", status: "draft", published_at: 40.days.ago)
 
       results = Article.published_at_this_month.pluck(:title)
       assert_includes results, "This month"
       refute_includes results, "Last month"
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_this_year filters this year's records" do
-      a1 = Article.create!(title: "This year", content: "Test", status: "draft", published_at: 100.days.ago)
-      a2 = Article.create!(title: "Last year", content: "Test", status: "draft", published_at: 400.days.ago)
+      Article.create!(title: "This year", content: "Test", status: "draft", published_at: 100.days.ago)
+      Article.create!(title: "Last year", content: "Test", status: "draft", published_at: 400.days.ago)
 
       results = Article.published_at_this_year.pluck(:title)
       assert_includes results, "This year"
       refute_includes results, "Last year"
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_past filters past dates" do
-      a1 = Article.create!(title: "Past", content: "Test", status: "draft", published_at: 1.day.ago)
-      a2 = Article.create!(title: "Future", content: "Test", status: "draft", published_at: 1.day.from_now)
+      Article.create!(title: "Past", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "Future", content: "Test", status: "draft", published_at: 1.day.from_now)
 
       results = Article.published_at_past.pluck(:title)
       assert_equal [ "Past" ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_future filters future dates" do
-      a1 = Article.create!(title: "Past", content: "Test", status: "draft", published_at: 1.day.ago)
-      a2 = Article.create!(title: "Future", content: "Test", status: "draft", published_at: 1.day.from_now)
+      Article.create!(title: "Past", content: "Test", status: "draft", published_at: 1.day.ago)
+      Article.create!(title: "Future", content: "Test", status: "draft", published_at: 1.day.from_now)
 
       results = Article.published_at_future.pluck(:title)
       assert_equal [ "Future" ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     # Test _within with auto-detection
     test "published_at_within accepts numeric days" do
-      a1 = Article.create!(title: "Recent", content: "Test", status: "draft", published_at: 3.days.ago)
-      a2 = Article.create!(title: "Old", content: "Test", status: "draft", published_at: 10.days.ago)
+      Article.create!(title: "Recent", content: "Test", status: "draft", published_at: 3.days.ago)
+      Article.create!(title: "Old", content: "Test", status: "draft", published_at: 10.days.ago)
 
       results = Article.published_at_within(7).pluck(:title)
       assert_equal [ "Recent" ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_within accepts ActiveSupport::Duration" do
-      a1 = Article.create!(title: "Recent", content: "Test", status: "draft", published_at: 3.days.ago)
-      a2 = Article.create!(title: "Old", content: "Test", status: "draft", published_at: 10.days.ago)
+      Article.create!(title: "Recent", content: "Test", status: "draft", published_at: 3.days.ago)
+      Article.create!(title: "Old", content: "Test", status: "draft", published_at: 10.days.ago)
 
       results = Article.published_at_within(7.days).pluck(:title)
       assert_equal [ "Recent" ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "published_at_within works with hours" do
-      a1 = Article.create!(title: "Very recent", content: "Test", status: "draft", published_at: 1.hour.ago)
-      a2 = Article.create!(title: "Old", content: "Test", status: "draft", published_at: 2.days.ago)
+      Article.create!(title: "Very recent", content: "Test", status: "draft", published_at: 1.hour.ago)
+      Article.create!(title: "Old", content: "Test", status: "draft", published_at: 2.days.ago)
 
       results = Article.published_at_within(6.hours).pluck(:title)
       assert_equal [ "Very recent" ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     test "created_at_within works with weeks" do
-      a1 = Article.create!(title: "Recent", content: "Test", status: "draft", created_at: 5.days.ago)
-      a2 = Article.create!(title: "Old", content: "Test", status: "draft", created_at: 3.weeks.ago)
+      Article.create!(title: "Recent", content: "Test", status: "draft", created_at: 5.days.ago)
+      Article.create!(title: "Old", content: "Test", status: "draft", created_at: 3.weeks.ago)
 
       results = Article.created_at_within(2.weeks).pluck(:title)
       assert_equal [ "Recent" ], results
 
-      a1.destroy
-      a2.destroy
     end
 
     # Test scope generation for complex predicates

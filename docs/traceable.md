@@ -11,6 +11,7 @@ Traceable provides automatic change tracking with full audit trail for Rails mod
   - [Table Naming Strategies](#table-naming-strategies)
 - [Configuration](#configuration)
   - [Basic Configuration](#basic-configuration)
+  - [Sensitive Fields](#sensitive-fields)
   - [Custom Table Names](#custom-table-names)
 - [Basic Usage](#basic-usage)
   - [Automatic Tracking](#automatic-tracking)
@@ -39,6 +40,7 @@ Traceable provides automatic change tracking with full audit trail for Rails mod
 
 - **🎯 Opt-in Activation**: Traceable is not active by default. You must explicitly enable it with `traceable do...end`.
 - **📝 Automatic Tracking**: Records changes on create, update, and destroy operations.
+- **🔐 Sensitive Data Protection**: Three-level redaction system (full, partial, hash) for passwords, PII, and tokens.
 - **👤 User Attribution**: Track who made each change (requires `updated_by_id` attribute).
 - **💬 Change Reasons**: Optional reason field for change context.
 - **⏰ Time Travel**: Reconstruct object state at any point in history.
@@ -145,6 +147,116 @@ end
 - Only specified fields are tracked. Untracked fields don't create versions.
 - `id`, `created_at`, `updated_at` are automatically excluded.
 - Foreign keys and associations can be tracked if explicitly specified.
+
+### Sensitive Fields
+
+Protect sensitive data in version history with three redaction levels:
+
+```ruby
+class User < ApplicationRecord
+  include BetterModel
+
+  traceable do
+    track :email, :name
+    track :password_hash, sensitive: :full     # Completely redacted
+    track :ssn, sensitive: :partial            # Partially masked
+    track :api_token, sensitive: :hash         # SHA256 hash
+  end
+end
+```
+
+#### Redaction Levels
+
+**`:full` - Complete Redaction**
+
+All values are replaced with `"[REDACTED]"`:
+
+```ruby
+track :password_hash, sensitive: :full
+# Stored as: {"password_hash" => ["[REDACTED]", "[REDACTED]"]}
+```
+
+Use for: Passwords, security tokens, encryption keys
+
+**`:partial` - Pattern-based Masking**
+
+Shows partial data based on detected patterns:
+
+```ruby
+track :credit_card, sensitive: :partial
+# "4532123456789012" → "****9012"
+
+track :email, sensitive: :partial
+# "user@example.com" → "u***@example.com"
+
+track :ssn, sensitive: :partial
+# "123456789" → "***-**-6789"
+
+track :phone, sensitive: :partial
+# "5551234567" → "***-***-4567"
+
+track :unknown_data, sensitive: :partial
+# "random_text_123" → "[REDACTED:15chars]"
+```
+
+Supported patterns:
+- Credit cards (shows last 4 digits)
+- Emails (shows first char + domain)
+- SSN (shows last 4 digits)
+- Phone numbers (shows last 4 digits)
+- Unknown patterns (shows character count)
+
+Use for: Credit cards, emails, phone numbers, SSN
+
+**`:hash` - SHA256 Hashing**
+
+Stores cryptographic hash instead of actual value:
+
+```ruby
+track :api_token, sensitive: :hash
+# Stored as: "sha256:a1b2c3d4..."
+```
+
+Benefits:
+- Verify if value changed without storing actual value
+- Same values produce same hash (deterministic)
+- One-way transformation (cannot recover original)
+
+Use for: API tokens, session IDs, verification codes
+
+#### Rollback Behavior with Sensitive Fields
+
+By default, rollback skips sensitive fields to prevent accidental exposure:
+
+```ruby
+user = User.create!(email: "user@example.com", password_hash: "secret123")
+user.update!(email: "new@example.com", password_hash: "newsecret")
+
+first_version = user.versions.first
+user.rollback_to(first_version)
+
+# Result:
+user.email         # => "user@example.com" (rolled back)
+user.password_hash # => "newsecret" (NOT rolled back - sensitive)
+```
+
+To include sensitive fields in rollback (not recommended):
+
+```ruby
+user.rollback_to(first_version, allow_sensitive: true)
+# WARNING: Will set password_hash to "[REDACTED]" since that's what was stored
+```
+
+**Security Note:** Since sensitive fields are redacted in storage, rolling back with `allow_sensitive: true` will set the field to the redacted value (e.g., `"[REDACTED]"`), not the original value.
+
+#### Configuration Introspection
+
+Check which fields have sensitivity configured:
+
+```ruby
+User.traceable_sensitive_fields
+# => {password_hash: :full, ssn: :partial, api_token: :hash}
+```
 
 ### Custom Table Names
 
@@ -827,13 +939,56 @@ end
 
 ### ❌ Don't
 
-- **Track sensitive data** - Passwords, tokens, PII should not be versioned
+- **Track sensitive data without protection** - Use `sensitive:` option for passwords, tokens, PII
 - **Track computed fields** - Only track source data, not derived values
 - **Version large binary data** - Store files elsewhere, track references only
 - **Ignore performance** - Monitor version table growth
 - **Skip indexes** - Will cause slow queries on large tables
 - **Forget foreign keys** - Version records should have referential integrity
 - **Mix concerns** - Use appropriate table strategy (shared vs per-model)
+
+### Sensitive Data Protection
+
+```ruby
+# Example: Healthcare application
+class PatientRecord < ApplicationRecord
+  traceable do
+    track :diagnosis, :treatment_plan  # Normal tracking
+    track :ssn, sensitive: :partial    # Shows last 4 digits
+    track :insurance_id, sensitive: :hash  # Hashed for verification
+    track :notes  # No sensitivity (already encrypted at rest)
+  end
+end
+
+# Example: E-commerce application
+class Order < ApplicationRecord
+  traceable do
+    track :status, :total_amount  # Normal tracking
+    track :credit_card, sensitive: :partial  # Shows last 4 digits
+    track :billing_address, sensitive: :hash  # Can verify changes
+  end
+end
+
+# Example: Authentication system
+class User < ApplicationRecord
+  traceable do
+    track :email, :name, :role  # Normal tracking
+    track :password_digest, sensitive: :full  # Completely redacted
+    track :api_token, sensitive: :hash  # Hash for token rotation tracking
+    track :two_factor_secret, sensitive: :full  # Completely redacted
+  end
+end
+```
+
+**Choosing the Right Sensitivity Level:**
+
+| Data Type | Recommended Level | Reason |
+|-----------|------------------|---------|
+| Passwords, encryption keys | `:full` | No value in storing any form |
+| Credit cards, SSN | `:partial` | Pattern helps identify which card/ID |
+| API tokens, session IDs | `:hash` | Track rotation without exposing value |
+| Email addresses | None or `:partial` | Depends on privacy requirements |
+| Phone numbers | `:partial` | Last 4 digits help identify |
 
 ### Version Retention Policies
 

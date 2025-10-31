@@ -13,6 +13,7 @@ Welcome to the BetterModel examples directory! This collection provides practica
 7. [Validatable](#07-validatable) - Declarative validation system
 8. [Stateable](#08-stateable) - State machine with transitions
 9. [Traceable](#09-traceable) - Audit trail and time travel
+10. [Taggable](#10-taggable) - Tag management with statistics
 
 ## Module Overview
 
@@ -78,6 +79,67 @@ Welcome to the BetterModel examples directory! This collection provides practica
 **Example use case**: Track who changed article title and when, with rollback capability
 
 [View Examples →](09_traceable.md)
+
+### 10. Taggable
+**When to use**: Manage tags with normalization, validation, and statistics.
+
+**Example use case**: Blog posts with tags, product categories, keyword management
+
+[View Examples →](11_taggable.md)
+
+## Advanced Integration Guides
+
+### Integration Patterns
+Learn proven patterns for combining multiple modules:
+
+**[→ View Integration Patterns](10_integration_patterns.md)**
+
+- **Pattern 1: Complete Workflow** - Stateable + Permissible + Statusable + Traceable
+- **Pattern 2: Search & Filter** - Searchable + Predicable + Sortable
+- **Pattern 3: Audit Trail** - Traceable + Stateable + Archivable
+- **Pattern 4: Multi-step Form** - Validatable + Stateable + Permissible
+- **Pattern 5: Content Lifecycle** - All modules combined
+
+### Real-World Use Cases
+Complete end-to-end implementations:
+
+**[→ View Use Cases](12_use_cases.md)**
+
+- **Blog Publishing Platform** - Article workflow with approvals
+- **E-commerce Order Management** - Payment and shipping lifecycle
+- **CMS Content System** - Page builder with validations
+- **Task Management System** - Assignments and permissions
+
+### Cookbook & Recipes
+Quick solutions to specific problems:
+
+**[→ View Cookbook](13_cookbook.md)**
+
+1. Three-Level Approval Workflow
+2. Soft Delete with Selective Restore
+3. Advanced API Filters with Validation
+4. Time-Limited Edit Window
+5. Partial Field Rollback
+6. Conditional Required Fields
+7. Auto-Archive Based on Criteria
+8. Search with Complex OR Conditions
+9. State-Based Validation
+10. Audit Export for Compliance
+
+## Module Compatibility Matrix
+
+| Primary Module | Works Best With | Common Use Case |
+|----------------|-----------------|-----------------|
+| **Statusable** | Permissible, Stateable | Permission logic based on state |
+| **Permissible** | Statusable, Stateable | Role-based workflows |
+| **Predicable** | Searchable, Sortable | Filtered data views |
+| **Sortable** | Searchable, Predicable | Ordered result sets |
+| **Searchable** | Predicable, Sortable | API endpoints, search UIs |
+| **Archivable** | Traceable, Stateable | Soft delete with history |
+| **Validatable** | Stateable, Permissible | Multi-step forms |
+| **Stateable** | All modules | Central workflow engine |
+| **Traceable** | Stateable, Archivable | Compliance and audit |
+| **Taggable** | Predicable, Searchable | Tag-based filtering |
 
 ## Combining Modules
 

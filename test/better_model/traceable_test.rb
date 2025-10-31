@@ -19,6 +19,14 @@ module BetterModel
         const_name = "TrackedArticle#{i + 1}"
         Object.send(:remove_const, const_name) if Object.const_defined?(const_name)
       end
+
+      # CRITICAL: Clean up all data created by tests to avoid polluting other tests
+      Article.delete_all
+
+      # Clean up version tables
+      if defined?(BetterModel::ArticleVersion)
+        BetterModel::ArticleVersion.delete_all
+      end
     end
 
     # Helper to create a traceable test class with a unique name

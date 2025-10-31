@@ -94,6 +94,9 @@ class Article < ApplicationRecord
   # 8. TRACEABLE - Audit trail with time-travel (opt-in)
   traceable do
     track :title, :content, :status, :published_at
+    track :password_hash, sensitive: :full    # Complete redaction
+    track :credit_card, sensitive: :partial   # Pattern-based masking
+    track :api_token, sensitive: :hash        # SHA256 hashing
     versions_table :article_versions  # Optional: custom table
   end
 
@@ -103,6 +106,17 @@ class Article < ApplicationRecord
     max_per_page 100
     default_order [:sort_published_at_desc]
     security :status_required, [:status_eq]
+  end
+
+  # 10. TAGGABLE - Tag management with statistics (opt-in)
+  taggable do
+    tag_field :tags
+    normalize true         # Automatic lowercase
+    strip true             # Remove whitespace
+    min_length 2           # Minimum tag length
+    max_length 30          # Maximum tag length
+    delimiter ","          # CSV delimiter
+    validates_tags minimum: 1, maximum: 10
   end
 end
 ```
@@ -172,6 +186,22 @@ Article.search(
   orders: [:sort_published_at_desc],
   pagination: { page: 1, per_page: 25 }
 )
+
+# 🏷️ Manage tags
+article.tag_with("ruby", "rails", "tutorial")
+article.untag("tutorial")
+article.tagged_with?("ruby")  # => true
+article.tag_list = "ruby, rails, api"
+
+# 📊 Query with tags (via Predicable)
+Article.tags_contains("ruby")
+Article.tags_overlaps(["ruby", "python"])
+Article.tags_contains_all(["ruby", "rails"])
+
+# 📈 Tag statistics
+Article.tag_counts                    # => {"ruby" => 45, "rails" => 38}
+Article.popular_tags(limit: 10)       # => [["ruby", 45], ["rails", 38]]
+Article.related_tags("ruby", limit: 5)  # => ["rails", "gem", "tutorial"]
 ```
 
 ### 🎯 Including Individual Concerns (Advanced)
@@ -189,26 +219,138 @@ class Article < ApplicationRecord
   include BetterModel::Validatable   # Only validations
   include BetterModel::Stateable     # Only state machine
   include BetterModel::Searchable    # Only search (requires Predicable & Sortable)
+  include BetterModel::Taggable      # Only tag management
 
   # Define your features...
 end
 ```
 
+## 🛠️ Generators
+
+Better Model provides Rails generators to help you quickly set up migrations for features that require database tables or columns.
+
+### Traceable Generator
+
+Create migrations for audit trail version tables:
+
+```bash
+# Basic usage - shows setup instructions
+rails g better_model:traceable Article
+
+# Create migration for versions table
+rails g better_model:traceable Article --create-table
+
+# Custom table name
+rails g better_model:traceable Article --create-table --table-name=audit_log
+
+# Run migrations
+rails db:migrate
+```
+
+**Generated migration includes:**
+- Polymorphic association (`item_type`, `item_id`)
+- Event tracking (`created`, `updated`, `destroyed`)
+- Change tracking (`object_changes` as JSON)
+- User attribution (`updated_by_id`)
+- Change reason (`updated_reason`)
+- Optimized indexes
+
+### Archivable Generator
+
+Add soft-delete columns to existing models:
+
+```bash
+# Basic usage - shows setup instructions
+rails g better_model:archivable Article
+
+# Add archivable columns to articles table
+rails g better_model:archivable Article --create-columns
+
+# Run migrations
+rails db:migrate
+```
+
+**Generated migration adds:**
+- `archived_at` (datetime) - when archived
+- `archived_by_id` (integer) - who archived it
+- `archive_reason` (string) - why archived
+- Index on `archived_at`
+
+### Stateable Generator
+
+Create state machine with state column and transitions tracking:
+
+```bash
+# Basic usage - shows setup instructions
+rails g better_model:stateable Article
+
+# Create both state column and transitions table
+rails g better_model:stateable Article --create-tables
+
+# Custom initial state (default: draft)
+rails g better_model:stateable Article --create-tables --initial-state=pending
+
+# Custom transitions table name
+rails g better_model:stateable Article --create-tables --table-name=article_state_history
+
+# Run migrations
+rails db:migrate
+```
+
+**Generated migrations include:**
+1. **State column migration:**
+   - `state` (string) with default value and index
+
+2. **Transitions table migration:**
+   - Polymorphic association (`transitionable_type`, `transitionable_id`)
+   - Event name and state tracking
+   - Optional metadata (JSON)
+   - Optimized indexes
+
+### Generator Options
+
+All generators support these common options:
+
+- `--pretend` - Dry run, show what would be generated
+- `--skip-model` - Only generate migrations, don't show model setup instructions
+- `--force` - Overwrite existing files
+
+**Example workflow:**
+
+```bash
+# 1. Generate migrations (dry-run first to preview)
+rails g better_model:traceable Article --create-table --pretend
+rails g better_model:archivable Article --create-columns --pretend
+rails g better_model:stateable Article --create-tables --pretend
+
+# 2. Generate for real
+rails g better_model:traceable Article --create-table
+rails g better_model:archivable Article --create-columns
+rails g better_model:stateable Article --create-tables
+
+# 3. Run migrations
+rails db:migrate
+
+# 4. Enable in your model (generators show you the code)
+# See model setup instructions after running each generator
+```
+
 ## 📋 Features Overview
 
-BetterModel provides nine powerful concerns that work seamlessly together:
+BetterModel provides ten powerful concerns that work seamlessly together:
 
 ### Core Features
 
 - **✨ Statusable** - Declarative status management with lambda-based conditions
 - **🔐 Permissible** - State-based permission system
 - **🗄️ Archivable** - Soft delete with tracking (by user, reason)
-- **⏰ Traceable** 🆕 - Complete audit trail with time-travel and rollback
+- **⏰ Traceable** - Complete audit trail with time-travel and rollback
 - **⬆️ Sortable** - Type-aware sorting scopes
 - **🔍 Predicable** - Advanced filtering with rich predicate system
 - **🔎 Searchable** - Unified search interface (Predicable + Sortable)
 - **✅ Validatable** - Declarative validation DSL with conditional rules
-- **🔄 Stateable** 🆕 - Declarative state machines with guards & callbacks
+- **🔄 Stateable** - Declarative state machines with guards & callbacks
+- **🏷️ Taggable** 🆕 - Tag management with normalization, validation, and statistics
 
 [See all features in detail →](#-features)
 
@@ -329,10 +471,11 @@ Track all changes to your records with complete audit trail, time-travel capabil
 **🎯 Key Benefits:**
 - 🎛️ Opt-in activation: only enabled when explicitly configured
 - 📝 Automatic change tracking on create, update, and destroy
+- 🔐 Sensitive data protection: 3-level redaction system (full, partial, hash)
 - 👤 User attribution: track who made each change
 - 💬 Change reasons: optional context for changes
 - ⏰ Time-travel: reconstruct object state at any point in history
-- ↩️ Rollback support: restore records to previous versions
+- ↩️ Rollback support: restore records to previous versions (with sensitive field protection)
 - 🔍 Rich query API: find changes by user, time, or field transitions
 - 📊 Flexible table naming: per-model, shared, or custom tables
 - 🔗 Polymorphic association for efficient storage
@@ -388,6 +531,24 @@ Orchestrate Predicable and Sortable into a powerful, secure search interface wit
 - ✅ Type-safe validation of all parameters
 
 **[📖 Full Documentation →](docs/searchable.md)**
+
+---
+
+### 🏷️ Taggable - Tag Management with Statistics
+
+Manage tags with automatic normalization, validation, and comprehensive statistics - integrated with Predicable for powerful searches.
+
+**🎯 Key Benefits:**
+- 🎛️ Opt-in activation: only enabled when explicitly configured
+- 🤖 Automatic normalization (lowercase, strip, length limits)
+- ✅ Validation (min/max count, whitelist, blacklist)
+- 📊 Statistics (tag counts, popularity, co-occurrence)
+- 🔍 Automatic Predicable integration for searches
+- 📝 CSV import/export with tag_list
+- 🐘 PostgreSQL arrays or serialized JSON for SQLite
+- 🎯 Thread-safe configuration
+
+**[📖 Full Documentation →](docs/taggable.md)** | **[📚 Examples →](docs/examples/11_taggable.md)**
 
 ---
 
@@ -532,9 +693,7 @@ article.update!(title: "Corrected Title")
 
 ---
 
-## 📌 Version & Changelog
-
-**Current Version:** 1.0.0
+## 📌 Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
@@ -623,12 +782,13 @@ bundle exec rubocop
 
 ### 📊 Test Coverage Notes
 
-The test suite runs on **SQLite** for performance and portability. Current coverage: **91.45%** (1272 / 1391 lines).
+The test suite runs on **SQLite** for performance and portability. Current coverage: **92.57%** (1507 / 1628 lines).
 
 **Database-Specific Features Not Covered:**
-- **Predicable**: PostgreSQL array predicates (`_overlaps`, `_contains`, `_contained_by`) and JSONB predicates (`_has_key`, `_has_any_key`, `_has_all_keys`, `_jsonb_contains`) - lines 278-376 in `lib/better_model/predicable.rb`
-- **Traceable**: PostgreSQL JSONB queries and MySQL JSON_EXTRACT queries for field-specific change tracking - lines 454-489 in `lib/better_model/traceable.rb`
-- **Sortable**: MySQL NULLS emulation with CASE statements - lines 198-203 in `lib/better_model/sortable.rb`
+- **Predicable**: PostgreSQL array predicates (`_overlaps`, `_contains`, `_contained_by`) and JSONB predicates (`_has_key`, `_has_any_key`, `_has_all_keys`, `_jsonb_contains`)
+- **Traceable**: PostgreSQL JSONB queries and MySQL JSON_EXTRACT queries for field-specific change tracking
+- **Sortable**: MySQL NULLS emulation with CASE statements
+- **Taggable**: PostgreSQL native array operations (covered by Predicable tests)
 
 These features are fully implemented with proper SQL sanitization but require manual testing on PostgreSQL/MySQL:
 

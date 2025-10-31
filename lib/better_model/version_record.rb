@@ -45,11 +45,14 @@ module BetterModel
       }
     end
 
-    # Check if a specific field changed
+    # Check if a specific field changed in this version
+    # This method overrides ActiveRecord's changed? to accept a field_name parameter
     #
-    # @param field_name [Symbol, String] Field name
+    # @param field_name [Symbol, String, nil] Field name (if nil, calls ActiveRecord's changed?)
     # @return [Boolean]
-    def changed?(field_name)
+    def changed?(field_name = nil)
+      return super() if field_name.nil?
+
       object_changes&.key?(field_name.to_s) || false
     end
 
