@@ -82,10 +82,10 @@ class Article < ApplicationRecord
 
     # Define transitions with guards and callbacks
     transition :publish, from: :draft, to: :published do
-      guard { valid? }
-      guard if: :is_ready_for_publishing?  # Statusable integration
-      before { set_published_at }
-      after { notify_subscribers }
+      check { valid? }
+      check { title.present? && content.present? }
+      before_transition { self.published_at = Time.current }
+      after_transition { Rails.logger.info "Article #{id} published" }
     end
 
     transition :archive, from: [:draft, :published], to: :archived
@@ -355,7 +355,7 @@ BetterModel provides ten powerful concerns that work seamlessly together:
 - **⏰ Traceable** - Complete audit trail with time-travel and rollback
 - **🏷️ Taggable** 🆕 - Tag management with normalization, validation, and statistics
 
-[See all features in detail →](#-features)
+[See all features in detail →](#feature-details)
 
 ## ⚙️ Requirements
 
@@ -379,9 +379,22 @@ BetterModel works with all databases supported by ActiveRecord:
 - Array predicates: `overlaps`, `contains`, `contained_by`
 - JSONB predicates: `has_key`, `has_any_key`, `has_all_keys`, `jsonb_contains`
 
-## 📚 Features
+## 🗄️ Database Requirements
 
-BetterModel provides eight powerful concerns that work together seamlessly:
+Some opt-in features require database columns. Use the provided generators to add them:
+
+| Feature | Database Requirement | Generator Command |
+|---------|---------------------|-------------------|
+| **Archivable** | `archived_at` column | `rails g better_model:archivable Model` |
+| **Stateable** | `state`, `transitions` columns | `rails g better_model:stateable Model` |
+| **Traceable** | `version_records` table | `rails g better_model:traceable Model` |
+| **Taggable** | `tags` JSONB/text column | `rails g better_model:taggable Model` |
+
+**Core features** (Statusable, Permissible, Predicable, Sortable, Searchable, Validatable) require no database changes.
+
+## 📚 Feature Details
+
+BetterModel provides ten powerful concerns that work together seamlessly:
 
 ### 📋 Statusable - Declarative Status Management
 
@@ -666,147 +679,6 @@ Manage tags with automatic normalization, validation, and comprehensive statisti
 
 ---
 
-### 📜 Traceable - Audit Trail & Change Tracking
-
-Track all changes to your records with comprehensive audit trail functionality, time-travel queries, and rollback capabilities.
-
-**🎯 Key Benefits:**
-- 🎛️ Opt-in activation: only enabled when explicitly configured
-- 🤖 Automatic change tracking on create/update/destroy
-- ⏰ Time-travel: reconstruct record state at any point in time
-- ↩️ Rollback: restore to previous versions
-- 📝 Audit trail with who/why tracking
-- 🔍 Query changes by user, date range, or field transitions
-- 🗂️ Flexible table naming: per-model tables (default), shared table, or custom names
-
-**[📖 Full Documentation →](docs/traceable.md)**
-
-#### 🚀 Quick Setup
-
-**1️⃣ Step 1: Create the versions table**
-
-By default, each model gets its own versions table (`{model}_versions`):
-
-```bash
-# Creates migration for article_versions table
-rails g better_model:traceable Article --create-table
-rails db:migrate
-```
-
-Or use a custom table name:
-
-```bash
-# Creates migration for custom table name
-rails g better_model:traceable Article --create-table --table-name=audit_log
-rails db:migrate
-```
-
-**2️⃣ Step 2: Enable in your model**
-
-```ruby
-class Article < ApplicationRecord
-  include BetterModel
-
-  # Activate traceable (opt-in)
-  traceable do
-    track :status, :title, :published_at  # Fields to track
-    # versions_table 'audit_log'  # Optional: custom table (default: article_versions)
-  end
-end
-```
-
-**💡 Usage:**
-
-```ruby
-# 🤖 Automatic tracking on changes
-article.update!(status: "published", updated_by_id: user.id, updated_reason: "Approved")
-
-# 🔍 Query version history
-article.versions                              # All versions (ordered desc)
-article.changes_for(:status)                  # Changes for specific field
-article.audit_trail                           # Full formatted history
-
-# ⏰ Time-travel: reconstruct state at specific time
-past_article = article.as_of(3.days.ago)
-past_article.status                           # => "draft" (what it was 3 days ago)
-
-# ↩️ Rollback to previous version
-version = article.versions.where(event: "updated").first
-article.rollback_to(version, updated_by_id: user.id, updated_reason: "Mistake")
-
-# 📊 Class-level queries
-Article.changed_by(user.id)                   # Records changed by user
-Article.changed_between(1.week.ago, Time.current)  # Changes in period
-Article.status_changed_from("draft").to("published")  # Specific transitions (PostgreSQL)
-
-# 📦 Integration with as_json
-article.as_json(include_audit_trail: true)    # Include full history in JSON
-```
-
-**💾 Database Schema:**
-
-By default, each model gets its own versions table (e.g., `article_versions` for Article model).
-You can also use a shared table across multiple models or a custom table name.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `item_type` | string | Polymorphic model name |
-| `item_id` | integer | Polymorphic record ID |
-| `event` | string | Event type: created/updated/destroyed |
-| `object_changes` | json | Before/after values for tracked fields |
-| `updated_by_id` | integer | Optional: user who made the change |
-| `updated_reason` | string | Optional: reason for the change |
-| `created_at` | datetime | When the change occurred |
-
-**🗂️ Table Naming Options:**
-
-```ruby
-# 1️⃣ Option 1: Per-model table (default)
-class Article < ApplicationRecord
-  traceable do
-    track :status
-    # Uses article_versions table automatically
-  end
-end
-
-# 2️⃣ Option 2: Custom table name
-class Article < ApplicationRecord
-  traceable do
-    track :status
-    versions_table 'audit_log'  # Uses audit_log table
-  end
-end
-
-# 3️⃣ Option 3: Shared table across models
-class Article < ApplicationRecord
-  traceable do
-    track :status
-    versions_table 'versions'  # Shared table
-  end
-end
-
-class User < ApplicationRecord
-  traceable do
-    track :email
-    versions_table 'versions'  # Same shared table
-  end
-end
-```
-
-**📝 Optional Tracking:**
-
-To track who made changes and why, simply set attributes before saving:
-
-```ruby
-article.updated_by_id = current_user.id
-article.updated_reason = "Fixed typo"
-article.update!(title: "Corrected Title")
-
-# The version will automatically include updated_by_id and updated_reason
-```
-
----
-
 ## 📌 Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
@@ -832,6 +704,7 @@ Detailed documentation for each BetterModel concern:
 - [**Searchable**](docs/searchable.md) - Unified search interface
 - [**Validatable**](docs/validatable.md) - Declarative validation system
 - [**Stateable**](docs/stateable.md) 🆕 - State machine with transitions
+- [**Taggable**](docs/taggable.md) 🆕 - Flexible tag management with normalization
 
 ### 💡 Quick Links
 

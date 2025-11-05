@@ -7,9 +7,171 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2025-11-05
+
+### ⚠️ BREAKING CHANGES
+
+#### Predicable - Presence Predicate API Changes
+
+**`_present` predicate now requires boolean parameter for non-string fields:**
+
+- **Before (v1.x):** `Article.view_count_present` (no parameter)
+- **After (v2.0):** `Article.view_count_present(true)` (boolean parameter required)
+- **Rationale:** Explicit parameters make intent clear and enable both presence/absence checks
+- **Affected field types:** integer, decimal, float, bigint, boolean, date, datetime, time, timestamp
+- **Not affected:** string/text fields retain parameterless `_present`, `_blank`, `_null`
+
+**Boolean field predicates simplified:**
+- Removed redundant `_present` predicate for boolean fields
+- Use `_eq(true)/_eq(false)` or convenience methods `_true/_false` for boolean checks
+- Base predicates (_eq, _not_eq) now inherited from base predicate definitions
+
+**Date field predicates streamlined:**
+- `_present` now requires boolean parameter: `published_at_present(true)`
+- Base predicates (_eq, _not_eq) inherited from base predicate definitions
+- All other date-specific predicates unchanged (_lt, _lteq, _within, etc.)
+
+**Migration Guide:**
+
+| Old API (v1.x) | New API (v2.0) | Notes |
+|----------------|----------------|-------|
+| `view_count_present` | `view_count_present(true)` | Boolean parameter required |
+| `view_count_present` | `view_count_present(false)` | Check for absence/nil |
+| `published_at_present` | `published_at_present(true)` | Boolean parameter required |
+| `featured_present` | `featured_eq(true)` or `featured_true` | Use explicit true/false checks |
+| `title_present` | `title_present` | ✅ Unchanged (string field) |
+| `title_blank` | `title_blank` | ✅ Unchanged (string field) |
+| `title_null` | `title_null` | ✅ Unchanged (string field) |
+
+**Why this change?**
+- Makes predicate behavior explicit and consistent across field types
+- Enables absence checks: `field_present(false)` equivalent to `field_null`
+- Reduces API surface by removing redundant method definitions
+- Follows principle of explicit over implicit
+- Improves code maintainability by centralizing base predicate logic
+
 ### Added
 
+#### Context7 - AI-Optimized Documentation
+
+- **New folder**: `context7/` with 11 curated example files specifically designed for AI assistants
+- **Purpose**: Practical, copy-paste ready code examples for developers and AI tools like Context7
+- **Contents**:
+  - Complete, working implementations for all 10 BetterModel features
+  - Self-contained examples with model setup, configuration, and usage
+  - Real-world use cases with progressive complexity
+  - Comprehensive inline comments and explanations
+  - Structured for optimal Context7 AI assistant integration
+- **Files included**:
+  - `01_statusable.md` - Dynamic boolean statuses
+  - `02_permissible.md` - Permission management
+  - `03_predicable.md` - Type-aware filtering
+  - `04_sortable.md` - Type-aware sorting
+  - `05_searchable.md` - Unified search interface
+  - `06_archivable.md` - Soft delete with tracking
+  - `07_validatable.md` - Declarative validation
+  - `08_stateable.md` - State machines
+  - `09_traceable.md` - Audit trail and versioning
+  - `10_taggable.md` - Tag management system
+  - `README.md` - Overview and navigation guide
+- **Format**: Each file includes setup, configuration examples, common usage patterns, advanced queries, and best practices
+
 #### Traceable - Sensitive Fields Protection
+
+- **Three-level redaction system** for protecting sensitive data in version history:
+  - **`:full`**: Complete redaction - all values replaced with `"[REDACTED]"`
+  - **`:partial`**: Pattern-based masking with smart pattern detection
+  - **`:hash`**: SHA256 hashing for value verification without exposure
+- **Pattern detection for partial masking**:
+  - Credit cards: Shows last 4 digits (e.g., `"4532123456789012"` → `"****9012"`)
+  - Emails: Shows first char + domain (e.g., `"user@example.com"` → `"u***@example.com"`)
+  - SSN: Shows last 4 digits (e.g., `"123456789"` → `"***-**-6789"`)
+  - Phone numbers: Shows last 4 digits (e.g., `"5551234567"` → `"***-***-4567"`)
+  - Unknown patterns: Shows character count (e.g., `"random_text_123"` → `"[REDACTED:15chars]"`)
+- **Rollback protection**: Sensitive fields excluded from rollback by default
+  - Override with `allow_sensitive: true` option (not recommended)
+  - Warning: Rolling back sensitive fields will set them to redacted values
+- **Configuration introspection**: `traceable_sensitive_fields` class method
+- **Thread-safe implementation** with frozen configuration
+
+### Changed
+
+#### Predicable - Internal Refactoring
+
+- **Refactored predicate generation** to reduce code duplication:
+  - Base predicates (_eq, _not_eq, _present, _blank, _null) defined once and inherited by all field types
+  - String-specific presence checks override base definition for empty string handling
+  - Date/numeric/boolean predicates inherit base predicates automatically
+- **Improved code maintainability**:
+  - Single source of truth for base predicate logic
+  - Reduced repetition across field type modules
+  - Clearer separation between base predicates and type-specific predicates
+- **Enhanced consistency**: All field types now share identical base predicate behavior
+
+#### Documentation
+
+- **Context7 integration**: Added new context7/ folder optimized for AI assistants and developers
+- **README updates**: Added references to context7 documentation
+- **Predicate documentation**: Updated to reflect new presence predicate API requirements
+- **Traceable guide** updated with comprehensive sensitive fields section:
+  - Added "Sensitive Fields" subsection to Configuration
+  - Added redaction levels with practical examples
+  - Added rollback behavior with sensitive fields
+  - Added configuration introspection documentation
+  - Updated Overview with sensitive data protection feature
+  - Updated Table of Contents
+  - Added "Sensitive Data Protection" to Best Practices section
+  - Added guidance table for choosing redaction levels
+  - Updated "Don't track sensitive data" best practice to reference the `sensitive:` option
+- Examples of protecting passwords, PII, tokens, credit cards, and API keys
+- Healthcare, e-commerce, and authentication system examples
+
+### Testing & Quality
+
+#### Test Suite
+
+- **Total tests**: 751 (+0 from v1.3.0)
+  - Added 14 comprehensive sensitive fields tests
+  - Removed ~150 unused variable assignments from test files
+- **Total assertions**: 2392 (+26 from v1.3.0)
+- **Code coverage**: 92.51% (1506/1628 lines)
+- **Pass rate**: 100%
+  - 0 failures
+  - 0 errors
+  - 0 skips
+  - 0 warnings from project code
+- **Test execution time**: ~7.5s for full test suite
+
+#### Sensitive Fields Test Coverage
+
+- **Full redaction**: Complete value redaction and nil handling (2 tests)
+- **Hash redaction**: SHA256 hashing with deterministic output (3 tests)
+- **Partial masking**: Pattern detection for credit cards, emails, SSN, phone, unknown (4 tests)
+- **Rollback behavior**: Default skipping and allow_sensitive option (2 tests)
+- **Integration**: Mixed sensitive/normal fields, configuration introspection (2 tests)
+- **Edge cases**: Nil values, empty strings, special characters (1 test)
+
+#### Code Quality
+
+- **RuboCop**: 100% compliant (0 offenses)
+- Removed 151 unused variable assignments from test files
+- All sensitive field code follows Rails Omakase style guide
+- Thread-safe configuration with frozen objects
+- Comprehensive error handling
+
+### Technical Details
+
+- Predicates refactored with single inheritance chain for base predicates
+- Base predicate definitions centralized in `define_base_predicates` method
+- String predicates override `_present` to handle empty string semantics
+- All configurations remain frozen and thread-safe
+- Zero runtime performance impact from refactoring
+
+## [1.3.0] - 2025-10-31
+
+### Added
+
+#### Taggable - Tag Management System
 - **Three-level redaction system** for protecting sensitive data in version history:
   - **`:full`**: Complete redaction - all values replaced with `"[REDACTED]"`
   - **`:partial`**: Pattern-based masking with smart pattern detection
@@ -399,5 +561,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Strong parameters compatible
 - Chainable with standard ActiveRecord methods
 
+[2.0.0]: https://github.com/alessiobussolari/better_model/compare/v1.3.0...v2.0.0
+[1.3.0]: https://github.com/alessiobussolari/better_model/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/alessiobussolari/better_model/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/alessiobussolari/better_model/releases/tag/v1.1.0
 [1.0.0]: https://github.com/alessiobussolari/better_model/releases/tag/v1.0.0
