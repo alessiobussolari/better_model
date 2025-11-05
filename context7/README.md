@@ -50,7 +50,7 @@ end
 Add to your Gemfile:
 
 ```ruby
-gem 'better_model', '~> 2.0.0'
+gem 'better_model', '~> 2.1.0'
 ```
 
 Run:
