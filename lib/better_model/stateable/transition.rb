@@ -5,9 +5,9 @@ module BetterModel
     # Transition executor per Stateable
     #
     # Gestisce l'esecuzione di una transizione di stato, includendo:
-    # - Valutazione guards
+    # - Valutazione checks
     # - Esecuzione validazioni
-    # - Esecuzione callbacks (before/after/around)
+    # - Esecuzione callbacks (before_transition/after_transition/around)
     # - Aggiornamento stato nel database
     # - Creazione record StateTransition per storico
     #
@@ -23,14 +23,14 @@ module BetterModel
 
       # Esegue la transizione
       #
-      # @raise [GuardFailedError] Se un guard fallisce
+      # @raise [CheckFailedError] Se un check fallisce
       # @raise [ValidationFailedError] Se una validazione fallisce
       # @raise [ActiveRecord::RecordInvalid] Se il save! fallisce
       # @return [Boolean] true se la transizione ha successo
       #
       def execute!
-        # 1. Valuta guards
-        evaluate_guards!
+        # 1. Valuta checks
+        evaluate_checks!
 
         # 2. Esegui validazioni
         execute_validations!
@@ -52,15 +52,15 @@ module BetterModel
 
       private
 
-      # Valuta tutti i guards
-      def evaluate_guards!
-        guards = @config[:guards] || []
+      # Valuta tutti i checks
+      def evaluate_checks!
+        checks = @config[:guards] || []  # Manteniamo :guards per compatibilità interna
 
-        guards.each do |guard_config|
-          guard = Guard.new(@instance, guard_config)
+        checks.each do |check_config|
+          check = Guard.new(@instance, check_config)  # Guard class handles the logic
 
-          unless guard.evaluate
-            raise GuardFailedError.new(@event, guard.description)
+          unless check.evaluate
+            raise CheckFailedError.new(@event, check.description)
           end
         end
       end
@@ -101,7 +101,7 @@ module BetterModel
 
       # Esegue la transizione effettiva
       def perform_transition!
-        # 1. Esegui before callbacks
+        # 1. Esegui before_transition callbacks
         execute_callbacks(@config[:before_callbacks] || [])
 
         # 2. Aggiorna stato
@@ -113,7 +113,7 @@ module BetterModel
         # 4. Crea record StateTransition
         create_state_transition_record
 
-        # 5. Esegui after callbacks
+        # 5. Esegui after_transition callbacks
         execute_callbacks(@config[:after_callbacks] || [])
       end
 

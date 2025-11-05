@@ -55,11 +55,11 @@ class Article < ApplicationRecord
   # 6. VALIDATABLE - Declarative validation system (opt-in)
   validatable do
     # Basic validations
-    validate :title, :content, presence: true
+    check :title, :content, presence: true
 
     # Conditional validations
     validate_if :is_published? do
-      validate :published_at, presence: true
+      check :published_at, presence: true
     end
 
     # Cross-field validations
@@ -339,17 +339,20 @@ rails db:migrate
 
 BetterModel provides ten powerful concerns that work seamlessly together:
 
-### Core Features
+### Core Features (Always Available)
 
 - **✨ Statusable** - Declarative status management with lambda-based conditions
 - **🔐 Permissible** - State-based permission system
-- **🗄️ Archivable** - Soft delete with tracking (by user, reason)
-- **⏰ Traceable** - Complete audit trail with time-travel and rollback
 - **⬆️ Sortable** - Type-aware sorting scopes
 - **🔍 Predicable** - Advanced filtering with rich predicate system
+
+### Opt-in Features (Require Activation)
+
 - **🔎 Searchable** - Unified search interface (Predicable + Sortable)
+- **🗄️ Archivable** - Soft delete with tracking (by user, reason)
 - **✅ Validatable** - Declarative validation DSL with conditional rules
 - **🔄 Stateable** - Declarative state machines with guards & callbacks
+- **⏰ Traceable** - Complete audit trail with time-travel and rollback
 - **🏷️ Taggable** 🆕 - Tag management with normalization, validation, and statistics
 
 [See all features in detail →](#-features)
@@ -512,8 +515,74 @@ Generate comprehensive predicate scopes for filtering and searching with support
 - 📊 Range queries (between) for numerics and dates
 - 🐘 PostgreSQL array and JSONB support
 - 🔗 Chainable with standard ActiveRecord queries
+- 🧩 Custom complex predicates for business logic
 
 **[📖 Full Documentation →](docs/predicable.md)**
+
+#### 🧩 Complex Predicates
+
+For queries that go beyond single-field filtering, you can register **complex predicates** - custom scopes that combine multiple conditions, work with associations, or encapsulate business logic.
+
+**Basic Example:**
+
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  predicates :title, :view_count, :published_at
+
+  # Define a complex predicate with parameters
+  register_complex_predicate :trending do |days = 7, min_views = 100|
+    where("published_at >= ? AND view_count >= ?", days.days.ago, min_views)
+  end
+
+  # Define a complex predicate for association queries
+  register_complex_predicate :popular_author do |min_articles = 10|
+    joins(:author)
+      .group("articles.author_id")
+      .having("COUNT(articles.id) >= ?", min_articles)
+  end
+end
+```
+
+**Usage:**
+
+```ruby
+# Use with default parameters
+Article.trending
+# => Articles from last 7 days with 100+ views
+
+# Use with custom parameters
+Article.trending(14, 200)
+# => Articles from last 14 days with 200+ views
+
+# Chain with standard predicates
+Article.trending(7, 100)
+       .title_cont("Ruby")
+       .status_eq("published")
+       .sort_view_count_desc
+
+# Association-based queries
+Article.popular_author(5)
+       .published_at_within(30.days)
+```
+
+**When to Use Complex Predicates:**
+
+| Standard Predicates ✅ | Complex Predicates 🧩 |
+|------------------------|------------------------|
+| Single field filtering | Multi-field conditions |
+| `title_eq("Ruby")` | `trending(days, views)` |
+| `view_count_gt(100)` | Association queries |
+| `published_at_within(7.days)` | Business logic encapsulation |
+| Simple comparisons | Custom SQL expressions |
+
+**Check if Defined:**
+
+```ruby
+Article.complex_predicate?(:trending)  # => true
+Article.complex_predicates_registry    # => { trending: #<Proc> }
+```
 
 ---
 
@@ -529,8 +598,53 @@ Orchestrate Predicable and Sortable into a powerful, secure search interface wit
 - ⚙️ Default ordering configuration
 - 💪 Strong parameters integration
 - ✅ Type-safe validation of all parameters
+- 🚀 Eager loading support with `includes:`, `preload:`, `eager_load:`
 
 **[📖 Full Documentation →](docs/searchable.md)**
+
+#### 🔗 Eager Loading Associations
+
+Optimize N+1 queries with built-in eager loading support:
+
+```ruby
+# Single association (always use array syntax)
+Article.search(
+  { status_eq: "published" },
+  includes: [:author]
+)
+
+# Multiple associations
+Article.search(
+  { status_eq: "published" },
+  includes: [:author, :comments],
+  preload: [:tags]
+)
+
+# Nested associations
+Article.search(
+  { status_eq: "published" },
+  includes: [{ author: :profile }]
+)
+
+# Complex mix of associations
+Article.search(
+  { status_eq: "published" },
+  includes: [:tags, { author: :profile }, { comments: :user }]
+)
+
+# Combined with pagination and ordering
+Article.search(
+  { status_eq: "published" },
+  pagination: { page: 1, per_page: 25 },
+  orders: [:sort_view_count_desc],
+  includes: [:author, :comments]
+)
+```
+
+**Strategies:**
+- `includes:` - Smart loading (LEFT OUTER JOIN or separate queries)
+- `preload:` - Separate queries (avoids JOIN ambiguity)
+- `eager_load:` - Force LEFT OUTER JOIN (use with caution with default_order)
 
 ---
 
@@ -719,14 +833,6 @@ Detailed documentation for each BetterModel concern:
 - [**Validatable**](docs/validatable.md) - Declarative validation system
 - [**Stateable**](docs/stateable.md) 🆕 - State machine with transitions
 
-### 🎓 Advanced Guides
-
-Learn how to master BetterModel in production:
-
-- [**Integration Guide**](docs/integration_guide.md) 🆕 - Combining multiple concerns effectively
-- [**Performance Guide**](docs/performance_guide.md) 🆕 - Optimization strategies and indexing
-- [**Migration Guide**](docs/migration_guide.md) 🆕 - Adding BetterModel to existing apps
-
 ### 💡 Quick Links
 
 - [Installation](#-installation)
@@ -762,6 +868,35 @@ We welcome contributions! Here's how you can help:
 
 ### 🔧 Development Setup
 
+#### 🐳 Using Docker (Recommended)
+
+The easiest way to get started is with Docker, which provides a consistent development environment:
+
+```bash
+# Clone your fork
+git clone https://github.com/YOUR_USERNAME/better_model.git
+cd better_model
+
+# One-time setup: build image and install dependencies
+bin/docker-setup
+
+# Run tests
+bin/docker-test
+
+# Run RuboCop
+bin/docker-rubocop
+
+# Open interactive shell for debugging
+docker compose run --rm app sh
+
+# Run any command in the container
+docker compose run --rm app bundle exec [command]
+```
+
+#### 💻 Local Setup (Without Docker)
+
+If you prefer to use your local Ruby installation:
+
 ```bash
 # Clone your fork
 git clone https://github.com/YOUR_USERNAME/better_model.git
@@ -779,6 +914,11 @@ bundle exec rake test  # Coverage report in coverage/index.html
 # Run RuboCop
 bundle exec rubocop
 ```
+
+**Requirements:**
+- Ruby 3.0+ (Ruby 3.3 recommended)
+- Rails 8.1+
+- SQLite3
 
 ### 📊 Test Coverage Notes
 

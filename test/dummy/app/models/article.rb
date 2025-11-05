@@ -4,6 +4,10 @@ class Article < ApplicationRecord
   include BetterModel
   include BetterModel::Searchable
 
+  # Associations
+  belongs_to :author, optional: true
+  has_many :comments, dependent: :destroy
+
   # Serialize tags as array (for SQLite compatibility)
   # In PostgreSQL, this would be a native array column
   serialize :tags, coder: JSON, type: Array
@@ -44,7 +48,7 @@ class Article < ApplicationRecord
 
     # Example securities for testing
     security :status_required, [ :status_eq ]
-    security :featured_only, [ :featured_true ]
+    security :featured_only, [ :featured_eq ]
   end
 
   # ========================================

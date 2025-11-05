@@ -1,0 +1,67 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "BetterModel",
+  "description": "BetterModel is a Rails engine gem (Rails 8.1+) that provides powerful extensions for ActiveRecord models, including declarative status management, permissions, state machines, validations, archiving, change tracking, sorting, filtering, and unified search capabilities.",
+  "branch": "main",
+  "folders": ["context7"],
+  "excludeFolders": [
+    "test",
+    "lib",
+    "docs",
+    "bin",
+    "plans",
+    ".claude",
+    ".github",
+    ".git"
+  ],
+  "excludeFiles": [
+    "CHANGELOG.md",
+    "changelog.md",
+    "CHANGELOG.mdx",
+    "changelog.mdx",
+    "LICENSE.md",
+    "license.md",
+    "MIT-LICENSE",
+    "CODE_OF_CONDUCT.md",
+    "code_of_conduct.md",
+    "CLAUDE.md",
+    "Gemfile",
+    "Gemfile.lock",
+    "Rakefile",
+    ".gitignore",
+    ".rubocop.yml",
+    ".dockerignore",
+    "docker-compose.yml",
+    "Dockerfile",
+    "better_model.gemspec",
+    "manual_test.rb"
+  ],
+  "rules": [
+    "Include BetterModel in ActiveRecord models to enable all features at once with 'include BetterModel'",
+    "Each feature (Statusable, Permissible, Predicable, Sortable, Searchable) is automatically available when BetterModel is included",
+    "Opt-in features require explicit activation: Archivable (with archived_at column), Validatable (with configuration block), Stateable (with state and transitions columns), Traceable (with version_records table), Taggable (with tags JSONB column)",
+    "Use Rails generators to create required migrations: 'rails generate better_model:archivable MODEL', 'rails generate better_model:stateable MODEL', 'rails generate better_model:traceable MODEL', 'rails generate better_model:taggable MODEL'",
+    "PostgreSQL provides additional predicates: overlaps, contains, contained_by for arrays; has_key, has_value, has_path for JSONB columns",
+    "Statusable declarations: use 'is :status_name, -> { condition }' to define dynamic boolean statuses based on model state and attributes",
+    "Permissible declarations: use 'permit :action_name, -> { condition }' to define action permissions based on model state",
+    "State machines: use 'state_machine initial: :state_name' with 'state :name, from: [:state1], to: :state2' declarations",
+    "Searchable accepts: text fields for full-text search, exact fields for exact matches, range fields for numeric/date ranges, boolean fields, enum fields, and custom scopes",
+    "Change tracking: Traceable automatically tracks all changes to model attributes, storing versions with changes hash, whodunnit (user), and metadata",
+    "Always use transaction blocks when performing state transitions or updates that involve multiple records",
+    "The gem requires Rails 8.1+ and Ruby 3.0+ minimum"
+  ],
+  "previousVersions": [
+    {
+      "tag": "v1.3.0",
+      "title": "version 1.3.0 (current) - Added Taggable concern"
+    },
+    {
+      "tag": "v1.2.0",
+      "title": "version 1.2.0 - Added Traceable concern"
+    },
+    {
+      "tag": "v1.1.0",
+      "title": "version 1.1.0 - Enhanced testing and documentation"
+    }
+  ]
+}

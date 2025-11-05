@@ -1,6 +1,6 @@
 # 🔄 Stateable
 
-Stateable provides a declarative state machine system for Rails models with support for explicit states, guarded transitions, validations, callbacks, and complete state history tracking. It enables you to model complex business workflows with clean, maintainable code.
+Stateable provides a declarative state machine system for Rails models with support for explicit states, conditional transitions, validations, callbacks, and complete state history tracking. It enables you to model complex business workflows with clean, maintainable code.
 
 ## Table of Contents
 
@@ -11,10 +11,10 @@ Stateable provides a declarative state machine system for Rails models with supp
 - [Basic Configuration](#basic-configuration)
   - [Defining States](#defining-states)
   - [Defining Transitions](#defining-transitions)
-- [Guards](#guards)
-  - [Block Guards](#block-guards)
-  - [Method Guards](#method-guards)
-  - [Predicate Guards (Statusable Integration)](#predicate-guards-statusable-integration)
+- [Checks](#checks)
+  - [Block Checks](#block-checks)
+  - [Method Checks](#method-checks)
+  - [Predicate Checks (Statusable Integration)](#predicate-checks-statusable-integration)
 - [Validations](#validations)
 - [Callbacks](#callbacks)
   - [Before Callbacks](#before-callbacks)
@@ -35,11 +35,11 @@ Stateable provides a declarative state machine system for Rails models with supp
 
 - **🎯 Opt-in Activation**: Stateable is not active by default. You must explicitly enable it with `stateable do...end`.
 - **📊 Explicit States**: Define all possible states upfront with clear initial state.
-- **🔐 Guarded Transitions**: Protect state changes with guard conditions (blocks, methods, or Statusable predicates).
+- **🔐 Conditional Transitions**: Protect state changes with check conditions (blocks, methods, or Statusable predicates).
 - **✅ Transition Validations**: Add custom validation logic to transitions.
 - **🎣 Rich Callbacks**: before, after, and around callbacks for transition lifecycle.
 - **📜 Complete History**: Track all state transitions with metadata and timestamps.
-- **🤝 Statusable Integration**: Use Statusable predicates as guard conditions.
+- **🤝 Statusable Integration**: Use Statusable predicates as check conditions.
 - **🔗 Flexible Table Naming**: Shared or per-model transition tables.
 - **🛡️ Thread-safe**: Immutable configuration and registry.
 - **⚡ Database Transaction**: All transitions wrapped in transactions for consistency.
@@ -148,9 +148,9 @@ class Order < ApplicationRecord
 
     # Transition with block configuration
     transition :pay, from: :confirmed, to: :paid do
-      guard { payment_method.present? }
-      before { charge_payment }
-      after { send_receipt }
+      check { payment_method.present? }
+      before_transition { charge_payment }
+      after_transition { send_receipt }
     end
   end
 end
@@ -160,15 +160,15 @@ end
 
 ```ruby
 transition :event_name, from: :source_state, to: :target_state do
-  # Optional: guards, validations, callbacks
+  # Optional: checks, validations, callbacks
 end
 ```
 
-## Guards
+## Checks
 
-Guards are preconditions that must be met for a transition to be allowed. There are three types of guards:
+Checks are preconditions that must be met for a transition to be allowed. There are three types of checks:
 
-### Block Guards
+### Block Checks
 
 Evaluate a block in the instance context:
 
@@ -178,21 +178,21 @@ stateable do
   state :confirmed
 
   transition :confirm, from: :pending, to: :confirmed do
-    # Multiple guards - ALL must pass
-    guard { items.any? }
-    guard { customer.present? }
-    guard { total_amount > 0 }
+    # Multiple checks - ALL must pass
+    check { items.any? }
+    check { customer.present? }
+    check { total_amount > 0 }
   end
 end
 ```
 
-**Block guards:**
+**Block checks:**
 - Executed in instance context (`self` is the model instance)
 - Must return truthy/falsy value
 - Can access any instance methods or attributes
-- Multiple guards are AND-ed (all must pass)
+- Multiple checks are AND-ed (all must pass)
 
-### Method Guards
+### Method Checks
 
 Call a method on the instance:
 
@@ -203,8 +203,8 @@ class Order < ApplicationRecord
     state :confirmed
 
     transition :confirm, from: :pending, to: :confirmed do
-      guard :customer_valid?
-      guard :stock_available?
+      check :customer_valid?
+      check :stock_available?
     end
   end
 
@@ -220,15 +220,15 @@ class Order < ApplicationRecord
 end
 ```
 
-**Method guards:**
+**Method checks:**
 - Cleaner for complex logic
 - Reusable across transitions
 - Can be private methods
 - Must return truthy/falsy value
 
-### Predicate Guards (Statusable Integration)
+### Predicate Checks (Statusable Integration)
 
-Use Statusable predicates as guards:
+Use Statusable predicates as checks:
 
 ```ruby
 class Order < ApplicationRecord
@@ -252,19 +252,19 @@ class Order < ApplicationRecord
     state :shipped
 
     transition :pay, from: :confirmed, to: :paid do
-      guard if: :is_payable?  # Uses Statusable predicate
+      check if: :is_payable?  # Uses Statusable predicate
     end
 
     transition :ship, from: :paid, to: :shipped do
-      guard if: :is_ready_to_ship?
+      check if: :is_ready_to_ship?
     end
   end
 end
 ```
 
-**Predicate guards:**
+**Predicate checks:**
 - Requires Statusable concern
-- Uses `guard if: :predicate_name` syntax
+- Uses `check if: :predicate_name` syntax
 - Automatically prefixes with `is_` if Statusable is enabled
 - Great for complex derived conditions
 
@@ -299,7 +299,7 @@ end
 
 **Validation behavior:**
 
-- Runs after guards (guards must pass first)
+- Runs after checks (checks must pass first)
 - Should add errors to `errors` object
 - If any errors exist after validation, transition fails with `ValidationFailedError`
 - Can add multiple validation blocks (all will be executed)
@@ -317,21 +317,21 @@ stateable do
 
   transition :confirm, from: :pending, to: :confirmed do
     # Block callback
-    before { calculate_total }
+    before_transition { calculate_total }
 
     # Method callback
-    before :send_confirmation_email
+    before_transition :send_confirmation_email
 
     # Multiple callbacks (executed in order)
-    before :update_inventory
-    before :notify_warehouse
+    before_transition :update_inventory
+    before_transition :notify_warehouse
   end
 end
 ```
 
 **Before callbacks:**
 - Execute before state is changed
-- Execute after guards and validations pass
+- Execute after checks and validations pass
 - Changes are not saved yet (can modify the record)
 - If an exception is raised, transaction rolls back
 
@@ -346,14 +346,14 @@ stateable do
 
   transition :pay, from: :confirmed, to: :paid do
     # Block callback
-    after { update_accounting }
+    after_transition { update_accounting }
 
     # Method callback
-    after :send_receipt
+    after_transition :send_receipt
 
     # Multiple callbacks
-    after :update_loyalty_points
-    after :schedule_shipping
+    after_transition :update_loyalty_points
+    after_transition :schedule_shipping
   end
 end
 ```
@@ -516,7 +516,7 @@ end
 
 # Generated methods:
 order.confirm!       # Execute transition (raises on failure)
-order.can_confirm?   # Check if transition is allowed (tests guards)
+order.can_confirm?   # Check if transition is allowed (tests check conditions)
 
 # Usage
 if order.can_confirm?
@@ -683,11 +683,11 @@ class Order < ApplicationRecord
     state :shipped
 
     transition :pay, from: :confirmed, to: :paid do
-      guard if: :is_payable?  # Uses Statusable
+      check if: :is_payable?  # Uses Statusable
     end
 
     transition :ship, from: :paid, to: :shipped do
-      guard if: :is_shippable?
+      check if: :is_shippable?
     end
   end
 end
@@ -712,11 +712,11 @@ class Order < ApplicationRecord
     state :cancelled
 
     transition :ship, from: :pending, to: :shipped do
-      before { self.shipped_at = Time.current }
+      before_transition { self.shipped_at = Time.current }
     end
 
     transition :cancel, from: [:pending, :confirmed], to: :cancelled do
-      before { self.cancelled_at = Time.current }
+      before_transition { self.cancelled_at = Time.current }
     end
   end
 end
@@ -746,7 +746,7 @@ class Article < ApplicationRecord
 
     transition :publish, from: :draft, to: :published
     transition :archive, from: :published, to: :archived do
-      before { archive!(reason: "Moved to archived state") }
+      before_transition { archive!(reason: "Moved to archived state") }
     end
   end
 end
@@ -785,55 +785,55 @@ class Order < ApplicationRecord
     state :refunded
 
     transition :confirm, from: :pending, to: :confirmed do
-      guard if: :is_ready_to_confirm?
+      check if: :is_ready_to_confirm?
 
       validate do
         errors.add(:base, "Minimum order amount not met") if total_amount < 10
       end
 
-      before :calculate_final_total
-      before :reserve_inventory
-      after :send_confirmation_email
+      before_transition :calculate_final_total
+      before_transition :reserve_inventory
+      after_transition :send_confirmation_email
     end
 
     transition :pay, from: :confirmed, to: :paid do
-      guard if: :is_ready_to_pay?
+      check if: :is_ready_to_pay?
 
       validate do
         errors.add(:payment_method, "declined") unless payment_method.valid?
       end
 
-      before :charge_payment
-      after :send_receipt
-      after :schedule_processing
+      before_transition :charge_payment
+      after_transition :send_receipt
+      after_transition :schedule_processing
     end
 
     transition :process, from: :paid, to: :processing do
-      before :notify_warehouse
+      before_transition :notify_warehouse
     end
 
     transition :ship, from: :processing, to: :shipped do
-      guard { tracking_number.present? }
+      check { tracking_number.present? }
 
-      before { self.shipped_at = Time.current }
-      after :send_shipping_notification
+      before_transition { self.shipped_at = Time.current }
+      after_transition :send_shipping_notification
     end
 
     transition :deliver, from: :shipped, to: :delivered do
-      before { self.delivered_at = Time.current }
-      after :send_delivery_confirmation
+      before_transition { self.delivered_at = Time.current }
+      after_transition :send_delivery_confirmation
     end
 
     transition :cancel, from: [:pending, :confirmed], to: :cancelled do
-      before :release_inventory
-      after :send_cancellation_email
+      before_transition :release_inventory
+      after_transition :send_cancellation_email
     end
 
     transition :refund, from: [:paid, :processing, :shipped], to: :refunded do
-      guard { refundable? }
+      check { refundable? }
 
-      before :process_refund
-      after :send_refund_notification
+      before_transition :process_refund
+      after_transition :send_refund_notification
     end
   end
 
@@ -875,32 +875,32 @@ class Document < ApplicationRecord
     state :published
 
     transition :submit, from: :draft, to: :submitted do
-      guard { content.present? && title.present? }
+      check { content.present? && title.present? }
 
       validate do
         errors.add(:base, "Must have at least 100 words") if word_count < 100
       end
 
-      before { self.submitted_at = Time.current }
-      after :notify_reviewers
+      before_transition { self.submitted_at = Time.current }
+      after_transition :notify_reviewers
     end
 
     transition :start_review, from: :submitted, to: :under_review do
-      guard { reviewer.present? }
+      check { reviewer.present? }
 
-      before { self.review_started_at = Time.current }
-      after :notify_author_review_started
+      before_transition { self.review_started_at = Time.current }
+      after_transition :notify_author_review_started
     end
 
     transition :approve, from: :under_review, to: :approved do
-      guard { reviewer.present? }
+      check { reviewer.present? }
 
       validate do
         errors.add(:approval_notes, "required") if approval_notes.blank?
       end
 
-      before { self.approved_at = Time.current }
-      after :notify_author_approved
+      before_transition { self.approved_at = Time.current }
+      after_transition :notify_author_approved
     end
 
     transition :reject, from: :under_review, to: :rejected do
@@ -908,18 +908,18 @@ class Document < ApplicationRecord
         errors.add(:rejection_reason, "required") if rejection_reason.blank?
       end
 
-      before { self.rejected_at = Time.current }
-      after :notify_author_rejected
+      before_transition { self.rejected_at = Time.current }
+      after_transition :notify_author_rejected
     end
 
     transition :revise, from: :rejected, to: :draft do
-      before { self.revision_count += 1 }
+      before_transition { self.revision_count += 1 }
     end
 
     transition :publish, from: :approved, to: :published do
-      before { self.published_at = Time.current }
-      after :notify_subscribers
-      after :index_for_search
+      before_transition { self.published_at = Time.current }
+      after_transition :notify_subscribers
+      after_transition :index_for_search
     end
   end
 
@@ -964,15 +964,15 @@ class SupportTicket < ApplicationRecord
     state :closed
 
     transition :assign, from: [:open, :assigned], to: :assigned do
-      guard { agent.present? }
+      check { agent.present? }
 
-      before :notify_agent_assigned
+      before_transition :notify_agent_assigned
     end
 
     transition :start_work, from: :assigned, to: :in_progress do
-      guard { agent.present? }
+      check { agent.present? }
 
-      before { self.started_at = Time.current }
+      before_transition { self.started_at = Time.current }
     end
 
     transition :request_info, from: :in_progress, to: :waiting_on_customer do
@@ -980,11 +980,11 @@ class SupportTicket < ApplicationRecord
         errors.add(:base, "Must specify what info is needed") if notes.blank?
       end
 
-      after :notify_customer_info_needed
+      after_transition :notify_customer_info_needed
     end
 
     transition :resume, from: :waiting_on_customer, to: :in_progress do
-      guard { customer_responded? }
+      check { customer_responded? }
     end
 
     transition :resolve, from: [:in_progress, :waiting_on_customer], to: :resolved do
@@ -992,22 +992,22 @@ class SupportTicket < ApplicationRecord
         errors.add(:resolution_notes, "required") if resolution_notes.blank?
       end
 
-      before { self.resolved_at = Time.current }
-      after :send_resolution_notification
+      before_transition { self.resolved_at = Time.current }
+      after_transition :send_resolution_notification
     end
 
     transition :reopen, from: [:resolved, :closed], to: :in_progress do
-      guard { reopenable? }
+      check { reopenable? }
 
-      before { self.reopened_count += 1 }
-      after :notify_agent_reopened
+      before_transition { self.reopened_count += 1 }
+      after_transition :notify_agent_reopened
     end
 
     transition :close, from: :resolved, to: :closed do
-      guard { resolved_at < 48.hours.ago }
+      check { resolved_at < 48.hours.ago }
 
-      before { self.closed_at = Time.current }
-      after :run_satisfaction_survey
+      before_transition { self.closed_at = Time.current }
+      after_transition :run_satisfaction_survey
     end
   end
 
@@ -1046,14 +1046,14 @@ rescue BetterModel::InvalidTransitionError => e
   e.to_state    # => "shipped"
 end
 
-# GuardFailedError - Guard condition not met
+# CheckFailedError - Check condition not met
 begin
   order.pay!  # But payment_method is nil
-rescue BetterModel::GuardFailedError => e
+rescue BetterModel::CheckFailedError => e
   e.message
-  # => "Guard failed for transition 'pay': method guard: payment_method_present?"
+  # => "Check failed for transition 'pay': method check: payment_method_present?"
   e.event        # => :pay
-  e.guard_description  # => "method guard: payment_method_present?"
+  e.check_description  # => "method check: payment_method_present?"
 end
 
 # ValidationFailedError - Validation failed
@@ -1078,8 +1078,8 @@ class OrdersController < ApplicationController
     redirect_to @order, notice: "Order confirmed"
   rescue BetterModel::InvalidTransitionError
     redirect_to @order, alert: "Order cannot be confirmed in current state"
-  rescue BetterModel::GuardFailedError => e
-    redirect_to @order, alert: "Cannot confirm: #{e.guard_description}"
+  rescue BetterModel::CheckFailedError => e
+    redirect_to @order, alert: "Cannot confirm: #{e.check_description}"
   rescue BetterModel::ValidationFailedError => e
     redirect_to @order, alert: "Validation failed: #{e.errors.full_messages.join(', ')}"
   end
@@ -1108,7 +1108,7 @@ end
 - **Define all states explicitly** - Make the state machine complete and clear
 - **Use initial state** - Always specify which state is initial
 - **Keep states simple** - States should be nouns (pending, confirmed), not verbs
-- **Use guards liberally** - Prevent invalid transitions with guard conditions
+- **Use checks liberally** - Prevent invalid transitions with check conditions
 - **Validate business rules** - Use validations for complex business logic
 - **Track metadata** - Pass context (user_id, reason, etc.) when transitioning
 - **Use before callbacks for side effects** - Database updates, calculations
@@ -1123,7 +1123,7 @@ end
 - **Don't make states too granular** - Too many states make the machine complex
 - **Don't forget initial state** - Every state machine needs a starting point
 - **Don't skip validations** - Use validations to enforce business rules
-- **Don't use callbacks for business logic** - Guards and validations are better
+- **Don't use callbacks for business logic** - Checks and validations are better
 - **Don't ignore errors** - Handle transition errors appropriately
 - **Don't track non-state data** - Use Traceable for change tracking
 - **Don't skip indexes** - State transitions table needs proper indexes
@@ -1156,12 +1156,12 @@ stateable do
 end
 ```
 
-### Guard vs Validation
+### Check vs Validation
 
 ```ruby
-# ✅ Good: Use guards for preconditions
+# ✅ Good: Use checks for preconditions
 transition :pay, from: :confirmed, to: :paid do
-  guard { payment_method.present? }  # Precondition
+  check { payment_method.present? }  # Precondition
 
   validate do
     # Business rule validation
@@ -1172,7 +1172,7 @@ end
 # ❌ Bad: Using validation for preconditions
 transition :pay, from: :confirmed, to: :paid do
   validate do
-    errors.add(:payment_method, "required") if payment_method.nil?  # Should be guard
+    errors.add(:payment_method, "required") if payment_method.nil?  # Should be check
   end
 end
 ```
@@ -1201,19 +1201,13 @@ end
 
 # Should be:
 transition :confirm, from: :pending, to: :confirmed do
-  guard { items.any? }  # Or use validate block
+  check { items.any? }  # Or use validate block
 end
 ```
 
 ---
 
-**Next Steps:**
-
-- Check out [Integration Guide](integration_guide.md) for combining Stateable with other concerns
-- See [Performance Guide](performance_guide.md) for optimization tips
-- Read [Migration Guide](migration_guide.md) for adding Stateable to existing models
-
 **Related Documentation:**
-- [Statusable](statusable.md) - Declarative status management (great for guards)
+- [Statusable](statusable.md) - Declarative status management (great for checks)
 - [Traceable](traceable.md) - Audit trail for state changes
 - [Validatable](validatable.md) - Advanced validation system

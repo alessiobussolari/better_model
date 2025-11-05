@@ -104,8 +104,8 @@ module BetterModel
         sort :archived_at unless sortable_field?(:archived_at)
 
         # Definisci gli scope alias (approccio ibrido)
-        scope :archived, -> { archived_at_present }
-        scope :not_archived, -> { archived_at_null }
+        scope :archived, -> { archived_at_present(true) }
+        scope :not_archived, -> { archived_at_null(true) }
 
         # Configura se passato un blocco
         if block_given?

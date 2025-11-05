@@ -32,18 +32,18 @@
 #
 #       # Transizioni
 #       transition :confirm, from: :pending, to: :confirmed do
-#         guard { items.any? }
-#         guard :customer_valid?
-#         guard if: :is_payable?  # Statusable integration
+#         check { items.any? }
+#         check :customer_valid?
+#         check if: :is_payable?  # Statusable integration
 #
 #         validate { errors.add(:base, "Stock unavailable") unless stock_available? }
 #
-#         before { calculate_total }
-#         after { send_confirmation_email }
+#         before_transition { calculate_total }
+#         after_transition { send_confirmation_email }
 #       end
 #
 #       transition :pay, from: :confirmed, to: :paid do
-#         before { charge_payment }
+#         before_transition { charge_payment }
 #       end
 #
 #       transition :cancel, from: [:pending, :confirmed], to: :cancelled
@@ -119,15 +119,15 @@ module BetterModel
       #     transition :publish, from: :draft, to: :published
       #   end
       #
-      # @example Con guards e callbacks
+      # @example Con checks e callbacks
       #   stateable do
       #     state :pending, initial: true
       #     state :confirmed
       #
       #     transition :confirm, from: :pending, to: :confirmed do
-      #       guard { valid? }
-      #       before { prepare_confirmation }
-      #       after { send_notification }
+      #       check { valid? }
+      #       before_transition { prepare_confirmation }
+      #       after_transition { send_notification }
       #     end
       #   end
       #
@@ -270,7 +270,7 @@ module BetterModel
     # @param event [Symbol] Nome della transizione
     # @param metadata [Hash] Metadata opzionale da salvare nella StateTransition
     # @raise [InvalidTransitionError] Se la transizione non è valida
-    # @raise [GuardFailedError] Se un guard fallisce
+    # @raise [CheckFailedError] Se un check fallisce
     # @raise [ValidationFailedError] Se una validazione fallisce
     # @return [Boolean] true se la transizione ha successo
     #

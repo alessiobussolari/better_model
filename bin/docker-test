@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# Run tests in Docker container
+# Usage: bin/docker-test [test file or options]
+
+set -e
+
+echo "🧪 Running BetterModel tests in Docker..."
+echo ""
+
+if [ $# -eq 0 ]; then
+  # No arguments: run all tests
+  docker compose run --rm test
+else
+  # Arguments provided: pass them to the test command
+  docker compose run --rm test bundle exec rake test "$@"
+fi

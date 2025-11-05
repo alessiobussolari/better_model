@@ -20,9 +20,9 @@ class Article < ApplicationRecord
   include BetterModel
 
   validatable do
-    validate :title, presence: true
-    validate :content, presence: true
-    validate :title, length: { minimum: 5, maximum: 200 }
+    check :title, presence: true
+    check :content, presence: true
+    check :title, length: { minimum: 5, maximum: 200 }
   end
 end
 ```
@@ -35,20 +35,20 @@ class Article < ApplicationRecord
 
   validatable do
     # Presence
-    validate :title, :content, presence: true
+    check :title, :content, presence: true
 
     # Length
-    validate :title, length: { minimum: 5, maximum: 200 }
-    validate :content, length: { minimum: 10 }
+    check :title, length: { minimum: 5, maximum: 200 }
+    check :content, length: { minimum: 10 }
 
     # Format
-    validate :slug, format: { with: /\A[a-z0-9\-]+\z/ }
+    check :slug, format: { with: /\A[a-z0-9\-]+\z/ }
 
     # Numericality
-    validate :view_count, numericality: { greater_than_or_equal_to: 0 }
+    check :view_count, numericality: { greater_than_or_equal_to: 0 }
 
     # Inclusion
-    validate :status, inclusion: { in: %w[draft published archived] }
+    check :status, inclusion: { in: %w[draft published archived] }
   end
 end
 
@@ -82,22 +82,22 @@ class Article < ApplicationRecord
 
   validatable do
     # Always required
-    validate :title, presence: true
+    check :title, presence: true
 
     # Conditional based on method
     validate_if :published? do
-      validate :published_at, presence: true
-      validate :content, presence: true, length: { minimum: 100 }
+      check :published_at, presence: true
+      check :content, presence: true, length: { minimum: 100 }
     end
 
     # Conditional based on status
     validate_if -> { status == "featured" } do
-      validate :featured_image_url, presence: true
+      check :featured_image_url, presence: true
     end
 
     # Unless condition
     validate_unless :draft? do
-      validate :reviewed_by_id, presence: true
+      check :reviewed_by_id, presence: true
     end
   end
 
@@ -139,18 +139,18 @@ class Article < ApplicationRecord
   validatable do
     # Step 1: Basic info
     validation_group :basic_info, [:title, :slug]
-    validate :title, presence: true, length: { minimum: 5 }
-    validate :slug, presence: true, format: { with: /\A[a-z0-9\-]+\z/ }
+    check :title, presence: true, length: { minimum: 5 }
+    check :slug, presence: true, format: { with: /\A[a-z0-9\-]+\z/ }
 
     # Step 2: Content
     validation_group :content_info, [:content, :excerpt]
-    validate :content, presence: true, length: { minimum: 100 }
-    validate :excerpt, length: { maximum: 300 }
+    check :content, presence: true, length: { minimum: 100 }
+    check :excerpt, length: { maximum: 300 }
 
     # Step 3: Publishing
     validation_group :publishing_info, [:published_at, :status]
-    validate :published_at, presence: true
-    validate :status, inclusion: { in: %w[draft published] }
+    check :published_at, presence: true
+    check :status, inclusion: { in: %w[draft published] }
   end
 end
 
@@ -231,7 +231,7 @@ class Article < ApplicationRecord
   include BetterModel
 
   validatable do
-    validate :title, :content, presence: true
+    check :title, :content, presence: true
 
     # Custom business rule validation
     validate_business_rule :published_article_must_be_complete
@@ -298,25 +298,25 @@ class Article < ApplicationRecord
   validatable do
     # Step 1: Basic Information
     validation_group :step1, [:title, :slug, :category]
-    validate :title, presence: true, length: { minimum: 5, maximum: 200 }
-    validate :slug, presence: true, format: { with: /\A[a-z0-9\-]+\z/ }
-    validate :category, presence: true
+    check :title, presence: true, length: { minimum: 5, maximum: 200 }
+    check :slug, presence: true, format: { with: /\A[a-z0-9\-]+\z/ }
+    check :category, presence: true
 
     # Step 2: Content
     validation_group :step2, [:content, :excerpt]
-    validate :content, presence: true, length: { minimum: 100 }
-    validate :excerpt, length: { maximum: 300 }
+    check :content, presence: true, length: { minimum: 100 }
+    check :excerpt, length: { maximum: 300 }
 
     # Step 3: Media
     validation_group :step3, [:featured_image_url]
     validate_if -> { featured? } do
-      validate :featured_image_url, presence: true
+      check :featured_image_url, presence: true
     end
 
     # Step 4: Publishing
     validation_group :step4, [:status, :published_at]
     validate_if -> { status == "published" } do
-      validate :published_at, presence: true
+      check :published_at, presence: true
     end
   end
 
@@ -400,7 +400,7 @@ class Article < ApplicationRecord
   # Validatable for complex cases
   validatable do
     validate_if :published? do
-      validate :content, presence: true
+      check :content, presence: true
     end
 
     validate_business_rule :content_quality

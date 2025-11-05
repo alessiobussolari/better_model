@@ -802,8 +802,6 @@ end
 
 **Next Steps:**
 
-- Check out [Integration Guide](integration_guide.md) for combining Taggable with other concerns
-- See [Performance Guide](performance_guide.md) for optimization strategies
 - Read [Examples](examples/11_taggable.md) for progressive learning examples
 
 **Related Documentation:**

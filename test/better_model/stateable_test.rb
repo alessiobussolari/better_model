@@ -150,20 +150,20 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
     assert_match(/Cannot transition from.*draft.*to.*archived/, error.message)
   end
 
-  # Test 5: Guards
-  test "guard with block works" do
+  # Test 5: Checks
+  test "check with block works" do
     article_class = create_stateable_class(:StateableArticle9) do
       stateable do
         state :draft, initial: true
         state :published
         transition :publish, from: :draft, to: :published do
-          guard { title.present? && title.length >= 5 }
+          check { title.present? && title.length >= 5 }
         end
       end
     end
 
     article = article_class.create!(title: "Hi")
-    assert_raises(BetterModel::Stateable::GuardFailedError) do
+    assert_raises(BetterModel::Stateable::CheckFailedError) do
       article.publish!
     end
 
@@ -173,13 +173,13 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
     assert article.published?
   end
 
-  test "guard with method works" do
+  test "check with method works" do
     article_class = create_stateable_class(:StateableArticle10) do
       stateable do
         state :draft, initial: true
         state :published
         transition :publish, from: :draft, to: :published do
-          guard :valid_for_publishing?
+          check :valid_for_publishing?
         end
       end
 
@@ -189,7 +189,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
     end
 
     article = article_class.create!(title: "Test", content: nil)
-    assert_raises(BetterModel::Stateable::GuardFailedError) do
+    assert_raises(BetterModel::Stateable::CheckFailedError) do
       article.publish!
     end
 
@@ -199,7 +199,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
     assert article.published?
   end
 
-  test "guard with Statusable integration works" do
+  test "check with Statusable integration works" do
     article_class = create_stateable_class(:StateableArticle11) do
       is :ready_to_publish, -> { title.present? && content.present? }
 
@@ -207,7 +207,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
         state :draft, initial: true
         state :published
         transition :publish, from: :draft, to: :published do
-          guard if: :is_ready_to_publish?
+          check if: :is_ready_to_publish?
         end
       end
     end
@@ -224,7 +224,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
   end
 
   # Test 6: Callbacks
-  test "before and after callbacks work" do
+  test "before_transition and after_transition callbacks work" do
     callback_log = []
 
     article_class = create_stateable_class(:StateableArticle12) do
@@ -234,8 +234,8 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
         state :draft, initial: true
         state :published
         transition :publish, from: :draft, to: :published do
-          before { callback_log << "before" }
-          after { callback_log << "after" }
+          before_transition { callback_log << "before" }
+          after_transition { callback_log << "after" }
         end
       end
     end
@@ -352,13 +352,13 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
   end
 
   # Test 12: can_transition_to? method
-  test "can_transition_to? checks guards" do
+  test "can_transition_to? evaluates checks" do
     article_class = create_stateable_class(:StateableArticle18) do
       stateable do
         state :draft, initial: true
         state :published
         transition :publish, from: :draft, to: :published do
-          guard { title.present? }
+          check { title.present? }
         end
       end
     end
@@ -594,51 +594,51 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
   # COVERAGE TESTS - Stateable Edge Cases
   # ========================================
 
-  test "transition with multiple guards - all must pass" do
+  test "transition with multiple checks - all must pass" do
     article_class = create_stateable_class(:StateableArticle27) do
       stateable do
         state :draft, initial: true
         state :published
         transition :publish, from: :draft, to: :published do
-          guard { title.present? }
-          guard { title.length >= 5 }
+          check { title.present? }
+          check { title.length >= 5 }
         end
       end
     end
 
-    # Both guards fail
+    # Both checks fail
     article = article_class.create!(title: "Hi")
-    assert_raises(BetterModel::Stateable::GuardFailedError) do
+    assert_raises(BetterModel::Stateable::CheckFailedError) do
       article.publish!
     end
 
-    # First guard passes, second fails
+    # First check passes, second fails
     article.title = "Test"
-    assert_raises(BetterModel::Stateable::GuardFailedError) do
+    assert_raises(BetterModel::Stateable::CheckFailedError) do
       article.publish!
     end
 
-    # Both guards pass
+    # Both checks pass
     article.title = "Valid Title"
     article.publish!
     assert article.published?
   end
 
-  test "transition guard with exception" do
+  test "transition check with exception" do
     article_class = create_stateable_class(:StateableArticle28) do
       stateable do
         state :draft, initial: true
         state :published
         transition :publish, from: :draft, to: :published do
-          guard { raise "Guard error" }
+          check { raise "Check error" }
         end
       end
     end
 
     article = article_class.create!(title: "Test")
 
-    # Guard exception should be propagated
-    assert_raises(RuntimeError, /Guard error/) do
+    # Check exception should be propagated
+    assert_raises(RuntimeError, /Check error/) do
       article.publish!
     end
   end
@@ -674,8 +674,8 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
         state :draft, initial: true
         state :published
         transition :publish, from: :draft, to: :published do
-          before { callback_log << "before"; raise "Before callback error" }
-          after { callback_log << "after" }
+          before_transition { callback_log << "before"; raise "Before callback error" }
+          after_transition { callback_log << "after" }
         end
       end
     end
@@ -714,20 +714,20 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
     assert_match(/Cannot transition/, error.message)
   end
 
-  test "can_transition? with guard that raises exception" do
+  test "can_transition? with check that raises exception" do
     article_class = create_stateable_class(:StateableArticle32) do
       stateable do
         state :draft, initial: true
         state :published
         transition :publish, from: :draft, to: :published do
-          guard { raise "Guard exception" }
+          check { raise "Check exception" }
         end
       end
     end
 
     article = article_class.create!(title: "Test")
 
-    # can_publish? should return false when guard raises (not propagate exception)
+    # can_publish? should return false when check raises (not propagate exception)
     refute article.can_publish?
   end
 
@@ -754,10 +754,10 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
   end
 
   # ========================================
-  # ERROR HANDLING TESTS - Guards
+  # ERROR HANDLING TESTS - Checks
   # ========================================
 
-  test "should raise NoMethodError when guard method not found" do
+  test "should raise NoMethodError when check method not found" do
     article_class = Class.new(ApplicationRecord) do
       self.table_name = "articles"
       include BetterModel::Stateable
@@ -767,7 +767,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
         state :published
 
         transition :publish, from: :draft, to: :published do
-          guard :nonexistent_method
+          check :nonexistent_method
         end
       end
     end
@@ -778,10 +778,10 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
       article.publish!
     end
 
-    assert_match(/Guard method 'nonexistent_method' not found/, error.message)
+    assert_match(/Check method 'nonexistent_method' not found/, error.message)
   end
 
-  test "should raise NoMethodError when guard predicate not found" do
+  test "should raise NoMethodError when check predicate not found" do
     article_class = Class.new(ApplicationRecord) do
       self.table_name = "articles"
       include BetterModel::Stateable
@@ -791,7 +791,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
         state :published
 
         transition :publish, from: :draft, to: :published do
-          guard if: :nonexistent_predicate?
+          check if: :nonexistent_predicate?
         end
       end
     end
@@ -802,10 +802,10 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
       article.publish!
     end
 
-    assert_match(/Guard predicate 'nonexistent_predicate\?' not found/, error.message)
+    assert_match(/Check predicate 'nonexistent_predicate\?' not found/, error.message)
   end
 
-  test "should raise StateableError for unknown guard type" do
+  test "should raise StateableError for unknown check type" do
     article_class = Class.new(ApplicationRecord) do
       self.table_name = "articles"
       include BetterModel::Stateable
@@ -817,16 +817,16 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
         transition :publish, from: :draft, to: :published
       end
 
-      # Helper to inject invalid guard type
-      def self.inject_invalid_guard
+      # Helper to inject invalid check type
+      def self.inject_invalid_check
         # Access the stateable configuration
         config = stateable_config
         config[:transitions][:publish][:guards] << { type: :invalid_type, something: :value }
       end
     end
 
-    # Inject invalid guard type after class definition
-    article_class.inject_invalid_guard
+    # Inject invalid check type after class definition
+    article_class.inject_invalid_check
 
     article = article_class.create!(title: "Test")
 
@@ -834,6 +834,6 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
       article.publish!
     end
 
-    assert_match(/Unknown guard type: invalid_type/, error.message)
+    assert_match(/Unknown check type: invalid_type/, error.message)
   end
 end

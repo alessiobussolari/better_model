@@ -24,7 +24,61 @@ This gem follows the Rails engine pattern where:
 
 ## Development Commands
 
-### Testing
+### Docker Development (Recommended)
+
+The project includes Docker support for consistent development environments. This is the recommended approach to avoid dependency issues.
+
+#### Initial Setup
+
+First-time setup:
+```bash
+bin/docker-setup
+```
+
+This will:
+- Build the Docker image with Ruby 3.3 and all dependencies
+- Install gems
+- Prepare the test database
+
+#### Running Tests
+
+Run all tests:
+```bash
+bin/docker-test
+```
+
+Run a specific test file:
+```bash
+bin/docker-test test/better_model_test.rb
+```
+
+#### Running RuboCop
+
+Check code style:
+```bash
+bin/docker-rubocop
+```
+
+Auto-fix style issues:
+```bash
+docker compose run --rm app bundle exec rubocop -a
+```
+
+#### Interactive Shell
+
+Open a shell in the Docker container for debugging or exploring:
+```bash
+docker compose run --rm app sh
+```
+
+#### Manual Commands
+
+Run any command in the container:
+```bash
+docker compose run --rm app bundle exec [command]
+```
+
+### Local Development (Without Docker)
 
 The gemspec currently has invalid placeholder URLs that prevent bundle commands from working. Before running tests, the gemspec metadata URLs need to be fixed (homepage, homepage_uri, source_code_uri, changelog_uri, allowed_push_host).
 

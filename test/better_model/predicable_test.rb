@@ -185,7 +185,7 @@ module BetterModel
       Article.create!(title: "", content: "Test", status: "draft")
       Article.create!(title: nil, content: "Test", status: "draft")
 
-      results = Article.title_present.pluck(:title)
+      results = Article.title_present(true).pluck(:title)
       assert_equal [ "Ruby" ], results
 
     end
@@ -195,7 +195,7 @@ module BetterModel
       Article.create!(title: "", content: "Test", status: "draft")
       Article.create!(title: nil, content: "Test", status: "draft")
 
-      results = Article.title_blank.count
+      results = Article.title_blank(true).count
       assert_equal 2, results
 
     end
@@ -205,7 +205,7 @@ module BetterModel
       Article.create!(title: "", content: "Test", status: "draft")
       Article.create!(title: nil, content: "Test", status: "draft")
 
-      results = Article.title_null.count
+      results = Article.title_null(true).count
       assert_equal 1, results
 
     end
@@ -312,7 +312,7 @@ module BetterModel
       Article.create!(title: "A", content: "Test", status: "draft", view_count: 100)
       Article.create!(title: "B", content: "Test", status: "draft", view_count: nil)
 
-      results = Article.view_count_present.pluck(:view_count)
+      results = Article.view_count_present(true).pluck(:view_count)
       assert_equal [ 100 ], results
 
     end
@@ -328,8 +328,6 @@ module BetterModel
 
       assert test_class.respond_to?(:featured_eq)
       assert test_class.respond_to?(:featured_not_eq)
-      assert test_class.respond_to?(:featured_true)
-      assert test_class.respond_to?(:featured_false)
       assert test_class.respond_to?(:featured_present)
     end
 
@@ -351,29 +349,12 @@ module BetterModel
 
     end
 
-    test "featured_true filters true values" do
-      Article.create!(title: "A", content: "Test", status: "draft", featured: true)
-      Article.create!(title: "B", content: "Test", status: "draft", featured: false)
-
-      results = Article.featured_true.pluck(:featured)
-      assert_equal [ true ], results
-
-    end
-
-    test "featured_false filters false values" do
-      Article.create!(title: "A", content: "Test", status: "draft", featured: true)
-      Article.create!(title: "B", content: "Test", status: "draft", featured: false)
-
-      results = Article.featured_false.pluck(:featured)
-      assert_equal [ false ], results
-
-    end
 
     test "featured_present filters non-null" do
       Article.create!(title: "A", content: "Test", status: "draft", featured: true)
       Article.create!(title: "B", content: "Test", status: "draft", featured: nil)
 
-      results = Article.featured_present.count
+      results = Article.featured_present(true).count
       assert_equal 1, results
 
     end
@@ -398,7 +379,6 @@ module BetterModel
       assert test_class.respond_to?(:published_at_present)
       assert test_class.respond_to?(:published_at_blank)
       assert test_class.respond_to?(:published_at_null)
-      assert test_class.respond_to?(:published_at_not_null)
     end
 
     test "published_at_eq filters by exact date" do
@@ -489,7 +469,7 @@ module BetterModel
       Article.create!(title: "A", content: "Test", status: "draft", published_at: 1.day.ago)
       Article.create!(title: "B", content: "Test", status: "draft", published_at: nil)
 
-      results = Article.published_at_present.count
+      results = Article.published_at_present(true).count
       assert_equal 1, results
 
     end
@@ -498,7 +478,7 @@ module BetterModel
       Article.create!(title: "A", content: "Test", status: "draft", published_at: 1.day.ago)
       Article.create!(title: "B", content: "Test", status: "draft", published_at: nil)
 
-      results = Article.published_at_blank.count
+      results = Article.published_at_blank(true).count
       assert_equal 1, results
 
     end
@@ -507,16 +487,16 @@ module BetterModel
       Article.create!(title: "A", content: "Test", status: "draft", published_at: 1.day.ago)
       Article.create!(title: "B", content: "Test", status: "draft", published_at: nil)
 
-      results = Article.published_at_null.count
+      results = Article.published_at_null(true).count
       assert_equal 1, results
 
     end
 
-    test "published_at_not_null filters non-null" do
+    test "published_at_null(false) filters non-null" do
       Article.create!(title: "A", content: "Test", status: "draft", published_at: 1.day.ago)
       Article.create!(title: "B", content: "Test", status: "draft", published_at: nil)
 
-      results = Article.published_at_not_null.count
+      results = Article.published_at_null(false).count
       assert_equal 1, results
 
     end
@@ -613,8 +593,6 @@ module BetterModel
       end
 
       assert test_class.predicable_scope?(:featured_eq)
-      assert test_class.predicable_scope?(:featured_true)
-      assert test_class.predicable_scope?(:featured_false)
       assert test_class.predicable_scope?(:featured_present)
     end
 
@@ -780,72 +758,6 @@ module BetterModel
 
     end
 
-    # Test Date Convenience Predicates
-    test "published_at_today filters today's records" do
-      Article.create!(title: "Today", content: "Test", status: "draft", published_at: Time.current)
-      Article.create!(title: "Yesterday", content: "Test", status: "draft", published_at: 1.day.ago)
-
-      results = Article.published_at_today.pluck(:title)
-      assert_equal [ "Today" ], results
-
-    end
-
-    test "published_at_yesterday filters yesterday's records" do
-      Article.create!(title: "Today", content: "Test", status: "draft", published_at: Time.current)
-      Article.create!(title: "Yesterday", content: "Test", status: "draft", published_at: 1.day.ago)
-
-      results = Article.published_at_yesterday.pluck(:title)
-      assert_equal [ "Yesterday" ], results
-
-    end
-
-    test "published_at_this_week filters this week's records" do
-      Article.create!(title: "This week", content: "Test", status: "draft", published_at: 2.days.ago)
-      Article.create!(title: "Last week", content: "Test", status: "draft", published_at: 10.days.ago)
-
-      results = Article.published_at_this_week.pluck(:title)
-      assert_includes results, "This week"
-      refute_includes results, "Last week"
-
-    end
-
-    test "published_at_this_month filters this month's records" do
-      Article.create!(title: "This month", content: "Test", status: "draft", published_at: 5.days.ago)
-      Article.create!(title: "Last month", content: "Test", status: "draft", published_at: 40.days.ago)
-
-      results = Article.published_at_this_month.pluck(:title)
-      assert_includes results, "This month"
-      refute_includes results, "Last month"
-
-    end
-
-    test "published_at_this_year filters this year's records" do
-      Article.create!(title: "This year", content: "Test", status: "draft", published_at: 100.days.ago)
-      Article.create!(title: "Last year", content: "Test", status: "draft", published_at: 400.days.ago)
-
-      results = Article.published_at_this_year.pluck(:title)
-      assert_includes results, "This year"
-      refute_includes results, "Last year"
-
-    end
-
-    test "published_at_past filters past dates" do
-      Article.create!(title: "Past", content: "Test", status: "draft", published_at: 1.day.ago)
-      Article.create!(title: "Future", content: "Test", status: "draft", published_at: 1.day.from_now)
-
-      results = Article.published_at_past.pluck(:title)
-      assert_equal [ "Past" ], results
-
-    end
-
-    test "published_at_future filters future dates" do
-      Article.create!(title: "Past", content: "Test", status: "draft", published_at: 1.day.ago)
-      Article.create!(title: "Future", content: "Test", status: "draft", published_at: 1.day.from_now)
-
-      results = Article.published_at_future.pluck(:title)
-      assert_equal [ "Future" ], results
-
-    end
 
     # Test _within with auto-detection
     test "published_at_within accepts numeric days" do
@@ -912,18 +824,10 @@ module BetterModel
       assert test_class.respond_to?(:published_at_not_between)
 
       # Convenience
-      assert test_class.respond_to?(:published_at_today)
-      assert test_class.respond_to?(:published_at_yesterday)
-      assert test_class.respond_to?(:published_at_this_week)
-      assert test_class.respond_to?(:published_at_this_month)
-      assert test_class.respond_to?(:published_at_this_year)
-      assert test_class.respond_to?(:published_at_past)
-      assert test_class.respond_to?(:published_at_future)
       assert test_class.respond_to?(:published_at_within)
 
       # Registry
       assert test_class.predicable_scope?(:published_at_between)
-      assert test_class.predicable_scope?(:published_at_today)
       assert test_class.predicable_scope?(:published_at_within)
     end
 
@@ -1046,9 +950,8 @@ module BetterModel
       end
 
       boolean_fields.each do |field|
-        # Verifica predicati boolean
-        assert Article.respond_to?(:"#{field}_true"), "Expected #{field}_true"
-        assert Article.respond_to?(:"#{field}_false"), "Expected #{field}_false"
+        # Verifica predicati boolean (use _eq instead of _true/_false)
+        assert Article.respond_to?(:"#{field}_eq"), "Expected #{field}_eq"
       end
     end
 
@@ -1069,7 +972,7 @@ module BetterModel
                "Expected #{field}_not_eq to return ActiveRecord::Relation"
 
         # Test _present
-        result = Article.send(:"#{field}_present")
+        result = Article.send(:"#{field}_present", true)
         assert result.is_a?(ActiveRecord::Relation),
                "Expected #{field}_present to return ActiveRecord::Relation"
       end
@@ -1118,9 +1021,9 @@ module BetterModel
       end
 
       boolean_fields.each do |field|
-        # Test predicati boolean
-        assert_nothing_raised { Article.send(:"#{field}_true").to_a }
-        assert_nothing_raised { Article.send(:"#{field}_false").to_a }
+        # Test predicati boolean (use _eq with true/false)
+        assert_nothing_raised { Article.send(:"#{field}_eq", true).to_a }
+        assert_nothing_raised { Article.send(:"#{field}_eq", false).to_a }
       end
     end
 
@@ -1133,10 +1036,10 @@ module BetterModel
       article = Article.create!(title: nil, status: "draft")
 
       # title_present dovrebbe ESCLUDERE record con title nil
-      refute_includes Article.title_present, article
+      refute_includes Article.title_present(true), article
 
       # title_blank dovrebbe INCLUDERE record con title nil
-      assert_includes Article.title_blank, article
+      assert_includes Article.title_blank(true), article
     end
 
     test "predicates can be chained" do
@@ -1211,6 +1114,288 @@ module BetterModel
         assert test_class.respond_to?(:status_present)
       ensure
         $stderr = original_stderr
+      end
+    end
+  end
+
+  # ==============================================================================
+  # COMPLEX PREDICATES COMPREHENSIVE TESTS
+  # ==============================================================================
+
+  class ComplexPredicatesTest < ActiveSupport::TestCase
+    test "complex predicate returns ActiveRecord::Relation" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Predicable
+        predicates :view_count, :published_at
+
+        register_complex_predicate :trending do
+          where("view_count >= ? AND published_at >= ?", 500, 7.days.ago)
+        end
+      end
+
+      relation = test_class.trending
+      assert_kind_of ActiveRecord::Relation, relation
+      assert_respond_to relation, :where
+      assert_respond_to relation, :order
+      assert_respond_to relation, :limit
+      assert_respond_to relation, :count
+    end
+
+    test "complex predicate is chainable with standard predicates" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Predicable
+        predicates :status, :title, :view_count
+
+        register_complex_predicate :popular do
+          where("view_count >= ?", 1000)
+        end
+      end
+
+      # Chain with standard predicates
+      chain = test_class.popular.status_eq("published").title_cont("Ruby")
+      assert_kind_of ActiveRecord::Relation, chain
+      assert_respond_to chain, :to_sql
+    end
+
+    test "complex predicate accepts multiple parameters with defaults" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Predicable
+        predicates :view_count, :published_at
+
+        register_complex_predicate :trending do |days = 7, min_views = 100|
+          where("published_at >= ? AND view_count >= ?", days.days.ago, min_views)
+        end
+      end
+
+      # Should work with no parameters (defaults)
+      relation1 = test_class.trending
+      assert_kind_of ActiveRecord::Relation, relation1
+
+      # Should work with custom parameters
+      relation2 = test_class.trending(14, 500)
+      assert_kind_of ActiveRecord::Relation, relation2
+    end
+
+    test "complex predicates registry is thread-safe (frozen)" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Predicable
+        predicates :status
+
+        register_complex_predicate :test_predicate do
+          where(status: "published")
+        end
+      end
+
+      registry = test_class.complex_predicates_registry
+      assert registry.frozen?, "Registry should be frozen for thread-safety"
+    end
+
+    test "complex predicates are inherited by subclasses" do
+      parent_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Predicable
+        predicates :status
+
+        register_complex_predicate :parent_predicate do
+          where(status: "draft")
+        end
+      end
+
+      child_class = Class.new(parent_class)
+
+      assert child_class.respond_to?(:parent_predicate)
+      relation = child_class.parent_predicate
+      assert_kind_of ActiveRecord::Relation, relation
+    end
+
+    test "complex_predicate? introspection method works" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Predicable
+        predicates :status
+
+        register_complex_predicate :published do
+          where(status: "published")
+        end
+      end
+
+      assert test_class.complex_predicate?(:published)
+      refute test_class.complex_predicate?(:nonexistent)
+      refute test_class.complex_predicate?(:status_eq) # Standard predicate, not complex
+    end
+
+    test "complex predicates integrate with existing model scopes" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Predicable
+        predicates :status, :view_count
+
+        scope :recent, -> { where("created_at >= ?", 1.week.ago) }
+
+        register_complex_predicate :popular do
+          where("view_count >= ?", 1000)
+        end
+      end
+
+      # Should be able to chain with existing scopes
+      chain = test_class.recent.popular.status_eq("published")
+      assert_kind_of ActiveRecord::Relation, chain
+    end
+
+    test "complex predicates generate valid SQL" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Predicable
+        predicates :view_count, :published_at
+
+        register_complex_predicate :trending do |min_views = 100|
+          where("view_count >= ?", min_views)
+        end
+      end
+
+      sql = test_class.trending(500).to_sql
+      assert_includes sql, "view_count >= 500"
+    end
+
+    test "complex predicates work with count and exists" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Predicable
+        predicates :view_count
+
+        register_complex_predicate :popular do
+          where("view_count >= ?", 1000)
+        end
+      end
+
+      # These should not raise errors
+      assert_respond_to test_class.popular, :count
+      assert_respond_to test_class.popular, :exists?
+    end
+
+    test "complex predicates registry tracks all registered predicates" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Predicable
+        predicates :status
+
+        register_complex_predicate :first_predicate do
+          where(status: "published")
+        end
+
+        register_complex_predicate :second_predicate do
+          where(status: "draft")
+        end
+      end
+
+      registry = test_class.complex_predicates_registry
+      assert_includes registry.keys, :first_predicate
+      assert_includes registry.keys, :second_predicate
+      assert_equal 2, registry.size
+    end
+
+    test "multiple complex predicates can be registered and used together" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Predicable
+        predicates :status, :view_count, :published_at
+
+        register_complex_predicate :popular do
+          where("view_count >= ?", 1000)
+        end
+
+        register_complex_predicate :recent do
+          where("published_at >= ?", 7.days.ago)
+        end
+      end
+
+      # Should be able to chain multiple complex predicates
+      chain = test_class.popular.recent.status_eq("published")
+      assert_kind_of ActiveRecord::Relation, chain
+      assert_respond_to chain, :to_sql
+    end
+
+    test "complex predicates with parameter validation" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Predicable
+        predicates :view_count
+
+        register_complex_predicate :min_views do |count|
+          raise ArgumentError, "count must be positive" unless count.to_i > 0
+          where("view_count >= ?", count.to_i)
+        end
+      end
+
+      # Should work with valid parameter
+      assert_kind_of ActiveRecord::Relation, test_class.min_views(100)
+
+      # Should raise with invalid parameter
+      assert_raises(ArgumentError) { test_class.min_views(-1) }
+      assert_raises(ArgumentError) { test_class.min_views(0) }
+    end
+
+    test "complex predicates with association queries" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Predicable
+        predicates :status
+
+        # Simulate association by using table name in query
+        register_complex_predicate :with_comments do |min_count = 1|
+          where("(SELECT COUNT(*) FROM comments WHERE comments.article_id = articles.id) >= ?", min_count)
+        end
+      end
+
+      relation = test_class.with_comments(5)
+      assert_kind_of ActiveRecord::Relation, relation
+      sql = relation.to_sql
+      assert_includes sql, "SELECT COUNT(*) FROM comments"
+    end
+
+    test "complex predicates prevent SQL injection" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Predicable
+        predicates :title
+
+        register_complex_predicate :safe_search do |search_term|
+          # Use proper parameterization - the ? placeholder handles SQL escaping
+          sanitized = ActiveRecord::Base.sanitize_sql_like(search_term)
+          where("title LIKE ?", "%#{sanitized}%")
+        end
+      end
+
+      # Malicious input should be safely handled
+      malicious_input = "'; DROP TABLE articles; --"
+      relation = test_class.safe_search(malicious_input)
+
+      # The query should execute without raising an error (proof it's safe)
+      assert_kind_of ActiveRecord::Relation, relation
+      assert_nothing_raised { relation.to_sql }
+
+      # Verify the query structure is safe - it should use parameterized LIKE
+      sql = relation.to_sql
+      assert_includes sql, "LIKE", "Should contain LIKE clause"
+
+      # The quotes should be escaped (doubled) in the SQL output
+      # When ActiveRecord escapes, ' becomes '' in the SQL string representation
+      assert_includes sql, "''", "Single quotes should be escaped (doubled)"
+    end
+
+    test "complex predicates with empty blocks raise error" do
+      assert_raises(ArgumentError) do
+        Class.new(ApplicationRecord) do
+          self.table_name = "articles"
+          include BetterModel::Predicable
+          predicates :status
+
+          register_complex_predicate :empty_predicate
+        end
       end
     end
   end

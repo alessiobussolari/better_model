@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: better_model:development
+    container_name: better_model_dev
+
+    # Mount source code for live editing
+    volumes:
+      - .:/app
+      - bundle_cache:/usr/local/bundle
+
+    # Set environment variables
+    environment:
+      - RAILS_ENV=${RAILS_ENV:-development}
+      - BUNDLE_PATH=/usr/local/bundle
+
+    # Keep container running for interactive use
+    stdin_open: true
+    tty: true
+
+    # Override default command to keep container alive
+    command: /bin/sh
+
+    # Working directory
+    working_dir: /app
+
+  # Service for running tests
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    image: better_model:test
+    container_name: better_model_test
+
+    volumes:
+      - .:/app
+      - bundle_cache:/usr/local/bundle
+
+    environment:
+      - RAILS_ENV=test
+      - BUNDLE_PATH=/usr/local/bundle
+
+    working_dir: /app
+
+    # Run tests by default
+    command: bundle exec rake test
+
+  # Service for running RuboCop
+  rubocop:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: better_model:development
+
+    volumes:
+      - .:/app
+      - bundle_cache:/usr/local/bundle
+
+    environment:
+      - BUNDLE_PATH=/usr/local/bundle
+
+    working_dir: /app
+
+    # Run rubocop by default
+    command: bundle exec rubocop
+
+volumes:
+  # Persistent volume for gem cache to speed up builds
+  bundle_cache:
+    driver: local

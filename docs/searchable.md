@@ -49,7 +49,15 @@ end
 ### Search Method Signature
 
 ```ruby
-Model.search(predicates = {}, pagination: {}, orders: [], security: nil)
+Model.search(
+  predicates = {},
+  pagination: {},
+  orders: [],
+  security: nil,
+  includes: nil,
+  preload: nil,
+  eager_load: nil
+)
 ```
 
 **Parameters:**
@@ -57,6 +65,9 @@ Model.search(predicates = {}, pagination: {}, orders: [], security: nil)
 - `pagination` (Hash, optional): `{ page: 1, per_page: 25 }`
 - `orders` (Array<Symbol>, optional): Sort scopes (e.g., `[:sort_title_asc, :sort_published_at_desc]`)
 - `security` (Symbol, optional): Security rule name to enforce
+- `includes` (Array/Hash, optional): Associations to eager load with smart strategy
+- `preload` (Array/Hash, optional): Associations to eager load with separate queries
+- `eager_load` (Array/Hash, optional): Associations to eager load with LEFT OUTER JOIN
 
 **Returns:**
 - `ActiveRecord::Relation` - Chainable with other ActiveRecord methods
@@ -542,14 +553,87 @@ searchable do
 end
 ```
 
-#### Chain with Eager Loading
+#### Association Eager Loading
 
-Search returns regular ActiveRecord::Relation, so chain freely:
+Optimize N+1 queries with built-in support for `includes:`, `preload:`, and `eager_load:` parameters:
+
+**Basic Usage:**
 
 ```ruby
-Article.search(predicates, pagination: pagination, orders: orders)
-       .includes(:author, :comments)
-       .preload(:tags)
+# Single association (always use array syntax for consistency)
+Article.search(
+  { status_eq: "published" },
+  includes: [:author]
+)
+
+# Multiple associations
+Article.search(
+  { status_eq: "published" },
+  includes: [:author, :comments],
+  preload: [:tags]
+)
+```
+
+**Nested Associations:**
+
+```ruby
+# Simple nested
+Article.search(
+  { status_eq: "published" },
+  includes: [{ author: :profile }]
+)
+
+# Complex nested mix
+Article.search(
+  { status_eq: "published" },
+  includes: [
+    :tags,                          # Direct association
+    { author: :profile },           # Nested: author -> profile
+    { comments: [:user, :likes] }   # Multiple nested
+  ]
+)
+```
+
+**Combined with Other Features:**
+
+```ruby
+# Full-featured search with eager loading
+Article.search(
+  {
+    status_eq: "published",
+    view_count_gteq: 100,
+    published_at_within: 7.days
+  },
+  pagination: { page: 1, per_page: 25 },
+  orders: [:sort_view_count_desc],
+  includes: [:author, { comments: :user }],
+  preload: [:tags]
+)
+```
+
+**Loading Strategies:**
+
+| Strategy | Parameter | Behavior | Use When |
+|----------|-----------|----------|----------|
+| **Smart Load** | `includes:` | Uses LEFT OUTER JOIN or separate queries based on context | Default choice, best for most cases |
+| **Separate Queries** | `preload:` | Always uses separate queries (one per association) | Avoiding JOIN complexity or ambiguous columns |
+| **Force JOIN** | `eager_load:` | Always uses LEFT OUTER JOIN | Need to filter/order by association columns |
+
+**⚠️ Important Notes:**
+
+1. **Ambiguous Columns with eager_load:** When using `eager_load:` with default_order, you may encounter "ambiguous column" errors if both tables have the same column names (e.g., `created_at`). Solutions:
+   - Use `includes:` or `preload:` instead
+   - Override `orders:` with fully qualified column names
+   - Chain `.eager_load()` after search for full control
+
+2. **Array Syntax:** Always use array syntax (`[:author]`) even for single associations to maintain consistency and allow easy additions
+
+3. **Chainability:** Since search returns `ActiveRecord::Relation`, you can still chain additional eager loading methods:
+
+```ruby
+Article.search({ status_eq: "published" })
+       .includes([:author])
+       .preload([:tags])
 ```
 
 ### Thread Safety
@@ -571,7 +655,7 @@ Article.search(predicates, pagination: pagination, orders: orders)
 **Recommendations:**
 - Add indexes on frequently filtered columns
 - Add composite indexes for common filter combinations
-- Use `includes`/`preload` for associations
+- Use built-in eager loading (`includes:`, `preload:`) to avoid N+1 queries
 - Consider caching for expensive searches
 
 **Index Examples:**

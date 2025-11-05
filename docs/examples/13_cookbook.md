@@ -396,24 +396,24 @@ class Form < ApplicationRecord
 
   validatable do
     # Always required
-    validate :name, presence: true
+    check :name, presence: true
 
     # Required when published
     validate_if -> { status == "published" } do
-      validate :description, presence: true, length: { minimum: 50 }
-      validate :published_at, presence: true
+      check :description, presence: true, length: { minimum: 50 }
+      check :published_at, presence: true
     end
 
     # Required for premium tier
     validate_if -> { tier == "premium" } do
-      validate :premium_features, presence: true
-      validate :support_email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
+      check :premium_features, presence: true
+      check :support_email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
     end
 
     # Required if condition field is checked
     validate_if -> { requires_approval? } do
-      validate :approver_email, presence: true
-      validate :approval_deadline, presence: true
+      check :approver_email, presence: true
+      check :approval_deadline, presence: true
     end
 
     # Complex conditional: required unless another field is present
@@ -571,28 +571,28 @@ class Order < ApplicationRecord
 
   validatable do
     # Always required
-    validate :customer_email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
+    check :customer_email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
 
     # Draft state: minimal validation
     # (no additional validations needed)
 
     # Processing state: need payment info
     validate_if -> { state == "processing" } do
-      validate :payment_method, presence: true
-      validate :billing_address, presence: true
+      check :payment_method, presence: true
+      check :billing_address, presence: true
     end
 
     # Shipping state: need shipping info
     validate_if -> { state == "shipping" || state == "shipped" } do
-      validate :shipping_address, presence: true
-      validate :shipping_method, presence: true
-      validate :tracking_number, presence: true
+      check :shipping_address, presence: true
+      check :shipping_method, presence: true
+      check :tracking_number, presence: true
     end
 
     # Delivered state: need confirmation
     validate_if -> { state == "delivered" } do
-      validate :delivered_at, presence: true
-      validate :signature, presence: true
+      check :delivered_at, presence: true
+      check :signature, presence: true
     end
   end
 

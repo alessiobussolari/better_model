@@ -1,11 +1,11 @@
 # Stateable Examples
 
-Stateable provides a declarative state machine with transitions, guards, and callbacks—perfect for modeling complex workflows.
+Stateable provides a declarative state machine with transitions, checks, and callbacks—perfect for modeling complex workflows.
 
 ## Table of Contents
 - [Basic Setup](#basic-setup)
 - [Example 1: Simple State Machine](#example-1-simple-state-machine)
-- [Example 2: Transitions with Guards](#example-2-transitions-with-guards)
+- [Example 2: Transitions with Checks](#example-2-transitions-with-checks)
 - [Example 3: Callbacks](#example-3-callbacks)
 - [Example 4: Multiple Transitions](#example-4-multiple-transitions)
 - [Example 5: Integration with Other Modules](#example-5-integration-with-other-modules)
@@ -78,9 +78,9 @@ article.archived?
 
 **Output Explanation**: State machine manages valid state transitions and provides helper methods.
 
-## Example 2: Transitions with Guards
+## Example 2: Transitions with Checks
 
-Guards prevent transitions unless conditions are met:
+Checks prevent transitions unless conditions are met:
 
 ```ruby
 class Article < ApplicationRecord
@@ -92,15 +92,15 @@ class Article < ApplicationRecord
     state :archived
 
     transition :publish, from: :draft, to: :published do
-      # Method guard
-      guard :content_complete?
+      # Method check
+      check :content_complete?
 
-      # Inline lambda guard
-      guard { title.present? && content.present? }
+      # Inline lambda check
+      check { title.present? && content.present? }
 
-      # Multiple guards (all must pass)
-      guard :reviewed?
-      guard :has_featured_image?
+      # Multiple checks (all must pass)
+      check :reviewed?
+      check :has_featured_image?
     end
 
     transition :archive, from: [:draft, :published], to: :archived
@@ -125,7 +125,7 @@ end
 article = Article.create!(title: "Draft")
 
 article.publish!
-# => BetterModel::GuardFailedError: Guard 'content_complete?' failed
+# => BetterModel::CheckFailedError: Check 'content_complete?' failed
 
 # Complete article
 article.update!(
@@ -140,7 +140,7 @@ article.published?
 # => true
 ```
 
-**Output Explanation**: Guards ensure articles meet requirements before publishing.
+**Output Explanation**: Checks ensure articles meet requirements before publishing.
 
 ## Example 3: Callbacks
 
@@ -157,22 +157,22 @@ class Article < ApplicationRecord
 
     transition :publish, from: :draft, to: :published do
       # Before transition
-      before :set_published_at
-      before { self.published_by = Current.user }
+      before_transition :set_published_at
+      before_transition { self.published_by = Current.user }
 
       # After transition
-      after :notify_subscribers
-      after :update_search_index
-      after { Rails.logger.info "Published: #{title}" }
+      after_transition :notify_subscribers
+      after_transition :update_search_index
+      after_transition { Rails.logger.info "Published: #{title}" }
     end
 
     transition :unpublish, from: :published, to: :draft do
-      before { self.published_at = nil }
+      before_transition { self.published_at = nil }
     end
 
     transition :archive, from: [:draft, :published], to: :archived do
-      before :set_archived_at
-      after :cleanup_cache
+      before_transition :set_archived_at
+      after_transition :cleanup_cache
     end
   end
 
@@ -235,20 +235,20 @@ class Article < ApplicationRecord
 
     # Draft → Review
     transition :submit_for_review, from: :draft, to: :review do
-      guard { content_complete? }
+      check { content_complete? }
     end
 
     # Review → Published
     transition :approve, from: :review, to: :published do
-      guard { reviewed_by_id.present? }
-      before { self.published_at = Time.current }
-      after { notify_author }
+      check { reviewed_by_id.present? }
+      before_transition { self.published_at = Time.current }
+      after_transition { notify_author }
     end
 
     # Review → Draft (rejected)
     transition :reject, from: :review, to: :draft do
-      before { self.rejection_reason = "Needs improvement" }
-      after { notify_author_rejection }
+      before_transition { self.rejection_reason = "Needs improvement" }
+      after_transition { notify_author_rejection }
     end
 
     # Published → Archived
@@ -256,7 +256,7 @@ class Article < ApplicationRecord
 
     # Archived → Draft (restore)
     transition :restore, from: :archived, to: :draft do
-      before { self.archived_at = nil }
+      before_transition { self.archived_at = nil }
     end
   end
 end
@@ -310,16 +310,16 @@ class Article < ApplicationRecord
     state :archived
 
     transition :submit, from: :draft, to: :review do
-      guard { can?(:submit_for_review) }
+      check { can?(:submit_for_review) }
     end
 
     transition :publish, from: :review, to: :published do
-      guard { can?(:publish_action) }
+      check { can?(:publish_action) }
     end
 
     transition :archive, from: :published, to: :archived do
-      guard { can?(:archive_action) }
-      after { archive!(by: Current.user) }  # Archivable integration
+      check { can?(:archive_action) }
+      after_transition { archive!(by: Current.user) }  # Archivable integration
     end
   end
 
@@ -378,58 +378,58 @@ class Article < ApplicationRecord
 
     # Submit for review
     transition :submit_for_review, from: [:draft, :changes_requested], to: :pending_review do
-      guard :content_ready_for_review?
-      after :notify_reviewers
+      check :content_ready_for_review?
+      after_transition :notify_reviewers
     end
 
     # Start review
     transition :start_review, from: :pending_review, to: :in_review do
-      guard { reviewer_id.present? }
-      before { self.review_started_at = Time.current }
+      check { reviewer_id.present? }
+      before_transition { self.review_started_at = Time.current }
     end
 
     # Request changes
     transition :request_changes, from: :in_review, to: :changes_requested do
-      guard { review_notes.present? }
-      after :notify_author_changes
+      check { review_notes.present? }
+      after_transition :notify_author_changes
     end
 
     # Approve
     transition :approve, from: :in_review, to: :approved do
-      guard { review_notes.present? }
-      before { self.approved_at = Time.current }
-      after :notify_author_approval
+      check { review_notes.present? }
+      before_transition { self.approved_at = Time.current }
+      after_transition :notify_author_approval
     end
 
     # Schedule
     transition :schedule, from: :approved, to: :scheduled do
-      guard { scheduled_for.present? && scheduled_for.future? }
+      check { scheduled_for.present? && scheduled_for.future? }
     end
 
     # Publish (from approved or scheduled)
     transition :publish, from: [:approved, :scheduled], to: :published do
-      guard :ready_for_publication?
-      before :set_published_at
-      after :update_search_index
-      after :notify_subscribers
+      check :ready_for_publication?
+      before_transition :set_published_at
+      after_transition :update_search_index
+      after_transition :notify_subscribers
     end
 
     # Unpublish
     transition :unpublish, from: :published, to: :unpublished do
-      before { self.unpublished_at = Time.current }
-      after :remove_from_search
+      before_transition { self.unpublished_at = Time.current }
+      after_transition :remove_from_search
     end
 
     # Archive
     transition :archive, from: [:published, :unpublished], to: :archived do
-      before :set_archived_at
-      after { archive!(by: Current.user) }
+      before_transition :set_archived_at
+      after_transition { archive!(by: Current.user) }
     end
 
     # Restore
     transition :restore_from_archive, from: :archived, to: :draft do
-      before { self.archived_at = nil }
-      after { restore! }  # Archivable restore
+      before_transition { self.archived_at = nil }
+      after_transition { restore! }  # Archivable restore
     end
   end
 
@@ -520,12 +520,12 @@ state :active  # Too vague
 state :inactive  # What does this mean?
 ```
 
-### 2. Use Guards for Business Logic
+### 2. Use Checks for Business Logic
 ```ruby
-# Good: Guard prevents invalid transitions
+# Good: Check prevents invalid transitions
 transition :publish, from: :draft, to: :published do
-  guard { content.present? && title.present? }
-  guard :reviewed_by_editor?
+  check { content.present? && title.present? }
+  check :reviewed_by_editor?
 end
 
 # Bad: Checking in controller
@@ -572,9 +572,9 @@ RSpec.describe Article, type: :model do
       expect { article.publish! }.to raise_error(BetterModel::InvalidTransitionError)
     end
 
-    it "enforces guards" do
+    it "enforces checks" do
       article = Article.create!(content: "")
-      expect { article.publish! }.to raise_error(BetterModel::GuardFailedError)
+      expect { article.publish! }.to raise_error(BetterModel::CheckFailedError)
     end
   end
 end

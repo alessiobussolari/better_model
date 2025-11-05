@@ -1044,12 +1044,6 @@ end
 
 ---
 
-**Next Steps:**
-
-- Check out [Integration Guide](integration_guide.md) for combining Traceable with other concerns
-- See [Performance Guide](performance_guide.md) for optimization tips
-- Read [Migration Guide](migration_guide.md) for adding Traceable to existing models
-
 **Related Documentation:**
 - [Archivable](archivable.md) - Soft delete with tracking
 - [Stateable](stateable.md) - State machines with history

@@ -16,14 +16,14 @@ module BetterModel
     #
     #     # Definisci transizioni
     #     transition :confirm, from: :pending, to: :confirmed do
-    #       guard { items.any? }
-    #       guard :customer_valid?
-    #       guard if: :is_ready?
+    #       check { items.any? }
+    #       check :customer_valid?
+    #       check if: :is_ready?
     #
     #       validate { errors.add(:base, "Invalid") unless valid_for_confirmation? }
     #
-    #       before { prepare }
-    #       after { notify }
+    #       before_transition { prepare }
+    #       after_transition { notify }
     #     end
     #   end
     #
@@ -71,12 +71,12 @@ module BetterModel
       # @example Transizione semplice
       #   transition :publish, from: :draft, to: :published
       #
-      # @example Con guards e callbacks
+      # @example Con checks e callbacks
       #   transition :confirm, from: :pending, to: :confirmed do
-      #     guard { valid? }
-      #     guard :ready_to_confirm?
-      #     before { prepare_confirmation }
-      #     after { send_email }
+      #     check { valid? }
+      #     check :ready_to_confirm?
+      #     before_transition { prepare_confirmation }
+      #     after_transition { send_email }
       #   end
       #
       # @example Da multipli stati
@@ -119,30 +119,30 @@ module BetterModel
         end
       end
 
-      # Definisce un guard per la transizione corrente
+      # Definisce un check per la transizione corrente
       #
-      # I guards sono precondizioni che devono essere vere per permettere la transizione.
+      # I checks sono precondizioni che devono essere vere per permettere la transizione.
       #
-      # @overload guard(&block)
-      #   Guard con lambda/proc
+      # @overload check(&block)
+      #   Check con lambda/proc
       #   @yield Blocco da valutare nel contesto dell'istanza
       #   @example
-      #     guard { items.any? && customer.present? }
+      #     check { items.any? && customer.present? }
       #
-      # @overload guard(method_name)
-      #   Guard con metodo
+      # @overload check(method_name)
+      #   Check con metodo
       #   @param method_name [Symbol] Nome del metodo da chiamare
       #   @example
-      #     guard :customer_valid?
+      #     check :customer_valid?
       #
-      # @overload guard(if: predicate)
-      #   Guard con Statusable predicate
+      # @overload check(if: predicate)
+      #   Check con Statusable predicate
       #   @param if [Symbol] Nome del predicate (integrazione Statusable)
       #   @example
-      #     guard if: :is_ready_for_publishing?
+      #     check if: :is_ready_for_publishing?
       #
-      def guard(method_name = nil, if: nil, &block)
-        raise StateableError, "guard can only be called inside a transition block" unless @current_transition
+      def check(method_name = nil, if: nil, &block)
+        raise StateableError, "check can only be called inside a transition block" unless @current_transition
 
         if block_given?
           @current_transition[:guards] << { type: :block, block: block }
@@ -151,7 +151,7 @@ module BetterModel
         elsif binding.local_variable_get(:if)
           @current_transition[:guards] << { type: :predicate, predicate: binding.local_variable_get(:if) }
         else
-          raise ArgumentError, "guard requires either a block, method name, or if: option"
+          raise ArgumentError, "check requires either a block, method name, or if: option"
         end
       end
 
@@ -175,59 +175,59 @@ module BetterModel
         @current_transition[:validations] << block
       end
 
-      # Definisce un callback before per la transizione corrente
+      # Definisce un callback before_transition per la transizione corrente
       #
-      # I before callbacks sono eseguiti prima della transizione di stato.
+      # I before_transition callbacks sono eseguiti prima della transizione di stato.
       #
-      # @overload before(&block)
-      #   Before callback con lambda/proc
+      # @overload before_transition(&block)
+      #   Before_transition callback con lambda/proc
       #   @yield Blocco da eseguire
       #   @example
-      #     before { calculate_total }
+      #     before_transition { calculate_total }
       #
-      # @overload before(method_name)
-      #   Before callback con metodo
+      # @overload before_transition(method_name)
+      #   Before_transition callback con metodo
       #   @param method_name [Symbol] Nome del metodo da chiamare
       #   @example
-      #     before :calculate_total
+      #     before_transition :calculate_total
       #
-      def before(method_name = nil, &block)
-        raise StateableError, "before can only be called inside a transition block" unless @current_transition
+      def before_transition(method_name = nil, &block)
+        raise StateableError, "before_transition can only be called inside a transition block" unless @current_transition
 
         if block_given?
           @current_transition[:before_callbacks] << { type: :block, block: block }
         elsif method_name
           @current_transition[:before_callbacks] << { type: :method, method: method_name }
         else
-          raise ArgumentError, "before requires either a block or method name"
+          raise ArgumentError, "before_transition requires either a block or method name"
         end
       end
 
-      # Definisce un callback after per la transizione corrente
+      # Definisce un callback after_transition per la transizione corrente
       #
-      # Gli after callbacks sono eseguiti dopo la transizione di stato.
+      # Gli after_transition callbacks sono eseguiti dopo la transizione di stato.
       #
-      # @overload after(&block)
-      #   After callback con lambda/proc
+      # @overload after_transition(&block)
+      #   After_transition callback con lambda/proc
       #   @yield Blocco da eseguire
       #   @example
-      #     after { send_notification }
+      #     after_transition { send_notification }
       #
-      # @overload after(method_name)
-      #   After callback con metodo
+      # @overload after_transition(method_name)
+      #   After_transition callback con metodo
       #   @param method_name [Symbol] Nome del metodo da chiamare
       #   @example
-      #     after :send_notification
+      #     after_transition :send_notification
       #
-      def after(method_name = nil, &block)
-        raise StateableError, "after can only be called inside a transition block" unless @current_transition
+      def after_transition(method_name = nil, &block)
+        raise StateableError, "after_transition can only be called inside a transition block" unless @current_transition
 
         if block_given?
           @current_transition[:after_callbacks] << { type: :block, block: block }
         elsif method_name
           @current_transition[:after_callbacks] << { type: :method, method: method_name }
         else
-          raise ArgumentError, "after requires either a block or method name"
+          raise ArgumentError, "after_transition requires either a block or method name"
         end
       end
 

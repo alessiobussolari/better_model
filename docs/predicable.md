@@ -1,12 +1,12 @@
 ## Predicable - Type-Aware Filtering System
 
-Define filtering capabilities on your models with automatic predicate generation based on column types. Use expressive method names like `title_cont`, `view_count_between`, `published_at_today`, and `tags_overlaps`.
+Define filtering capabilities on your models with automatic predicate generation based on column types. Use expressive method names like `title_cont`, `view_count_between`, `published_at_within(7.days)`, and `tags_overlaps`.
 
 **Key Benefits:**
 - **Type-aware:** Different predicates for strings, numbers, dates, booleans, arrays, and JSONB
 - **Semantic naming:** Clear, readable predicate names
+- **Explicit parameters:** All predicates require explicit parameters (no defaults or shortcuts)
 - **Range queries:** Built-in `_between` for numeric and date ranges
-- **Date convenience:** Shortcuts like `_today`, `_this_week`, `_past`, `_future`
 - **Pattern matching:** Case-sensitive and case-insensitive search
 - **PostgreSQL support:** Advanced array and JSONB operators
 - **Chainable:** Combine multiple filters easily
@@ -80,32 +80,19 @@ end
 
 #### Presence Predicates
 
-| Predicato | Tipi Campo | SQLite | MySQL | PostgreSQL | Esempio |
-|-----------|-----------|--------|-------|------------|---------|
-| `_present` | 🟢 🔢 ☑️ 📅 | ✅ | ✅ | ✅ | `title_present` → `WHERE title IS NOT NULL AND title != ''` (string) |
-| `_blank` | 🟢 📅 | ✅ | ✅ | ✅ | `title_blank` → `WHERE title IS NULL OR title = ''` |
-| `_null` | 🟢 📅 | ✅ | ✅ | ✅ | `published_at_null` → `WHERE published_at IS NULL` |
-| `_not_null` | 📅 | ✅ | ✅ | ✅ | `published_at_not_null` → `WHERE published_at IS NOT NULL` |
-
-#### Boolean Predicates
+**IMPORTANT:** All presence predicates require an explicit boolean parameter - no defaults.
 
 | Predicato | Tipi Campo | SQLite | MySQL | PostgreSQL | Esempio |
 |-----------|-----------|--------|-------|------------|---------|
-| `_true` | ☑️ | ✅ | ✅ | ✅ | `featured_true` → `WHERE featured = TRUE` |
-| `_false` | ☑️ | ✅ | ✅ | ✅ | `featured_false` → `WHERE featured = FALSE` |
+| `_present(value)` | 🟢 🔢 ☑️ 📅 | ✅ | ✅ | ✅ | `title_present(true)` → `WHERE title IS NOT NULL` (has value)<br>`title_present(false)` → `WHERE title IS NULL` (no value) |
+| `_blank(value)` | 🟢 📅 | ✅ | ✅ | ✅ | `title_blank(true)` → `WHERE title IS NULL OR title = ''`<br>`title_blank(false)` → `WHERE title IS NOT NULL AND title != ''` |
+| `_null(value)` | 🟢 🔢 📅 | ✅ | ✅ | ✅ | `published_at_null(true)` → `WHERE published_at IS NULL`<br>`published_at_null(false)` → `WHERE published_at IS NOT NULL` |
 
-#### Date Convenience Predicates
+#### Date Range Predicates
 
 | Predicato | Tipi Campo | SQLite | MySQL | PostgreSQL | Esempio |
 |-----------|-----------|--------|-------|------------|---------|
-| `_today` | 📅 | ✅ | ✅ | ✅ | `published_at_today` → Records pubblicati oggi |
-| `_yesterday` | 📅 | ✅ | ✅ | ✅ | `published_at_yesterday` → Records di ieri |
-| `_this_week` | 📅 | ✅ | ✅ | ✅ | `published_at_this_week` → Da inizio settimana |
-| `_this_month` | 📅 | ✅ | ✅ | ✅ | `published_at_this_month` → Da inizio mese |
-| `_this_year` | 📅 | ✅ | ✅ | ✅ | `published_at_this_year` → Da inizio anno |
-| `_past` | 📅 | ✅ | ✅ | ✅ | `scheduled_at_past` → `WHERE scheduled_at < NOW()` |
-| `_future` | 📅 | ✅ | ✅ | ✅ | `scheduled_at_future` → `WHERE scheduled_at > NOW()` |
-| `_within` | 📅 | ✅ | ✅ | ✅ | `created_at_within(7.days)` o `within(7)` → Ultimi 7 giorni |
+| `_within(duration)` | 📅 | ✅ | ✅ | ✅ | `created_at_within(7.days)` o `within(7)` → Ultimi 7 giorni |
 
 ---
 
@@ -134,12 +121,14 @@ These predicates are automatically generated **only** when using PostgreSQL and 
 
 ### Scope Count by Field Type
 
+**Note:** All predicates require explicit parameters - no defaults, no shortcuts.
+
 | Tipo Campo | Scope Base | Scope Complessi | Totale |
 |------------|------------|-----------------|--------|
 | **String** (`title`, `status`) | 14 scopes | - | **14 scopes** |
 | **Numeric** (`view_count`, `price`) | 9 scopes | +2 range | **11 scopes** |
-| **Boolean** (`featured`, `active`) | 5 scopes | - | **5 scopes** |
-| **Date** (`published_at`, `created_at`) | 12 scopes | +10 convenience | **22 scopes** |
+| **Boolean** (`featured`, `active`) | 3 scopes | - | **3 scopes** |
+| **Date** (`published_at`, `created_at`) | 12 scopes | +1 convenience | **13 scopes** |
 | **Array** (PostgreSQL only) | 3 base | +3 operators | **6 scopes** |
 | **JSONB** (PostgreSQL only) | 3 base | +4 operators | **7 scopes** |
 
@@ -160,12 +149,19 @@ Article.status_in(["draft", "published"])
 Article.view_count_gt(100)
 Article.view_count_between(50, 200)
 
-# Boolean predicates
-Article.featured_true
+# Boolean predicates (use _eq with true/false)
+Article.featured_eq(true)
+Article.archived_eq(false)
+
+# Presence predicates (require explicit boolean parameter)
+Article.title_present(true)            # Has a title
+Article.title_present(false)           # No title
+Article.published_at_null(true)        # Is NULL
+Article.published_at_null(false)       # Is NOT NULL
 
 # Date predicates
 Article.published_at_gteq(1.week.ago)
-Article.published_at_today
+Article.published_at_gteq(Date.today.beginning_of_day)
 Article.created_at_within(30.days)     # Auto-detects Duration
 Article.created_at_within(30)          # Or just numeric days
 ```
@@ -179,7 +175,7 @@ Combine multiple predicates for complex queries:
 Article
   .status_eq("published")
   .view_count_gt(100)
-  .published_at_this_month
+  .published_at_gteq(Date.today.beginning_of_month)
   .sort_view_count_desc
   .limit(10)
 
@@ -188,12 +184,12 @@ Article
   .title_i_cont("ruby")
   .view_count_between(50, 500)
   .published_at_within(60.days)
-  .featured_true
+  .featured_eq(true)
   .sort_published_at_newest
 
 # Complex date filtering
 Article
-  .published_at_past
+  .published_at_lt(Time.current)
   .view_count_gteq(100)
   .status_not_in(["archived", "deleted"])
   .sort_view_count_desc_nulls_last
@@ -299,13 +295,13 @@ end
 # Featured trending posts
 @posts = Post.status_eq("published")
              .trending
-             .featured_true
+             .featured_eq(true)
              .sort_view_count_desc
              .limit(5)
 
 # Search posts
 @results = Post.title_i_cont(params[:query])
-               .published_at_this_month
+               .published_at_gteq(Date.today.beginning_of_month)
                .view_count_gt(50)
 ```
 
@@ -325,7 +321,7 @@ end
 @products = Product.category_eq("electronics")
                    .price_between(100, 500)
                    .in_stock
-                   .featured_true
+                   .featured_eq(true)
                    .sort_price_asc
 ```
 
@@ -338,14 +334,15 @@ class Event < ApplicationRecord
 end
 
 # Upcoming events
-@events = Event.start_date_future
+@events = Event.start_date_gt(Time.current)
               .status_not_in(["cancelled", "completed"])
               .capacity_gt(0)
               .sort_start_date_asc
               .limit(10)
 
 # This week's events
-@events = Event.start_date_this_week
+@events = Event.start_date_gteq(Date.today.beginning_of_week)
+              .start_date_lteq(Date.today.end_of_week)
               .status_eq("confirmed")
 ```
 
@@ -358,19 +355,21 @@ end
 | **Pattern Matching** (`_cont`, `_start`) | ✅ | ✅ | ✅ | LIKE-based, SQL injection safe |
 | **Case-Insensitive** (`_i_cont`) | ✅ | ✅ | ✅ | LOWER() function |
 | **Array Operations** (`_in`) | ✅ | ✅ | ✅ | Standard SQL IN |
-| **Date Convenience** (`_today`, `_within`) | ✅ | ✅ | ✅ | ActiveSupport date helpers |
+| **Presence** (`_present`, `_null`) | ✅ | ✅ | ✅ | Require explicit boolean parameter |
+| **Date Range** (`_within`) | ✅ | ✅ | ✅ | ActiveSupport duration support |
 | **Array Operators** (`_overlaps`) | ❌ | ❌ | ✅ | PostgreSQL array types only |
 | **JSONB Operators** (`_has_key`) | ❌ | ❌ | ✅ | PostgreSQL JSONB only |
 
 ### Best Practices
 
-1. **Use semantic predicates** - `published_at_today` is clearer than `published_at_between(Date.today.beginning_of_day, Date.today.end_of_day)`
-2. **Leverage case-insensitive search** - Use `_i_cont` for user-facing search
-3. **Chain predicates logically** - Filter first (most restrictive), then sort
-4. **Use `_within` for recency** - More readable than manual date comparisons
-5. **Register complex business logic** - Use `register_complex_predicate` for multi-field filters
-6. **Avoid N+1 queries** - Load associations before applying predicates
-7. **Index filtered columns** - Add database indexes for frequently filtered fields
+1. **Always use explicit parameters** - All predicates require explicit parameters (no defaults). Use `title_present(true)` not `title_present`
+2. **Use `_eq` for booleans** - Use `featured_eq(true)` instead of removed `featured_true` shortcut
+3. **Leverage case-insensitive search** - Use `_i_cont` for user-facing search
+4. **Chain predicates logically** - Filter first (most restrictive), then sort
+5. **Use `_within` for recency** - More readable than manual date comparisons: `published_at_within(7.days)`
+6. **Register complex business logic** - Use `register_complex_predicate` for multi-field filters
+7. **Avoid N+1 queries** - Load associations before applying predicates
+8. **Index filtered columns** - Add database indexes for frequently filtered fields
 
 ### Thread Safety
 

@@ -42,10 +42,12 @@ module BetterModel
       # DSL per definire campi predicable
       #
       # Genera automaticamente scope di filtro basati sul tipo di colonna:
-      # - String: _eq, _not_eq, _matches, _start, _end, _cont, _not_cont, _i_cont, _not_i_cont, _in, _not_in, _present, _blank, _null
-      # - Numeric: _eq, _not_eq, _lt, _lteq, _gt, _gteq, _in, _not_in, _present
-      # - Boolean: _eq, _not_eq, _true, _false, _present
-      # - Date: _eq, _not_eq, _lt, _lteq, _gt, _gteq, _in, _not_in, _present, _blank, _null, _not_null
+      # - String: _eq, _not_eq, _matches, _start, _end, _cont, _not_cont, _i_cont, _not_i_cont, _in, _not_in, _present(bool), _blank(bool), _null(bool)
+      # - Numeric: _eq, _not_eq, _lt, _lteq, _gt, _gteq, _between, _not_between, _in, _not_in, _present(bool)
+      # - Boolean: _eq, _not_eq, _present(bool)
+      # - Date: _eq, _not_eq, _lt, _lteq, _gt, _gteq, _between, _not_between, _in, _not_in, _within(duration), _blank(bool), _null(bool)
+      #
+      # Nota: Tutti i predicati richiedono parametri espliciti. Use _eq(true)/_eq(false) per booleani.
       #
       # Esempio:
       #   predicates :title, :view_count, :published_at, :featured
@@ -152,8 +154,11 @@ module BetterModel
 
         # Presence - skip for string/text types as they get specialized version
         # String types need to check for both nil and empty string
+        # Requires boolean parameter: true for present, false for absent
         unless [ :string, :text ].include?(column_type)
-          scope :"#{field_name}_present", -> { where(field.not_eq(nil)) }
+          scope :"#{field_name}_present", ->(value) {
+            value ? where(field.not_eq(nil)) : where(field.eq(nil))
+          }
         end
 
         scopes_to_register = [ :"#{field_name}_eq", :"#{field_name}_not_eq" ]
@@ -162,15 +167,18 @@ module BetterModel
         register_predicable_scopes(*scopes_to_register)
       end
 
-      # Genera predicati per campi stringa (12 scope)
+      # Genera predicati per campi stringa (14 scope)
       # Base predicates (_eq, _not_eq) are defined separately
-      # _present is defined here to handle both nil and empty strings
+      # _present(bool), _blank(bool), _null(bool) handle presence with parameters
       def define_string_predicates(field_name)
         table = arel_table
         field = table[field_name]
 
         # String-specific presence check (checks both nil and empty string)
-        scope :"#{field_name}_present", -> { where(field.not_eq(nil).and(field.not_eq(""))) }
+        # Requires boolean parameter: true for present, false for blank
+        scope :"#{field_name}_present", ->(value) {
+          value ? where(field.not_eq(nil).and(field.not_eq(""))) : where(field.eq(nil).or(field.eq("")))
+        }
 
         # Pattern matching (4)
         scope :"#{field_name}_matches", ->(pattern) { where(field.matches(pattern)) }
@@ -205,9 +213,14 @@ module BetterModel
         scope :"#{field_name}_in", ->(values) { where(field.in(Array(values))) }
         scope :"#{field_name}_not_in", ->(values) { where.not(field.in(Array(values))) }
 
-        # Presence (2) - _present is overridden above for string-specific behavior
-        scope :"#{field_name}_blank", -> { where(field.eq(nil).or(field.eq(""))) }
-        scope :"#{field_name}_null", -> { where(field.eq(nil)) }
+        # Presence predicates (3) - _present is overridden above for string-specific behavior
+        # All require boolean parameter: true for condition, false for negation
+        scope :"#{field_name}_blank", ->(value) {
+          value ? where(field.eq(nil).or(field.eq(""))) : where(field.not_eq(nil).and(field.not_eq("")))
+        }
+        scope :"#{field_name}_null", ->(value) {
+          value ? where(field.eq(nil)) : where(field.not_eq(nil))
+        }
 
         register_predicable_scopes(
           :"#{field_name}_matches",
@@ -225,8 +238,8 @@ module BetterModel
         )
       end
 
-      # Genera predicati per campi numerici (8 scope)
-      # Base predicates (_eq, _not_eq, _present) are defined separately
+      # Genera predicati per campi numerici (11 scope)
+      # Base predicates (_eq, _not_eq, _present(bool)) are defined separately
       def define_numeric_predicates(field_name)
         table = arel_table
         field = table[field_name]
@@ -258,20 +271,12 @@ module BetterModel
         )
       end
 
-      # Genera predicati per campi booleani (2 scope)
+      # Genera predicati per campi booleani (0 scope)
       # Base predicates (_eq, _not_eq, _present) are defined separately
+      # Use _eq(true) or _eq(false) for boolean filtering
       def define_boolean_predicates(field_name)
-        table = arel_table
-        field = table[field_name]
-
-        # Boolean shortcuts (2)
-        scope :"#{field_name}_true", -> { where(field.eq(true)) }
-        scope :"#{field_name}_false", -> { where(field.eq(false)) }
-
-        register_predicable_scopes(
-          :"#{field_name}_true",
-          :"#{field_name}_false"
-        )
+        # No additional scopes needed for boolean fields
+        # Use field_eq(true) or field_eq(false) instead
       end
 
       # Genera predicati per campi array PostgreSQL (3 scope)
@@ -383,8 +388,9 @@ module BetterModel
         )
       end
 
-      # Genera predicati per campi data/datetime (17 scope)
-      # Base predicates (_eq, _not_eq, _present) are defined separately
+      # Genera predicati per campi data/datetime (11 scope)
+      # Base predicates (_eq, _not_eq, _present(bool)) are defined separately
+      # Date convenience shortcuts removed except _within(duration)
       def define_date_predicates(field_name)
         table = arel_table
         field = table[field_name]
@@ -403,38 +409,21 @@ module BetterModel
         scope :"#{field_name}_in", ->(values) { where(field.in(Array(values))) }
         scope :"#{field_name}_not_in", ->(values) { where.not(field.in(Array(values))) }
 
-        # Date convenience shortcuts (8)
-        scope :"#{field_name}_today", -> {
-          where(field.between(Date.current.beginning_of_day..Date.current.end_of_day))
-        }
-        scope :"#{field_name}_yesterday", -> {
-          where(field.between(1.day.ago.beginning_of_day..1.day.ago.end_of_day))
-        }
-        scope :"#{field_name}_this_week", -> {
-          where(field.gteq(Date.current.beginning_of_week))
-        }
-        scope :"#{field_name}_this_month", -> {
-          where(field.gteq(Date.current.beginning_of_month))
-        }
-        scope :"#{field_name}_this_year", -> {
-          where(field.gteq(Date.current.beginning_of_year))
-        }
-        scope :"#{field_name}_past", -> {
-          where(field.lt(Time.current))
-        }
-        scope :"#{field_name}_future", -> {
-          where(field.gt(Time.current))
-        }
+        # Date convenience - only _within with explicit parameter
         scope :"#{field_name}_within", ->(duration) {
           # Auto-detect: ActiveSupport::Duration or numeric (days)
           time_ago = duration.respond_to?(:ago) ? duration.ago : duration.to_i.days.ago
           where(field.gteq(time_ago))
         }
 
-        # Presence (3) - _present is defined in base predicates
-        scope :"#{field_name}_blank", -> { where(field.eq(nil)) }
-        scope :"#{field_name}_null", -> { where(field.eq(nil)) }
-        scope :"#{field_name}_not_null", -> { where(field.not_eq(nil)) }
+        # Presence predicates (2) - _present(bool) is defined in base predicates
+        # _blank and _null require boolean parameter: true for condition, false for negation
+        scope :"#{field_name}_blank", ->(value) {
+          value ? where(field.eq(nil)) : where(field.not_eq(nil))
+        }
+        scope :"#{field_name}_null", ->(value) {
+          value ? where(field.eq(nil)) : where(field.not_eq(nil))
+        }
 
         register_predicable_scopes(
           :"#{field_name}_lt",
@@ -445,17 +434,9 @@ module BetterModel
           :"#{field_name}_not_between",
           :"#{field_name}_in",
           :"#{field_name}_not_in",
-          :"#{field_name}_today",
-          :"#{field_name}_yesterday",
-          :"#{field_name}_this_week",
-          :"#{field_name}_this_month",
-          :"#{field_name}_this_year",
-          :"#{field_name}_past",
-          :"#{field_name}_future",
           :"#{field_name}_within",
           :"#{field_name}_blank",
-          :"#{field_name}_null",
-          :"#{field_name}_not_null"
+          :"#{field_name}_null"
         )
       end
 

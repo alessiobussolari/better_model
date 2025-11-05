@@ -69,19 +69,19 @@ class Article < ApplicationRecord
 
   validatable do
     # Single field with presence
-    validate :title, presence: true
+    check :title, presence: true
 
     # Multiple fields with same validation
-    validate :title, :content, presence: true
+    check :title, :content, presence: true
 
     # Multiple validation types
-    validate :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
-    validate :view_count, numericality: { greater_than_or_equal_to: 0 }
-    validate :status, inclusion: { in: %w[draft published archived] }
+    check :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
+    check :view_count, numericality: { greater_than_or_equal_to: 0 }
+    check :status, inclusion: { in: %w[draft published archived] }
 
     # Length validations
-    validate :title, length: { minimum: 3, maximum: 255 }
-    validate :slug, uniqueness: true
+    check :title, length: { minimum: 3, maximum: 255 }
+    check :slug, uniqueness: true
   end
 end
 ```
@@ -107,22 +107,22 @@ class Article < ApplicationRecord
 
   validatable do
     # Always required
-    validate :title, :status, presence: true
+    check :title, :status, presence: true
 
     # Required only when published
     validate_if :is_published? do
-      validate :published_at, presence: true
-      validate :author_id, presence: true
+      check :published_at, presence: true
+      check :author_id, presence: true
     end
 
     # Required only when scheduled
     validate_if :is_scheduled? do
-      validate :scheduled_for, presence: true
+      check :scheduled_for, presence: true
     end
 
     # Using lambda instead of method
     validate_if -> { status == "featured" } do
-      validate :featured_image_url, presence: true
+      check :featured_image_url, presence: true
     end
   end
 end
@@ -162,13 +162,13 @@ class Article < ApplicationRecord
   validatable do
     # Required unless draft
     validate_unless :is_draft? do
-      validate :reviewer_id, presence: true
-      validate :reviewed_at, presence: true
+      check :reviewer_id, presence: true
+      check :reviewed_at, presence: true
     end
 
     # Using lambda
     validate_unless -> { internal_only? } do
-      validate :public_url, presence: true
+      check :public_url, presence: true
     end
   end
 end
@@ -253,7 +253,7 @@ Cross-field validations are skipped if either field is `nil`. Use presence valid
 
 ```ruby
 validatable do
-  validate :starts_at, :ends_at, presence: true  # Ensure not nil
+  check :starts_at, :ends_at, presence: true  # Ensure not nil
   validate_order :starts_at, :before, :ends_at   # Then compare
 end
 ```
@@ -341,14 +341,14 @@ class User < ApplicationRecord
 
   validatable do
     # Step 1: Basic info
-    validate :email, :password, presence: true
-    validate :email, format: { with: URI::MailTo::EMAIL_REGEXP }
+    check :email, :password, presence: true
+    check :email, format: { with: URI::MailTo::EMAIL_REGEXP }
 
     # Step 2: Personal details
-    validate :first_name, :last_name, presence: true
+    check :first_name, :last_name, presence: true
 
     # Step 3: Address
-    validate :address, :city, :zip_code, presence: true
+    check :address, :city, :zip_code, presence: true
 
     # Define validation groups
     validation_group :step1, [:email, :password]
@@ -479,24 +479,24 @@ class Article < ApplicationRecord
   # Use statuses in conditional validations
   validatable do
     # Always required
-    validate :title, :content, presence: true
+    check :title, :content, presence: true
 
     # Published-specific validations
     validate_if :is_published? do
-      validate :published_at, presence: true
-      validate :author_id, presence: true
-      validate :reviewer_id, presence: true
+      check :published_at, presence: true
+      check :author_id, presence: true
+      check :reviewer_id, presence: true
     end
 
     # Scheduled-specific validations
     validate_if :is_scheduled? do
-      validate :scheduled_for, presence: true
+      check :scheduled_for, presence: true
       validate_order :scheduled_for, :after, :created_at
     end
 
     # Only drafts can have no category
     validate_unless :is_draft? do
-      validate :category_id, presence: true
+      check :category_id, presence: true
     end
   end
 end
@@ -518,21 +518,21 @@ class User < ApplicationRecord
 
   validatable do
     # Step 1: Account creation
-    validate :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
-    validate :password, presence: true, length: { minimum: 8 }
-    validate :password_confirmation, presence: true
+    check :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
+    check :password, presence: true, length: { minimum: 8 }
+    check :password_confirmation, presence: true
 
     # Step 2: Profile
-    validate :first_name, :last_name, presence: true
-    validate :date_of_birth, presence: true
+    check :first_name, :last_name, presence: true
+    check :date_of_birth, presence: true
     validate_order :date_of_birth, :before, -> { 18.years.ago }
 
     # Step 3: Contact
-    validate :phone, :address, :city, :zip_code, presence: true
-    validate :phone, format: { with: /\A\d{10}\z/ }
+    check :phone, :address, :city, :zip_code, presence: true
+    check :phone, format: { with: /\A\d{10}\z/ }
 
     # Step 4: Preferences
-    validate :notification_preferences, presence: true
+    check :notification_preferences, presence: true
 
     # Define validation groups
     validation_group :account, [:email, :password, :password_confirmation]
@@ -556,22 +556,22 @@ class Event < ApplicationRecord
 
   validatable do
     # Basic validations
-    validate :title, :description, presence: true
-    validate :title, length: { minimum: 5, maximum: 255 }
+    check :title, :description, presence: true
+    check :title, length: { minimum: 5, maximum: 255 }
 
     # Date validations
-    validate :starts_at, :ends_at, presence: true
+    check :starts_at, :ends_at, presence: true
     validate_order :starts_at, :before, :ends_at
     validate_order :starts_at, :after, :created_at
 
     # Capacity validations
-    validate :max_attendees, numericality: { greater_than: 0 }
+    check :max_attendees, numericality: { greater_than: 0 }
     validate_order :registered_count, :lteq, :max_attendees
 
     # Published events require more fields
     validate_if :is_published? do
-      validate :venue, :address, :city, presence: true
-      validate :ticket_price, numericality: { greater_than_or_equal_to: 0 }
+      check :venue, :address, :city, presence: true
+      check :ticket_price, numericality: { greater_than_or_equal_to: 0 }
     end
 
     # Business rules
@@ -611,23 +611,23 @@ class Product < ApplicationRecord
 
   validatable do
     # Basic validations
-    validate :name, :sku, presence: true
-    validate :sku, uniqueness: true
+    check :name, :sku, presence: true
+    check :sku, uniqueness: true
 
     # Price validations
-    validate :price, numericality: { greater_than: 0 }
+    check :price, numericality: { greater_than: 0 }
     validate_if :is_on_sale? do
-      validate :sale_price, presence: true
+      check :sale_price, presence: true
       validate_order :sale_price, :lt, :price
     end
 
     # Stock validations
-    validate :stock, numericality: { greater_than_or_equal_to: 0 }
+    check :stock, numericality: { greater_than_or_equal_to: 0 }
     validate_order :reserved_stock, :lteq, :stock
 
     # Shipping validations
-    validate :weight, :dimensions, presence: true
-    validate :weight, numericality: { greater_than: 0 }
+    check :weight, :dimensions, presence: true
+    check :weight, numericality: { greater_than: 0 }
 
     # Business rules
     validate_business_rule :valid_category
@@ -661,11 +661,11 @@ Always use the `validatable do...end` block to activate the concern:
 ```ruby
 # Good
 validatable do
-  validate :title, presence: true
+  check :title, presence: true
 end
 
 # Bad - Validatable not active
-validate :title, presence: true  # Standard Rails validation, not Validatable
+check :title, presence: true  # Standard Rails validation, not Validatable
 ```
 
 ### 2. Combine with Statusable for Status-based Logic
@@ -678,14 +678,14 @@ is :published, -> { status == "published" }
 
 validatable do
   validate_if :is_published? do
-    validate :published_at, presence: true
+    check :published_at, presence: true
   end
 end
 
 # Avoid - inline conditions harder to test and reuse
 validatable do
   validate_if -> { status == "published" } do
-    validate :published_at, presence: true
+    check :published_at, presence: true
   end
 end
 ```
@@ -738,7 +738,7 @@ Prefer `validate_order` over custom validations for comparisons:
 validate_order :starts_at, :before, :ends_at
 
 # Avoid - custom validator for simple comparison
-validate :starts_before_ends
+check :starts_before_ends
 
 def starts_before_ends
   return if starts_at.blank? || ends_at.blank?
@@ -752,7 +752,7 @@ Use presence validations before order validations:
 
 ```ruby
 # Good
-validate :starts_at, :ends_at, presence: true
+check :starts_at, :ends_at, presence: true
 validate_order :starts_at, :before, :ends_at
 
 # Avoid - order validation silently skips nil values
@@ -766,18 +766,18 @@ Group related validations together:
 ```ruby
 validatable do
   # Basic required fields
-  validate :title, :content, presence: true
+  check :title, :content, presence: true
 
   # Format validations
-  validate :email, format: { with: URI::MailTo::EMAIL_REGEXP }
-  validate :slug, format: { with: /\A[a-z0-9-]+\z/ }
+  check :email, format: { with: URI::MailTo::EMAIL_REGEXP }
+  check :slug, format: { with: /\A[a-z0-9-]+\z/ }
 
   # Numeric validations
-  validate :view_count, numericality: { greater_than_or_equal_to: 0 }
+  check :view_count, numericality: { greater_than_or_equal_to: 0 }
 
   # Conditional validations
   validate_if :is_published? do
-    validate :published_at, presence: true
+    check :published_at, presence: true
   end
 
   # Cross-field validations
@@ -830,13 +830,13 @@ Use Validatable's DSL instead of custom validation methods when possible:
 ```ruby
 # Good - declarative
 validatable do
-  validate :title, presence: true, length: { minimum: 5 }
+  check :title, presence: true, length: { minimum: 5 }
   validate_order :starts_at, :before, :ends_at
 end
 
 # Avoid - procedural custom methods for simple cases
-validate :title_present_and_long_enough
-validate :starts_before_ends
+check :title_present_and_long_enough
+check :starts_before_ends
 
 def title_present_and_long_enough
   errors.add(:title, "can't be blank") if title.blank?

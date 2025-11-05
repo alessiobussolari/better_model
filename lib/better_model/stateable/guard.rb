@@ -2,10 +2,10 @@
 
 module BetterModel
   module Stateable
-    # Guard evaluator per Stateable
+    # Check evaluator per Stateable (internal class name remains Guard for compatibility)
     #
-    # Valuta le guard conditions per determinare se una transizione è permessa.
-    # Supporta tre tipi di guards:
+    # Valuta le check conditions per determinare se una transizione è permessa.
+    # Supporta tre tipi di checks:
     # - Block: lambda/proc valutato nel contesto dell'istanza
     # - Method: metodo chiamato sull'istanza
     # - Predicate: integrazione con Statusable (is_ready?, etc.)
@@ -16,10 +16,10 @@ module BetterModel
         @guard_config = guard_config
       end
 
-      # Valuta il guard
+      # Valuta il check
       #
-      # @return [Boolean] true se il guard passa
-      # @raise [GuardFailedError] Se il guard fallisce (opzionale, dipende dal contesto)
+      # @return [Boolean] true se il check passa
+      # @raise [CheckFailedError] Se il check fallisce (opzionale, dipende dal contesto)
       #
       def evaluate
         case @guard_config[:type]
@@ -30,53 +30,53 @@ module BetterModel
         when :predicate
           evaluate_predicate
         else
-          raise StateableError, "Unknown guard type: #{@guard_config[:type]}"
+          raise StateableError, "Unknown check type: #{@guard_config[:type]}"
         end
       end
 
-      # Descrizione del guard per messaggi di errore
+      # Descrizione del check per messaggi di errore
       #
       # @return [String] Descrizione human-readable
       #
       def description
         case @guard_config[:type]
         when :block
-          "block guard"
+          "block check"
         when :method
-          "method guard: #{@guard_config[:method]}"
+          "method check: #{@guard_config[:method]}"
         when :predicate
-          "predicate guard: #{@guard_config[:predicate]}"
+          "predicate check: #{@guard_config[:predicate]}"
         else
-          "unknown guard"
+          "unknown check"
         end
       end
 
       private
 
-      # Valuta un guard block
+      # Valuta un check block
       def evaluate_block
         block = @guard_config[:block]
         @instance.instance_exec(&block)
       end
 
-      # Valuta un guard method
+      # Valuta un check method
       def evaluate_method
         method_name = @guard_config[:method]
 
         unless @instance.respond_to?(method_name, true)
-          raise NoMethodError, "Guard method '#{method_name}' not found in #{@instance.class.name}. " \
+          raise NoMethodError, "Check method '#{method_name}' not found in #{@instance.class.name}. " \
                                "Define it in your model: def #{method_name}; ...; end"
         end
 
         @instance.send(method_name)
       end
 
-      # Valuta un guard predicate (integrazione Statusable)
+      # Valuta un check predicate (integrazione Statusable)
       def evaluate_predicate
         predicate_name = @guard_config[:predicate]
 
         unless @instance.respond_to?(predicate_name)
-          raise NoMethodError, "Guard predicate '#{predicate_name}' not found in #{@instance.class.name}. " \
+          raise NoMethodError, "Check predicate '#{predicate_name}' not found in #{@instance.class.name}. " \
                                "Make sure Statusable is enabled and the predicate is defined: is :ready, -> { ... }"
         end
 

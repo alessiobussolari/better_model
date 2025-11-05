@@ -90,6 +90,9 @@ module BetterModel
         pagination = options.delete(:pagination)
         orders = options.delete(:orders)
         security = options.delete(:security)
+        includes_param = options.delete(:includes)
+        preload_param = options.delete(:preload)
+        eager_load_param = options.delete(:eager_load)
 
         # If there are remaining unknown options, they might be misplaced predicates
         if options.any?
@@ -131,6 +134,11 @@ module BetterModel
 
         # Apply pagination
         scope = apply_pagination(scope, pagination) if pagination.present?
+
+        # Apply eager loading associations
+        scope = apply_includes(scope, includes_param) if includes_param.present?
+        scope = apply_preload(scope, preload_param) if preload_param.present?
+        scope = apply_eager_load(scope, eager_load_param) if eager_load_param.present?
 
         scope
       end
@@ -229,7 +237,8 @@ module BetterModel
 
           # Apply scope
           scope = if value == true || value == "true"
-            scope.public_send(predicate_scope)
+            # All predicates require parameters, pass true
+            scope.public_send(predicate_scope, true)
           elsif value.is_a?(Array)
             # Splat array values for predicates like _between that expect multiple args
             scope.public_send(predicate_scope, *value)
@@ -317,6 +326,24 @@ module BetterModel
 
         offset = (page - 1) * per_page
         scope.limit(per_page).offset(offset)
+      end
+
+      # Applica includes per eager loading delle associazioni (usa LEFT OUTER JOIN)
+      def apply_includes(scope, includes_param)
+        return scope if includes_param.blank?
+        scope.includes(includes_param)
+      end
+
+      # Applica preload per eager loading delle associazioni (carica con query separate)
+      def apply_preload(scope, preload_param)
+        return scope if preload_param.blank?
+        scope.preload(preload_param)
+      end
+
+      # Applica eager_load per eager loading delle associazioni (forza LEFT OUTER JOIN)
+      def apply_eager_load(scope, eager_load_param)
+        return scope if eager_load_param.blank?
+        scope.eager_load(eager_load_param)
       end
 
       # Valida che i predicati obbligatori della security siano presenti con valori validi

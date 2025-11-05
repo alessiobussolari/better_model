@@ -45,7 +45,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validate with presence works" do
     article_class = create_validatable_class(:ValidatableArticle3) do
       validatable do
-        validate :title, presence: true
+        check :title, presence: true
       end
     end
 
@@ -60,7 +60,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validate with multiple fields" do
     article_class = create_validatable_class(:ValidatableArticle4) do
       validatable do
-        validate :title, :status, presence: true
+        check :title, :status, presence: true
       end
     end
 
@@ -78,7 +78,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
 
       validatable do
         validate_if :is_published? do
-          validate :published_at, presence: true
+          check :published_at, presence: true
         end
       end
     end
@@ -100,7 +100,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     article_class = create_validatable_class(:ValidatableArticle6) do
       validatable do
         validate_if -> { status == "published" } do
-          validate :published_at, presence: true
+          check :published_at, presence: true
         end
       end
     end
@@ -118,7 +118,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
 
       validatable do
         validate_unless :is_draft? do
-          validate :published_at, presence: true
+          check :published_at, presence: true
         end
       end
     end
@@ -226,9 +226,9 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validation_group defines groups" do
     article_class = create_validatable_class(:ValidatableArticle13) do
       validatable do
-        validate :title, presence: true
-        validate :status, presence: true
-        validate :view_count, presence: true
+        check :title, presence: true
+        check :status, presence: true
+        check :view_count, presence: true
 
         validation_group :step1, [ :title ]
         validation_group :step2, [ :status, :view_count ]
@@ -250,8 +250,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "errors_for_group filters errors to group fields" do
     article_class = create_validatable_class(:ValidatableArticle14) do
       validatable do
-        validate :title, presence: true
-        validate :status, presence: true
+        check :title, presence: true
+        check :status, presence: true
 
         validation_group :step1, [ :title ]
       end
@@ -297,16 +297,16 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
 
       validatable do
         # Basic validations
-        validate :title, presence: true
-        validate :status, presence: true
+        check :title, presence: true
+        check :status, presence: true
 
         # Conditional validations
         validate_if :is_published? do
-          validate :published_at, presence: true
+          check :published_at, presence: true
         end
 
         validate_if :is_scheduled? do
-          validate :scheduled_for, presence: true
+          check :scheduled_for, presence: true
         end
 
         # Cross-field validation
@@ -359,7 +359,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validatable_config is frozen after setup" do
     article_class = create_validatable_class(:ValidatableArticle18) do
       validatable do
-        validate :title, presence: true
+        check :title, presence: true
       end
     end
 
@@ -371,12 +371,12 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validatable setup runs only once" do
     article_class = create_validatable_class(:ValidatableArticle19) do
       validatable do
-        validate :title, presence: true
+        check :title, presence: true
       end
 
       # Call validatable again
       validatable do
-        validate :status, presence: true
+        check :status, presence: true
       end
     end
 
@@ -397,7 +397,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validate with multiple validation options (presence + length)" do
     article_class = create_validatable_class(:ValidatableArticle20) do
       validatable do
-        validate :title, presence: true, length: { minimum: 5, maximum: 100 }
+        check :title, presence: true, length: { minimum: 5, maximum: 100 }
       end
     end
 
@@ -427,8 +427,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       attr_accessor :email
 
       validatable do
-        validate :email, format: { with: URI::MailTo::EMAIL_REGEXP }
-        validate :view_count, numericality: { greater_than_or_equal_to: 0 }
+        check :email, format: { with: URI::MailTo::EMAIL_REGEXP }
+        check :view_count, numericality: { greater_than_or_equal_to: 0 }
       end
     end
 
@@ -450,7 +450,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validate with inclusion validator" do
     article_class = create_validatable_class(:ValidatableArticle22) do
       validatable do
-        validate :status, inclusion: { in: %w[draft published archived] }
+        check :status, inclusion: { in: %w[draft published archived] }
       end
     end
 
@@ -469,7 +469,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validate with custom message" do
     article_class = create_validatable_class(:ValidatableArticle23) do
       validatable do
-        validate :title, presence: { message: "must not be empty" }
+        check :title, presence: { message: "must not be empty" }
       end
     end
 
@@ -484,8 +484,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       attr_accessor :optional_field, :another_field
 
       validatable do
-        validate :optional_field, length: { minimum: 5 }, allow_nil: true
-        validate :another_field, length: { minimum: 5 }, allow_blank: true
+        check :optional_field, length: { minimum: 5 }, allow_nil: true
+        check :another_field, length: { minimum: 5 }, allow_blank: true
       end
     end
 
@@ -506,8 +506,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validate with on: :create and on: :update" do
     article_class = create_validatable_class(:ValidatableArticle25) do
       validatable do
-        validate :title, presence: true, on: :create
-        validate :status, presence: true, on: :update
+        check :title, presence: true, on: :create
+        check :status, presence: true, on: :update
       end
     end
 
@@ -536,8 +536,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       is :published, -> { status == "published" }
 
       validatable do
-        validate :published_at, presence: true, if: :is_published?
-        validate :draft_notes, presence: true, unless: :is_published?
+        check :published_at, presence: true, if: :is_published?
+        check :draft_notes, presence: true, unless: :is_published?
       end
     end
 
@@ -560,7 +560,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       attr_accessor :custom_field
 
       validatable do
-        validate :custom_field, presence: true
+        check :custom_field, presence: true
       end
     end
 
@@ -585,12 +585,12 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       validatable do
         # First condition: if published
         validate_if :is_published? do
-          validate :published_at, presence: true
+          check :published_at, presence: true
         end
 
         # Second condition: if published AND featured (using proc)
         validate_if -> { status == "published" && featured == true } do
-          validate :view_count, numericality: { greater_than: 100 }
+          check :view_count, numericality: { greater_than: 100 }
         end
       end
     end
@@ -617,7 +617,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     article_class = create_validatable_class(:ValidatableArticle29) do
       validatable do
         validate_if -> { raise StandardError, "Condition error" } do
-          validate :title, presence: true
+          check :title, presence: true
         end
       end
     end
@@ -636,11 +636,11 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
 
       validatable do
         validate_if :is_published? do
-          validate :published_at, presence: true
+          check :published_at, presence: true
         end
 
         validate_unless :is_draft? do
-          validate :view_count, numericality: { greater_than_or_equal_to: 0 }
+          check :view_count, numericality: { greater_than_or_equal_to: 0 }
         end
       end
     end
@@ -662,7 +662,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     article_class = create_validatable_class(:ValidatableArticle31) do
       validatable do
         validate_if -> { status == "published" || status == "archived" } do
-          validate :published_at, presence: true
+          check :published_at, presence: true
         end
       end
     end
@@ -688,7 +688,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
 
       validatable do
         validate_if -> { dynamic_flag == true } do
-          validate :title, presence: true
+          check :title, presence: true
         end
       end
     end
@@ -711,7 +711,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     article_class = create_validatable_class(:ValidatableArticle33) do
       validatable do
         validate_unless -> { status == "draft" && view_count.to_i < 10 } do
-          validate :title, length: { minimum: 10 }
+          check :title, length: { minimum: 10 }
         end
       end
     end
@@ -1035,7 +1035,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validation_group with empty fields array" do
     article_class = create_validatable_class(:ValidatableArticle48) do
       validatable do
-        validate :title, presence: true
+        check :title, presence: true
 
         validation_group :empty_group, []
       end
@@ -1053,7 +1053,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validation_group with fields that have no validations" do
     article_class = create_validatable_class(:ValidatableArticle49) do
       validatable do
-        validate :title, presence: true
+        check :title, presence: true
 
         # status has no validations defined
         validation_group :status_group, [ :status ]
@@ -1085,8 +1085,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "valid? with nonexistent group falls back to full validation" do
     article_class = create_validatable_class(:ValidatableArticle51) do
       validatable do
-        validate :title, presence: true
-        validate :status, presence: true
+        check :title, presence: true
+        check :status, presence: true
         validation_group :step1, [ :title ]
       end
     end
@@ -1104,7 +1104,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "errors_for_group with nonexistent group returns empty errors" do
     article_class = create_validatable_class(:ValidatableArticle52) do
       validatable do
-        validate :title, presence: true
+        check :title, presence: true
         validation_group :step1, [ :title ]
       end
     end
@@ -1120,9 +1120,9 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validation_group with overlapping fields" do
     article_class = create_validatable_class(:ValidatableArticle53) do
       validatable do
-        validate :title, presence: true
-        validate :status, presence: true
-        validate :content, presence: true
+        check :title, presence: true
+        check :status, presence: true
+        check :content, presence: true
 
         validation_group :group1, [ :title, :status ]
         validation_group :group2, [ :status, :content ]  # status overlaps
@@ -1150,8 +1150,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validate_group clears previous errors before validation" do
     article_class = create_validatable_class(:ValidatableArticle54) do
       validatable do
-        validate :title, presence: true
-        validate :status, presence: true
+        check :title, presence: true
+        check :status, presence: true
 
         validation_group :group1, [ :title ]
       end
@@ -1176,9 +1176,9 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validation_group validates only specified fields" do
     article_class = create_validatable_class(:ValidatableArticle55) do
       validatable do
-        validate :title, presence: true, length: { minimum: 5 }
-        validate :status, presence: true
-        validate :content, presence: true
+        check :title, presence: true, length: { minimum: 5 }
+        check :status, presence: true
+        check :content, presence: true
 
         validation_group :title_only, [ :title ]
         validation_group :content_only, [ :content ]
@@ -1221,7 +1221,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
 
       validatable do
         validate_if :is_published? do
-          validate :published_at, presence: true
+          check :published_at, presence: true
         end
       end
     end
@@ -1242,7 +1242,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       is :published, -> { status == "published" }
 
       validatable do
-        validate :title, presence: true
+        check :title, presence: true
       end
 
       def can_edit?
@@ -1261,8 +1261,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validatable with save(validate: false) skips all validations" do
     article_class = create_validatable_class(:ValidatableArticle58) do
       validatable do
-        validate :title, presence: true
-        validate :status, presence: true
+        check :title, presence: true
+        check :status, presence: true
       end
     end
 
@@ -1278,8 +1278,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validatable works with Rails standard validation contexts" do
     article_class = create_validatable_class(:ValidatableArticle59) do
       validatable do
-        validate :title, presence: true, on: :create
-        validate :status, presence: true, on: :update
+        check :title, presence: true, on: :create
+        check :status, presence: true, on: :update
       end
     end
 
@@ -1305,7 +1305,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       validates :content, presence: true
 
       validatable do
-        validate :title, presence: true
+        check :title, presence: true
       end
     end
 
@@ -1329,7 +1329,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validatable works in transaction with rollback" do
     article_class = create_validatable_class(:ValidatableArticle61) do
       validatable do
-        validate :title, presence: true
+        check :title, presence: true
       end
     end
 
@@ -1357,7 +1357,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       validatable do
         # Many field validations
         20.times do |i|
-          validate "field_#{i}".to_sym, presence: true
+          check "field_#{i}".to_sym, presence: true
         end
       end
     end
@@ -1385,7 +1385,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
         # 10 conditional validations
         10.times do |i|
           validate_if "is_status_#{i}?".to_sym do
-            validate :title, presence: true
+            check :title, presence: true
           end
         end
       end
@@ -1412,7 +1412,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       validatable do
         # Add validations
         20.times do |i|
-          validate "field_#{i}".to_sym, presence: true
+          check "field_#{i}".to_sym, presence: true
         end
 
         # Create 10 groups with 2 fields each
@@ -1486,7 +1486,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validation errors include validator metadata" do
     article_class = create_validatable_class(:ValidatableArticle67) do
       validatable do
-        validate :title, presence: true, length: { minimum: 5 }
+        check :title, presence: true, length: { minimum: 5 }
       end
     end
 
@@ -1521,8 +1521,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validation full_messages includes field names" do
     article_class = create_validatable_class(:ValidatableArticle69) do
       validatable do
-        validate :title, presence: true
-        validate :status, presence: true
+        check :title, presence: true
+        check :status, presence: true
       end
     end
 
@@ -1549,8 +1549,8 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   test "validatable error messages are customizable" do
     article_class = create_validatable_class(:ValidatableArticle71) do
       validatable do
-        validate :title, presence: { message: "must be provided" }
-        validate :content, length: { minimum: 10, too_short: "needs at least %{count} characters" }
+        check :title, presence: { message: "must be provided" }
+        check :content, length: { minimum: 10, too_short: "needs at least %{count} characters" }
       end
     end
 
@@ -1574,10 +1574,10 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
 
       validatable do
         validate_if :is_level1_active? do
-          validate :title, presence: true
+          check :title, presence: true
 
           validate_if :is_level2_active? do
-            validate :content, presence: true
+            check :content, presence: true
           end
         end
       end
@@ -1700,11 +1700,11 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
 
       validatable do
         validate_if -> { condition1 && condition2 } do
-          validate :title, presence: true, length: { minimum: 5 }
+          check :title, presence: true, length: { minimum: 5 }
         end
 
         validate_unless -> { condition1 || condition2 } do
-          validate :content, presence: true
+          check :content, presence: true
         end
       end
     end
@@ -1730,12 +1730,12 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
 
       validatable do
         # Step 1 validations - basic authentication
-        validate :email, presence: true
-        validate :password, presence: true
+        check :email, presence: true
+        check :password, presence: true
 
         # Step 2 validations - personal info
-        validate :first_name, presence: true
-        validate :last_name, presence: true
+        check :first_name, presence: true
+        check :last_name, presence: true
 
         # Group definitions - specify which fields to validate in each step
         validation_group :step1, [ :email, :password ]
@@ -1767,7 +1767,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       attr_accessor :email
 
       validatable do
-        validate :email, format: { with: /\A[\w+\-.]+@[a-z\d\-]+(\.[a-z\d\-]+)*\.[a-z]+\z/i }
+        check :email, format: { with: /\A[\w+\-.]+@[a-z\d\-]+(\.[a-z\d\-]+)*\.[a-z]+\z/i }
       end
     end
 
@@ -1785,7 +1785,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       attr_accessor :min_price, :max_price
 
       validatable do
-        validate :min_price, order: { second_field: :max_price, comparator: :lt }
+        check :min_price, order: { second_field: :max_price, comparator: :lt }
       end
     end
 
@@ -1808,7 +1808,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       attr_accessor :current_price, :original_price
 
       validatable do
-        validate :current_price, order: { second_field: :original_price, comparator: :gt }
+        check :current_price, order: { second_field: :original_price, comparator: :gt }
       end
     end
 
@@ -1831,7 +1831,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       attr_accessor :starts_at, :ends_at
 
       validatable do
-        validate :starts_at, order: { second_field: :ends_at, comparator: :before }
+        check :starts_at, order: { second_field: :ends_at, comparator: :before }
       end
     end
 
@@ -1858,7 +1858,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     # Test :before
     article_class1 = create_validatable_class(:ValidatableArticle83) do
       attr_accessor :starts_at, :ends_at
-      validatable { validate :starts_at, order: { second_field: :ends_at, comparator: :before } }
+      validatable { check :starts_at, order: { second_field: :ends_at, comparator: :before } }
     end
     article = article_class1.new(starts_at: Time.current + 1.hour, ends_at: Time.current)
     assert_not article.valid?
@@ -1867,7 +1867,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     # Test :after
     article_class2 = create_validatable_class(:ValidatableArticle84) do
       attr_accessor :ends_at, :starts_at
-      validatable { validate :ends_at, order: { second_field: :starts_at, comparator: :after } }
+      validatable { check :ends_at, order: { second_field: :starts_at, comparator: :after } }
     end
     article = article_class2.new(ends_at: Time.current, starts_at: Time.current + 1.hour)
     assert_not article.valid?
@@ -1876,7 +1876,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     # Test :lteq
     article_class3 = create_validatable_class(:ValidatableArticle85) do
       attr_accessor :min_value, :max_value
-      validatable { validate :min_value, order: { second_field: :max_value, comparator: :lteq } }
+      validatable { check :min_value, order: { second_field: :max_value, comparator: :lteq } }
     end
     article = article_class3.new(min_value: 100, max_value: 50)
     assert_not article.valid?
@@ -1885,7 +1885,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     # Test :gteq
     article_class4 = create_validatable_class(:ValidatableArticle86) do
       attr_accessor :max_value, :min_value
-      validatable { validate :max_value, order: { second_field: :min_value, comparator: :gteq } }
+      validatable { check :max_value, order: { second_field: :min_value, comparator: :gteq } }
     end
     article = article_class4.new(max_value: 50, min_value: 100)
     assert_not article.valid?
@@ -1898,7 +1898,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
         attr_accessor :field1, :field2
 
         validatable do
-          validate :field1, order: { second_field: :field2, comparator: :invalid }
+          check :field1, order: { second_field: :field2, comparator: :invalid }
         end
       end
     end

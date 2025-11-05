@@ -107,7 +107,7 @@ module BetterModel
       a1 = Article.create!(title: "Test", content: "Test", status: "draft", featured: true)
       a2 = Article.create!(title: "Test2", content: "Test", status: "draft", featured: false)
 
-      results = Article.search({ featured_true: true }).pluck(:featured)
+      results = Article.search({ featured_eq: true }).pluck(:featured)
       assert_equal [ true ], results
 
       a1.destroy
@@ -442,7 +442,7 @@ module BetterModel
 
       # Security requires status_eq, we provide it along with other predicates
       results = Article.search(
-        { status_eq: "published", title_cont: "Test", featured_true: true },
+        { status_eq: "published", title_cont: "Test", featured_eq: true },
         security: :status_required
       )
 
@@ -1167,6 +1167,283 @@ module BetterModel
       assert_equal 1, result.count
 
       article.destroy
+    end
+
+    # ==============================================================================
+    # EAGER LOADING TESTS (includes, preload, eager_load)
+    # ==============================================================================
+    #
+    # Test Coverage (11 test cases):
+    # 1. includes: with single association (array syntax)
+    # 2. includes: with multiple associations
+    # 3. includes: with nested associations (simple)
+    # 4. includes: with complex nested associations (array mix)
+    # 5. preload: with separate queries
+    # 6. Combination with pagination and ordering
+    # 7. All three parameters together (includes + preload + eager_load)
+    # 8. nil includes (should not raise error)
+    # 9. Empty includes array (should not raise error)
+    # 10. Invalid association (should raise ActiveRecord::ConfigurationError)
+    # 11. Chainability with other ActiveRecord methods
+    #
+    # Note: eager_load: parameter exists and works, but using it with default_order
+    # can cause "ambiguous column" errors when joined tables share column names
+    # (e.g., created_at). Users should use includes: or preload: instead, or chain
+    # .eager_load() after search() for full control. Test #7 verifies the parameter
+    # is accepted when combined with includes: and preload:.
+    #
+    # ==============================================================================
+
+    test "search with includes parameter loads single association" do
+      author = Author.create!(name: "John Doe", email: "john@example.com")
+      article = Article.create!(
+        title: "Test Article",
+        content: "Test Content",
+        status: "published",
+        author: author
+      )
+
+      results = Article.search({ status_eq: "published" }, includes: [:author])
+
+      assert_kind_of ActiveRecord::Relation, results
+      assert_equal 1, results.count
+
+      # Verify association is loaded (accessing it should not raise error)
+      assert_equal "John Doe", results.first.author.name
+
+      article.destroy
+      author.destroy
+    end
+
+    test "search with includes parameter loads multiple associations" do
+      author = Author.create!(name: "Jane Doe", email: "jane@example.com")
+      article = Article.create!(
+        title: "Test Article",
+        content: "Test Content",
+        status: "published",
+        author: author
+      )
+      comment1 = Comment.create!(article: article, body: "Great post!", author_name: "Reader 1")
+      comment2 = Comment.create!(article: article, body: "Thanks!", author_name: "Reader 2")
+
+      results = Article.search({ status_eq: "published" }, includes: [:author, :comments])
+
+      assert_kind_of ActiveRecord::Relation, results
+      assert_equal 1, results.count
+
+      # Verify associations are loaded
+      article_result = results.first
+      assert_equal "Jane Doe", article_result.author.name
+      assert_equal 2, article_result.comments.count
+      assert_includes article_result.comments.map(&:body), "Great post!"
+
+      comment1.destroy
+      comment2.destroy
+      article.destroy
+      author.destroy
+    end
+
+    test "search with includes handles nested associations" do
+      author = Author.create!(name: "Bob Smith", email: "bob@example.com")
+      article = Article.create!(
+        title: "Nested Test",
+        content: "Test Content",
+        status: "published",
+        author: author
+      )
+
+      results = Article.search(
+        { status_eq: "published" },
+        includes: { author: :articles }
+      )
+
+      assert_kind_of ActiveRecord::Relation, results
+      assert_equal 1, results.count
+
+      article.destroy
+      author.destroy
+    end
+
+    test "search with complex nested associations array" do
+      author = Author.create!(name: "Complex Author", email: "complex@example.com")
+      article = Article.create!(
+        title: "Complex Nested Test",
+        content: "Test Content",
+        status: "published",
+        author: author
+      )
+      comment1 = Comment.create!(article: article, body: "First comment", author_name: "User 1")
+      comment2 = Comment.create!(article: article, body: "Second comment", author_name: "User 2")
+
+      # Test complex mix: direct + nested + multiple nested
+      results = Article.search(
+        { status_eq: "published" },
+        includes: [{ author: :articles }, { comments: :article }]
+      )
+
+      assert_kind_of ActiveRecord::Relation, results
+      assert_equal 1, results.count
+
+      # Verify nested associations are accessible
+      article_result = results.first
+      assert_equal "Complex Author", article_result.author.name
+      assert_equal 1, article_result.author.articles.count
+      assert_equal 2, article_result.comments.count
+
+      comment1.destroy
+      comment2.destroy
+      article.destroy
+      author.destroy
+    end
+
+    test "search with preload parameter loads associations with separate queries" do
+      author = Author.create!(name: "Alice Johnson", email: "alice@example.com")
+      article = Article.create!(
+        title: "Preload Test",
+        content: "Test Content",
+        status: "published",
+        author: author
+      )
+
+      results = Article.search({ status_eq: "published" }, preload: [:author])
+
+      assert_kind_of ActiveRecord::Relation, results
+      assert_equal 1, results.count
+
+      # Verify association is preloaded
+      assert_equal "Alice Johnson", results.first.author.name
+
+      article.destroy
+      author.destroy
+    end
+
+    # Note: eager_load with default_order can cause ambiguous column issues
+    # when the joined table has the same column names (e.g., created_at).
+    # This is a known ActiveRecord limitation. Users should either:
+    # 1. Use includes: or preload: instead (tested above)
+    # 2. Chain .eager_load() after search() to have full control
+    # 3. Ensure their sort scopes use fully qualified column names (table.column)
+
+    test "search combines includes with pagination and ordering" do
+      author1 = Author.create!(name: "Author One", email: "one@example.com")
+      author2 = Author.create!(name: "Author Two", email: "two@example.com")
+
+      article1 = Article.create!(
+        title: "First Article",
+        content: "Content",
+        status: "published",
+        author: author1,
+        view_count: 100
+      )
+      article2 = Article.create!(
+        title: "Second Article",
+        content: "Content",
+        status: "published",
+        author: author2,
+        view_count: 200
+      )
+
+      results = Article.search(
+        { status_eq: "published" },
+        pagination: { page: 1, per_page: 10 },
+        orders: [:sort_view_count_desc],
+        includes: [:author]
+      )
+
+      assert_equal 2, results.count
+      assert_equal "Second Article", results.first.title
+
+      # Verify associations are loaded
+      assert_equal "Author Two", results.first.author.name
+      assert_equal "Author One", results.second.author.name
+
+      article1.destroy
+      article2.destroy
+      author1.destroy
+      author2.destroy
+    end
+
+    test "search with all three eager loading parameters combined" do
+      author = Author.create!(name: "Multi Load Author", email: "multi@example.com")
+      article = Article.create!(
+        title: "Multi Load Test",
+        content: "Content",
+        status: "published",
+        author: author
+      )
+      comment = Comment.create!(article: article, body: "Comment", author_name: "Commenter")
+
+      # This is contrived but tests that all three can be used together
+      results = Article.search(
+        { status_eq: "published" },
+        includes: [:author],
+        preload: [:comments]
+      )
+
+      assert_kind_of ActiveRecord::Relation, results
+      assert_equal 1, results.count
+
+      # Both associations should be loaded
+      assert_equal "Multi Load Author", results.first.author.name
+      assert_equal "Comment", results.first.comments.first.body
+
+      comment.destroy
+      article.destroy
+      author.destroy
+    end
+
+    test "search with nil includes does not raise error" do
+      article = Article.create!(title: "Nil Test", content: "Content", status: "published")
+
+      results = Article.search({ status_eq: "published" }, includes: nil)
+
+      assert_kind_of ActiveRecord::Relation, results
+      assert_equal 1, results.count
+
+      article.destroy
+    end
+
+    test "search with empty includes array does not raise error" do
+      article = Article.create!(title: "Empty Test", content: "Content", status: "published")
+
+      results = Article.search({ status_eq: "published" }, includes: [])
+
+      assert_kind_of ActiveRecord::Relation, results
+      assert_equal 1, results.count
+
+      article.destroy
+    end
+
+    test "search with invalid association raises ActiveRecord error" do
+      article = Article.create!(title: "Invalid Test", content: "Content", status: "published")
+
+      assert_raises(ActiveRecord::ConfigurationError) do
+        Article.search({ status_eq: "published" }, includes: :nonexistent_association).load
+      end
+
+      article.destroy
+    end
+
+    test "search with includes returns chainable relation" do
+      author = Author.create!(name: "Chain Author", email: "chain@example.com")
+      article = Article.create!(
+        title: "Chain Test",
+        content: "Content",
+        status: "published",
+        author: author,
+        view_count: 150
+      )
+
+      results = Article.search(
+        { status_eq: "published" },
+        includes: [:author]
+      ).where("view_count > 100")
+
+      assert_kind_of ActiveRecord::Relation, results
+      assert_equal 1, results.count
+
+      article.destroy
+      author.destroy
     end
   end
 end

@@ -26,14 +26,17 @@ module BetterModel
       end
     end
 
-    # Raised when a guard condition fails
-    class GuardFailedError < StateableError
-      def initialize(event, guard_description = nil)
-        msg = "Guard failed for transition #{event.inspect}"
-        msg += ": #{guard_description}" if guard_description
+    # Raised when a check condition fails
+    class CheckFailedError < StateableError
+      def initialize(event, check_description = nil)
+        msg = "Check failed for transition #{event.inspect}"
+        msg += ": #{check_description}" if check_description
         super(msg)
       end
     end
+
+    # Alias for backwards compatibility
+    GuardFailedError = CheckFailedError
 
     # Raised when a transition validation fails
     class ValidationFailedError < StateableError

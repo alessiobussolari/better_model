@@ -139,22 +139,22 @@ class Page < ApplicationRecord
   validatable do
     # Step 1: Basic info
     validation_group :basic, [:title, :slug]
-    validate :title, presence: true, length: { minimum: 3 }
-    validate :slug, presence: true, uniqueness: true
+    check :title, presence: true, length: { minimum: 3 }
+    check :slug, presence: true, uniqueness: true
 
     # Step 2: Content
     validation_group :content, [:body, :excerpt]
-    validate :body, presence: true, length: { minimum: 100 }
-    validate :excerpt, length: { maximum: 300 }
+    check :body, presence: true, length: { minimum: 100 }
+    check :excerpt, length: { maximum: 300 }
 
     # Step 3: SEO
     validation_group :seo, [:meta_title, :meta_description]
-    validate :meta_title, length: { maximum: 60 }
-    validate :meta_description, length: { maximum: 160 }
+    check :meta_title, length: { maximum: 60 }
+    check :meta_description, length: { maximum: 160 }
 
     # Step 4: Settings
     validation_group :settings, [:template, :published_at]
-    validate :template, presence: true
+    check :template, presence: true
   end
 
   # Workflow

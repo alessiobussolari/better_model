@@ -912,10 +912,10 @@ class Application < ApplicationRecord
   validatable do
     # Step 1: Personal Info
     validation_group :personal_info, [:first_name, :last_name, :birth_date, :email, :phone]
-    validate :first_name, :last_name, :email, presence: true
-    validate :email, format: { with: URI::MailTo::EMAIL_REGEXP }
-    validate :birth_date, presence: true
-    validate :phone, format: { with: /\A\d{10}\z/ }
+    check :first_name, :last_name, :email, presence: true
+    check :email, format: { with: URI::MailTo::EMAIL_REGEXP }
+    check :birth_date, presence: true
+    check :phone, format: { with: /\A\d{10}\z/ }
 
     validate_if -> { birth_date.present? } do
       validate_business_rule :must_be_adult
@@ -923,19 +923,19 @@ class Application < ApplicationRecord
 
     # Step 2: Address
     validation_group :address, [:street, :city, :state_province, :postal_code, :country]
-    validate :street, :city, :state_province, :postal_code, :country, presence: true
-    validate :postal_code, format: { with: /\A\d{5}(-\d{4})?\z/ }
+    check :street, :city, :state_province, :postal_code, :country, presence: true
+    check :postal_code, format: { with: /\A\d{5}(-\d{4})?\z/ }
 
     # Step 3: Employment
     validation_group :employment, [:employer, :job_title, :annual_income, :years_employed]
-    validate :employer, :job_title, presence: true
-    validate :annual_income, numericality: { greater_than: 0 }
-    validate :years_employed, numericality: { greater_than_or_equal_to: 0 }
+    check :employer, :job_title, presence: true
+    check :annual_income, numericality: { greater_than: 0 }
+    check :years_employed, numericality: { greater_than_or_equal_to: 0 }
 
     # Step 4: Financial
     validation_group :financial, [:credit_score, :monthly_debts]
-    validate :credit_score, numericality: { in: 300..850 }, allow_nil: false
-    validate :monthly_debts, numericality: { greater_than_or_equal_to: 0 }
+    check :credit_score, numericality: { in: 300..850 }, allow_nil: false
+    check :monthly_debts, numericality: { greater_than_or_equal_to: 0 }
 
     # Final submission validation
     validate_if -> { state == "submitted" } do

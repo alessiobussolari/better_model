@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# Run RuboCop in Docker container
+# Usage: bin/docker-rubocop [rubocop options]
+
+set -e
+
+echo "🔍 Running RuboCop in Docker..."
+echo ""
+
+if [ $# -eq 0 ]; then
+  # No arguments: run rubocop on entire codebase
+  docker compose run --rm rubocop
+else
+  # Arguments provided: pass them to rubocop
+  docker compose run --rm rubocop bundle exec rubocop "$@"
+fi

@@ -10,6 +10,7 @@ Searchable provides a unified interface for filtering, sorting, and pagination�
 - [Example 4: OR Conditions](#example-4-or-conditions)
 - [Example 5: Complex Search Queries](#example-5-complex-search-queries)
 - [Example 6: Building Search UIs](#example-6-building-search-uis)
+- [Eager Loading Associations](#eager-loading-associations)
 - [Tips & Best Practices](#tips--best-practices)
 
 ## Basic Setup
@@ -25,8 +26,8 @@ class Article < ApplicationRecord
 
   # Configure searchable
   searchable do
-    default_sort :published_at_desc
-    default_per_page 25
+    default_order [:sort_published_at_desc]
+    per_page 25
     max_per_page 100
   end
 end
@@ -71,29 +72,29 @@ Article.search({
 })
 # => Uses :published_at_desc from config
 
-# Override sort
+# Override default order
 Article.search(
   { status_eq: "published" },
-  sort: :view_count_desc
+  orders: [:sort_view_count_desc]
 )
 # => Published articles sorted by view count
 
 # Multiple sorts via array
 Article.search(
   { status_eq: "published" },
-  sort: [:status_asc, :view_count_desc]
+  orders: [:sort_status_asc, :sort_view_count_desc]
 )
 # => Sorted by status, then view count
 
-# No sorting
+# No sorting (override default)
 Article.search(
   { status_eq: "published" },
-  sort: nil
+  orders: []
 )
-# => Natural database order
+# => Natural database order (or uses default_order if configured)
 ```
 
-**Output Explanation**: Sort parameter accepts symbol, array of symbols, or nil.
+**Output Explanation**: Orders parameter accepts array of sort scope symbols.
 
 ## Example 3: Search with Pagination
 
@@ -125,7 +126,7 @@ result = Article.search(
   { status_eq: "published" },
   pagination: { page: 1 }
 )
-# => Uses default_per_page: 25 from config
+# => Uses per_page: 25 from config
 ```
 
 **Output Explanation**: Pagination returns enriched ActiveRecord::Relation with metadata methods.
@@ -181,7 +182,7 @@ results = Article.search(
       { status_eq: "scheduled" }
     ]
   },
-  sort: [:featured_desc, :view_count_desc],
+  orders: [:sort_featured_desc, :sort_view_count_desc],
   pagination: { page: 1, per_page: 20 }
 )
 
@@ -209,7 +210,7 @@ class ArticlesController < ApplicationController
   def index
     @results = Article.search(
       search_params,
-      sort: params[:sort]&.to_sym,
+      orders: parse_sort_param,
       pagination: {
         page: params[:page] || 1,
         per_page: params[:per_page] || 25
@@ -233,6 +234,18 @@ class ArticlesController < ApplicationController
       ]
     )
   end
+
+  def parse_sort_param
+    return nil unless params[:sort].present?
+
+    case params[:sort]
+    when "newest" then [:sort_published_at_desc]
+    when "oldest" then [:sort_published_at_asc]
+    when "popular" then [:sort_view_count_desc]
+    when "title" then [:sort_title_asc]
+    else nil  # Use default_order
+    end
+  end
 end
 ```
 
@@ -243,7 +256,7 @@ class Api::ArticlesController < ApplicationController
   def index
     results = Article.search(
       search_predicates,
-      sort: sort_param,
+      orders: sort_param,
       pagination: pagination_params
     )
 
@@ -268,13 +281,13 @@ class Api::ArticlesController < ApplicationController
 
   def sort_param
     allowed_sorts = %i[
-      title_asc title_desc
-      view_count_asc view_count_desc
-      published_at_asc published_at_desc
+      sort_title_asc sort_title_desc
+      sort_view_count_asc sort_view_count_desc
+      sort_published_at_asc sort_published_at_desc
     ]
 
     sort = params[:sort]&.to_sym
-    allowed_sorts.include?(sort) ? sort : :published_at_desc
+    allowed_sorts.include?(sort) ? [sort] : [:sort_published_at_desc]
   end
 
   def pagination_params
@@ -286,7 +299,7 @@ class Api::ArticlesController < ApplicationController
 end
 
 # Example API request:
-# GET /api/articles?filters[status_eq]=published&sort=view_count_desc&page=1
+# GET /api/articles?filters[status_eq]=published&sort=sort_view_count_desc&page=1
 
 # Response:
 # {
@@ -350,36 +363,72 @@ end
 <%= paginate @results %>
 ```
 
-## Security Features
+## Eager Loading Associations
 
-Searchable includes built-in DoS protection:
+Optimize N+1 queries with built-in support for `includes:`, `preload:`, and `eager_load:` parameters:
+
+### Basic Usage
 
 ```ruby
-# Configure limits
-class Article < ApplicationRecord
-  searchable do
-    max_page 10000          # Prevent page=999999
-    max_predicates 100      # Limit number of filters
-    max_or_conditions 50    # Limit OR complexity
-  end
-end
+# Single association (always use array syntax for consistency)
+Article.search(
+  { status_eq: "published" },
+  includes: [:author]
+)
 
-# These will raise errors:
-Article.search({}, pagination: { page: 10001 })
-# => BetterModel::Searchable::InvalidPaginationError
-
-predicates = {}
-101.times { |i| predicates["field_#{i}".to_sym] = "value" }
-Article.search(predicates)
-# => ArgumentError: Too many predicates
-
-Article.search({
-  or: Array.new(51) { { status_eq: "published" } }
-})
-# => ArgumentError: Too many OR conditions
+# Multiple associations
+Article.search(
+  { status_eq: "published" },
+  includes: [:author, :comments],
+  preload: [:tags]
+)
 ```
 
-**Output Explanation**: Built-in limits prevent malicious queries from overwhelming your database.
+### Nested Associations
+
+```ruby
+# Simple nested
+Article.search(
+  { status_eq: "published" },
+  includes: [{ author: :profile }]
+)
+
+# Complex nested mix
+Article.search(
+  { status_eq: "published" },
+  includes: [
+    :tags,                          # Direct association
+    { author: :profile },           # Nested: author -> profile
+    { comments: [:user, :likes] }   # Multiple nested
+  ]
+)
+```
+
+### Combined with Search Features
+
+```ruby
+# Full-featured search with eager loading
+Article.search(
+  {
+    status_eq: "published",
+    view_count_gteq: 100
+  },
+  pagination: { page: 1, per_page: 25 },
+  orders: [:sort_view_count_desc],
+  includes: [:author, { comments: :user }],
+  preload: [:tags]
+)
+```
+
+### Loading Strategies
+
+| Strategy | Parameter | Behavior | Use When |
+|----------|-----------|----------|----------|
+| **Smart Load** | `includes:` | Uses LEFT OUTER JOIN or separate queries based on context | Default choice, best for most cases |
+| **Separate Queries** | `preload:` | Always uses separate queries (one per association) | Avoiding JOIN complexity or ambiguous columns |
+| **Force JOIN** | `eager_load:` | Always uses LEFT OUTER JOIN | Need to filter/order by association columns |
+
+**⚠️ Important Note**: When using `eager_load:` with `default_order`, you may encounter "ambiguous column" errors if both tables have the same column names (e.g., `created_at`). In such cases, use `includes:` or `preload:` instead, or chain `.eager_load()` after search for full control.
 
 ## Tips & Best Practices
 
@@ -387,23 +436,22 @@ Article.search({
 ```ruby
 # Bad: Allows SQL injection
 sort_param = params[:sort]
-Article.search({}, sort: sort_param)
+Article.search({}, orders: [sort_param&.to_sym])
 
 # Good: Whitelist allowed sorts
-ALLOWED_SORTS = %i[title_asc title_desc view_count_desc published_at_desc]
+ALLOWED_SORTS = %i[sort_title_asc sort_title_desc sort_view_count_desc sort_published_at_desc]
 sort_param = params[:sort]&.to_sym
-sort_param = nil unless ALLOWED_SORTS.include?(sort_param)
-Article.search({}, sort: sort_param)
+orders = ALLOWED_SORTS.include?(sort_param) ? [sort_param] : nil
+Article.search({}, orders: orders)
 ```
 
 ### 2. Set Reasonable Defaults
 ```ruby
 class Article < ApplicationRecord
   searchable do
-    default_sort :published_at_desc     # Sensible default
-    default_per_page 25                 # Not too many
-    max_per_page 100                    # Prevent abuse
-    max_page 1000                       # Reasonable limit
+    default_order [:sort_published_at_desc]  # Sensible default
+    per_page 25                              # Default items per page
+    max_per_page 100                         # Prevent abuse
   end
 end
 ```
@@ -430,7 +478,7 @@ def index
   @results = Rails.cache.fetch(cache_key, expires_in: 5.minutes) do
     Article.search(
       search_params,
-      sort: sort_param,
+      orders: sort_param,
       pagination: pagination_params
     ).to_a  # Convert to array for caching
   end

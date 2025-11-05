@@ -10,18 +10,18 @@ module BetterModel
     # Esempio:
     #   validatable do
     #     # Validazioni base
-    #     validate :title, :content, presence: true
-    #     validate :email, format: { with: URI::MailTo::EMAIL_REGEXP }
+    #     check :title, :content, presence: true
+    #     check :email, format: { with: URI::MailTo::EMAIL_REGEXP }
     #
     #     # Validazioni condizionali
     #     validate_if :is_published? do
-    #       validate :published_at, presence: true
-    #       validate :author_id, presence: true
+    #       check :published_at, presence: true
+    #       check :author_id, presence: true
     #     end
     #
     #     # Validazioni condizionali negate
     #     validate_unless :is_draft? do
-    #       validate :reviewer_id, presence: true
+    #       check :reviewer_id, presence: true
     #     end
     #
     #     # Cross-field validations
@@ -54,11 +54,11 @@ module BetterModel
       # @param options [Hash] Opzioni di validazione (presence, format, etc.)
       #
       # @example
-      #   validate :title, :content, presence: true
-      #   validate :email, format: { with: URI::MailTo::EMAIL_REGEXP }
-      #   validate :age, numericality: { greater_than: 0 }
+      #   check :title, :content, presence: true
+      #   check :email, format: { with: URI::MailTo::EMAIL_REGEXP }
+      #   check :age, numericality: { greater_than: 0 }
       #
-      def validate(*fields, **options)
+      def check(*fields, **options)
         # Se siamo dentro un blocco condizionale, aggiungi alla condizione corrente
         if @current_conditional
           @current_conditional[:validations] << {
@@ -79,12 +79,12 @@ module BetterModel
       #
       # @example Con simbolo (metodo)
       #   validate_if :is_published? do
-      #     validate :published_at, presence: true
+      #     check :published_at, presence: true
       #   end
       #
       # @example Con lambda
       #   validate_if -> { status == "published" } do
-      #     validate :published_at, presence: true
+      #     check :published_at, presence: true
       #   end
       #
       def validate_if(condition, &block)
@@ -111,7 +111,7 @@ module BetterModel
       #
       # @example
       #   validate_unless :is_draft? do
-      #     validate :reviewer_id, presence: true
+      #     check :reviewer_id, presence: true
       #   end
       #
       def validate_unless(condition, &block)

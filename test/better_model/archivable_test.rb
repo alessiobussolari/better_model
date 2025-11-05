@@ -102,7 +102,7 @@ module BetterModel
 
       assert test_class.respond_to?(:archived)
       # Verifica che usi predicato sotto
-      assert_equal test_class.archived_at_present.to_sql, test_class.archived.to_sql
+      assert_equal test_class.archived_at_present(true).to_sql, test_class.archived.to_sql
     end
 
     test "should define not_archived scope as alias" do
@@ -113,7 +113,7 @@ module BetterModel
       end
 
       assert test_class.respond_to?(:not_archived)
-      assert_equal test_class.archived_at_null.to_sql, test_class.not_archived.to_sql
+      assert_equal test_class.archived_at_null(true).to_sql, test_class.not_archived.to_sql
     end
 
     test "archived_only should bypass default scope" do
