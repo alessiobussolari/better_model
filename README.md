@@ -708,11 +708,11 @@ Detailed documentation for each BetterModel concern:
 
 ### 💡 Quick Links
 
-- [Installation](#-installation)
-- [Quick Start](#-quick-start)
-- [Features Overview](#-features-overview)
-- [Requirements](#%EF%B8%8F-requirements)
-- [Contributing](#-contributing)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Features Overview](#features-overview)
+- [Requirements](#requirements)
+- [Contributing](#contributing)
 
 ## 🤝 Contributing
 
