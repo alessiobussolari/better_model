@@ -281,6 +281,150 @@ Article.search(
 )
 ```
 
+## Example 6: Complex Sort
+
+For multi-field ordering with custom logic, use `register_complex_sort`:
+
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  sort :published_at, :view_count, :title
+
+  # Register a complex sort for popularity ranking
+  # Primary: view count descending, Secondary: publication date descending
+  register_complex_sort :by_popularity do
+    order(view_count: :desc, published_at: :desc)
+  end
+
+  # Register a complex sort with parameters
+  register_complex_sort :by_relevance do |keyword|
+    order(
+      Arel.sql(
+        "CASE WHEN title ILIKE '%#{sanitize_sql_like(keyword)}%' THEN 0 " \
+        "WHEN content ILIKE '%#{sanitize_sql_like(keyword)}%' THEN 1 " \
+        "ELSE 2 END ASC, " \
+        "published_at DESC"
+      )
+    )
+  end
+
+  # Register a complex sort with CASE WHEN logic
+  register_complex_sort :by_priority do
+    order(
+      Arel.sql("CASE WHEN featured = TRUE THEN 0 ELSE 1 END"),
+      view_count: :desc,
+      published_at: :desc
+    )
+  end
+
+  # Register a complex sort that filters AND sorts
+  register_complex_sort :trending do
+    where("view_count >= ?", 100)
+      .order(published_at: :desc, view_count: :desc)
+  end
+end
+
+# Usage: Complex sorts work like regular scopes
+
+# Simple usage (no parameters)
+@popular = Article.sort_by_popularity
+# => ORDER BY view_count DESC, published_at DESC
+
+# Parameterized usage
+@relevant = Article.sort_by_relevance('Rails')
+# => Title matches first, then content matches, then by date
+
+# Combining with filters
+@featured = Article
+  .status_eq("published")
+  .sort_by_priority
+  .limit(10)
+# => Featured articles first, then by views and date
+
+# Complex sort with filtering built-in
+@trending = Article.sort_trending
+# => Articles with 100+ views, newest first
+```
+
+### Real-World Example: Task Management
+
+```ruby
+class Task < ApplicationRecord
+  include BetterModel
+
+  sort :priority, :due_date, :created_at, :title
+
+  # Register complex sort for task board (My Tasks view)
+  # Priority: Overdue > Due today > Due soon > Others
+  # Secondary: Priority > Due date > Title
+  register_complex_sort :by_urgency do
+    order(
+      Arel.sql(
+        "CASE " \
+        "WHEN due_date < CURRENT_DATE THEN 0 " \
+        "WHEN due_date = CURRENT_DATE THEN 1 " \
+        "WHEN due_date <= CURRENT_DATE + INTERVAL '3 days' THEN 2 " \
+        "WHEN due_date <= CURRENT_DATE + INTERVAL '7 days' THEN 3 " \
+        "ELSE 4 END"
+      ),
+      priority: :desc,
+      due_date: :asc
+    )
+  end
+
+  # Register complex sort for completed tasks (Recently Completed)
+  register_complex_sort :recently_completed do
+    where(status: 'completed')
+      .order(updated_at: :desc, priority: :desc)
+  end
+
+  # Register complex sort for unassigned tasks
+  register_complex_sort :unassigned_priority do
+    where(assigned_to_id: nil)
+      .order(priority: :desc, created_at: :asc)
+  end
+end
+
+# Controller usage
+class TasksController < ApplicationController
+  def index
+    @tasks = current_user.tasks.where.not(status: 'completed')
+
+    # Apply sort based on view preference
+    case params[:sort]
+    when 'urgency'
+      @tasks = @tasks.sort_by_urgency
+    when 'priority'
+      @tasks = @tasks.sort_priority_desc.sort_due_date_asc
+    when 'due_date'
+      @tasks = @tasks.sort_due_date_asc_nulls_last
+    when 'title'
+      @tasks = @tasks.sort_title_asc_i
+    else
+      @tasks = @tasks.sort_by_urgency  # Default
+    end
+
+    @tasks = @tasks.page(params[:page])
+  end
+
+  def unassigned
+    # Use complex sort with built-in filtering
+    @tasks = Task.unassigned_priority.page(params[:page])
+  end
+
+  def completed
+    # Combine complex sort with additional filtering
+    @tasks = Task
+      .recently_completed
+      .where("updated_at >= ?", 30.days.ago)
+      .page(params[:page])
+  end
+end
+```
+
+**Output Explanation**: Complex sorts encapsulate multi-field ordering logic and can include filtering, making them perfect for reusable business-specific sorting patterns.
+
 ## Database-Specific Notes
 
 ### PostgreSQL & SQLite

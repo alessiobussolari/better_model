@@ -20,7 +20,7 @@ Next steps:
 
        # Define transitions
        transition :confirm, from: :<%= initial_state_value %>, to: :confirmed do
-         guard { valid? }
+         check { valid? }
          before { prepare_confirmation }
          after { send_notification }
        end

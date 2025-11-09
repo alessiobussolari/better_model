@@ -21,6 +21,7 @@ Each file demonstrates a complete, working implementation of a specific feature:
 8. **08_stateable.md** - State machines with guards, validations, callbacks, and transition history
 9. **09_traceable.md** - Comprehensive audit trail with time travel, sensitive data protection, and version history
 10. **10_taggable.md** - Flexible tag management with normalization, validation, statistics, and array storage
+11. **11_repositable.md** - Repository Pattern for clean architecture, testability, and data access abstraction
 
 ## Quick Start
 
@@ -81,6 +82,9 @@ rails generate better_model:traceable User
 
 # Taggable - adds tags JSONB column
 rails generate better_model:taggable Article
+
+# Repositable - creates repository class
+rails generate better_model:repository Article
 
 # Run migrations
 rails db:migrate

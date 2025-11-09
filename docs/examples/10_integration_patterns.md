@@ -111,32 +111,32 @@ class Article < ApplicationRecord
     state :published
 
     transition :submit, from: :draft, to: :pending_review do
-      guard { can?(:submit_for_review) }
-      guard { title.present? && content.present? }
+      check { can?(:submit_for_review) }
+      check { title.present? && content.present? }
       after :notify_reviewers
     end
 
     transition :approve, from: :pending_review, to: :reviewed do
-      guard { can?(:approve) }
+      check { can?(:approve) }
       before :set_reviewer
       before :set_reviewed_at
       after :notify_author_approved
     end
 
     transition :reject, from: :pending_review, to: :draft do
-      guard { can?(:reject) }
+      check { can?(:reject) }
       before :set_reviewer
       after :notify_author_rejected
     end
 
     transition :publish, from: :reviewed, to: :published do
-      guard { can?(:publish_action) }
+      check { can?(:publish_action) }
       before :set_published_at
       after :notify_subscribers
     end
 
     transition :unpublish, from: :published, to: :draft do
-      guard { can?(:publish_action) }
+      check { can?(:publish_action) }
       before { self.published_at = nil }
     end
   end
@@ -652,7 +652,7 @@ class Order < ApplicationRecord
     state :refunded
 
     transition :process_payment, from: :pending, to: :payment_processing do
-      guard { total > 0 }
+      check { total > 0 }
       after :charge_payment
     end
 
@@ -677,12 +677,12 @@ class Order < ApplicationRecord
     end
 
     transition :cancel, from: [:pending, :payment_processing, :paid], to: :cancelled do
-      guard { can_cancel? }
+      check { can_cancel? }
       after :process_cancellation
     end
 
     transition :refund, from: [:paid, :shipped, :delivered], to: :refunded do
-      guard { can_refund? }
+      check { can_refund? }
       after :process_refund
     end
   end
@@ -908,6 +908,22 @@ class Application < ApplicationRecord
 
   attr_accessor :current_step
 
+  # Custom validations
+  register_complex_validation :must_be_adult do
+    return if birth_date.blank?
+
+    age = ((Time.current - birth_date.to_time) / 1.year.seconds).floor
+    errors.add(:birth_date, "must be 18 or older") if age < 18
+  end
+
+  register_complex_validation :debt_to_income_ratio_acceptable do
+    return unless state == "submitted"
+    return if annual_income.blank? || monthly_debts.blank?
+
+    ratio = (monthly_debts * 12) / annual_income.to_f
+    errors.add(:base, "Debt-to-income ratio too high") if ratio > 0.43
+  end
+
   # 1. Validation groups for each step
   validatable do
     # Step 1: Personal Info
@@ -916,10 +932,7 @@ class Application < ApplicationRecord
     check :email, format: { with: URI::MailTo::EMAIL_REGEXP }
     check :birth_date, presence: true
     check :phone, format: { with: /\A\d{10}\z/ }
-
-    validate_if -> { birth_date.present? } do
-      validate_business_rule :must_be_adult
-    end
+    check_complex :must_be_adult, if: -> { birth_date.present? }
 
     # Step 2: Address
     validation_group :address, [:street, :city, :state_province, :postal_code, :country]
@@ -938,9 +951,7 @@ class Application < ApplicationRecord
     check :monthly_debts, numericality: { greater_than_or_equal_to: 0 }
 
     # Final submission validation
-    validate_if -> { state == "submitted" } do
-      validate_business_rule :debt_to_income_ratio_acceptable
-    end
+    check_complex :debt_to_income_ratio_acceptable, if: -> { state == "submitted" }
   end
 
   # 2. State machine for form steps
@@ -953,23 +964,23 @@ class Application < ApplicationRecord
     state :submitted
 
     transition :complete_personal_info, from: :personal_info, to: :address do
-      guard { valid_for_group?(:personal_info) }
+      check { valid?(:personal_info) }
     end
 
     transition :complete_address, from: :address, to: :employment do
-      guard { valid_for_group?(:address) }
+      check { valid?(:address) }
     end
 
     transition :complete_employment, from: :employment, to: :financial do
-      guard { valid_for_group?(:employment) }
+      check { valid?(:employment) }
     end
 
     transition :complete_financial, from: :financial, to: :review do
-      guard { valid_for_group?(:financial) }
+      check { valid?(:financial) }
     end
 
     transition :submit_application, from: :review, to: :submitted do
-      guard { valid_for_all_groups? }
+      check { valid_for_all_groups? }
       before { self.submitted_at = Time.current }
       after :notify_admin
     end
@@ -999,7 +1010,7 @@ class Application < ApplicationRecord
   }
 
   def valid_for_all_groups?
-    valid_for_groups?([:personal_info, :address, :employment, :financial])
+    [:personal_info, :address, :employment, :financial].all? { |group| valid?(group) }
   end
 
   def progress_percentage
@@ -1009,12 +1020,6 @@ class Application < ApplicationRecord
   end
 
   private
-
-  def must_be_adult
-    if birth_date > 18.years.ago
-      errors.add(:birth_date, "must be at least 18 years old")
-    end
-  end
 
   def debt_to_income_ratio_acceptable
     return if annual_income.nil? || monthly_debts.nil?

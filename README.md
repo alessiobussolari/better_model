@@ -53,20 +53,20 @@ class Article < ApplicationRecord
   end
 
   # 6. VALIDATABLE - Declarative validation system (opt-in)
+  register_complex_validation :published_requirements do
+    return unless status == "published"
+    errors.add(:published_at, "must be present for published articles") if published_at.blank?
+  end
+
   validatable do
     # Basic validations
     check :title, :content, presence: true
 
-    # Conditional validations
-    validate_if :is_published? do
-      check :published_at, presence: true
-    end
+    # Conditional validations using Rails options
+    check :published_at, presence: true, if: -> { status == "published" }
 
-    # Cross-field validations
-    validate_order :starts_at, :before, :ends_at
-
-    # Business rules
-    validate_business_rule :valid_category
+    # Complex validations for business rules
+    check_complex :published_requirements
 
     # Validation groups (multi-step forms)
     validation_group :step1, [:title, :content]
@@ -335,6 +335,90 @@ rails db:migrate
 # See model setup instructions after running each generator
 ```
 
+### Repository Generator
+
+Create repository classes that implement the Repository Pattern:
+
+```bash
+# Basic usage - creates model repository and ApplicationRepository
+rails g better_model:repository Article
+
+# Custom path
+rails g better_model:repository Article --path app/services/repositories
+
+# Skip ApplicationRepository creation
+rails g better_model:repository Article --skip-base
+
+# With namespace
+rails g better_model:repository Article --namespace Admin
+```
+
+**Generated repository includes:**
+- Repository class inheriting from `ApplicationRepository` (or `BetterModel::Repositable::BaseRepository` with `--skip-base`)
+- Modern Ruby 3 endless method syntax: `def model_class = Article`
+- Commented examples of custom query methods
+- Integration with BetterModel's Searchable, Predicable, and Sortable features
+- Auto-generated documentation of available predicates and sort scopes (if model uses BetterModel)
+
+**ApplicationRepository (generated once):**
+- Base class for all repositories in your application
+- Inherits from `BetterModel::Repositable::BaseRepository`
+- Can be customized with application-wide repository behaviors
+
+**Example usage:**
+
+```ruby
+# app/repositories/article_repository.rb
+class ArticleRepository < ApplicationRepository
+  def model_class = Article
+
+  def published
+    search({ status_eq: "published" })
+  end
+
+  def recent(days: 7)
+    search({ created_at_gteq: days.days.ago }, order_scope: { field: :created_at, direction: :desc })
+  end
+
+  def popular(min_views: 100)
+    search({ view_count_gteq: min_views }, orders: [:sort_view_count_desc])
+  end
+
+  def search_text(query)
+    search({
+      or: [
+        { title_i_cont: query },
+        { content_i_cont: query }
+      ]
+    })
+  end
+end
+
+# In your controllers/services
+repo = ArticleRepository.new
+articles = repo.published
+popular = repo.popular(min_views: 200)
+results = repo.search({ status_eq: "published" }, page: 1, per_page: 20)
+article = repo.search({ id_eq: 1 }, limit: 1)
+```
+
+**BaseRepository features:**
+- `search(predicates, page:, per_page:, includes:, joins:, order:, order_scope:, limit:)` - Main search method
+- `find(id)`, `find_by(...)` - Standard ActiveRecord finders
+- `create(attrs)`, `create!(attrs)` - Create records
+- `build(attrs)` - Build new instances
+- `update(id, attrs)` - Update records
+- `delete(id)` - Delete records
+- `where(...)`, `all`, `count`, `exists?` - Basic ActiveRecord methods
+
+**Search method parameters:**
+- **predicates**: Hash of BetterModel predicates (e.g., `{ status_eq: "published", view_count_gt: 100 }`)
+- **page/per_page**: Pagination (default: page 1, 20 per page)
+- **includes/joins**: Eager loading and associations
+- **order**: SQL order clause
+- **order_scope**: BetterModel sort scope (e.g., `{ field: :published_at, direction: :desc }`)
+- **limit**: Result limit (Integer for limit, `:default` for pagination, `nil` for all results)
+
 ## 📋 Features Overview
 
 BetterModel provides ten powerful concerns that work seamlessly together:
@@ -450,11 +534,10 @@ Define validations declaratively with support for conditional rules, cross-field
 
 **🎯 Key Benefits:**
 - 🎛️ Opt-in activation: only enabled when explicitly configured
-- ✨ Declarative DSL for all validation types
-- 🔀 Conditional validations: `validate_if` / `validate_unless`
-- 🔗 Cross-field validations: `validate_order` for date/number comparisons
-- 💼 Business rules: delegate complex logic to custom methods
+- ✨ Declarative DSL with `check` method for basic validations
+- 🔗 Complex validations: reusable validation blocks for cross-field and business logic
 - 📋 Validation groups: partial validation for multi-step forms
+- 🔀 Conditional validations using Rails `if:` / `unless:` options
 - 🔒 Thread-safe with immutable configuration
 
 **[📖 Full Documentation →](docs/validatable.md)**

@@ -1,5 +1,13 @@
 # frozen_string_literal: true
 
+require_relative "errors/stateable/stateable_error"
+require_relative "errors/stateable/not_enabled_error"
+require_relative "errors/stateable/invalid_state_error"
+require_relative "errors/stateable/invalid_transition_error"
+require_relative "errors/stateable/check_failed_error"
+require_relative "errors/stateable/validation_failed_error"
+require_relative "errors/stateable/configuration_error"
+
 # Stateable - Declarative State Machine per modelli Rails
 #
 # Questo concern permette di definire state machines dichiarative con:
@@ -96,7 +104,7 @@ module BetterModel
     included do
       # Validazione ActiveRecord
       unless ancestors.include?(ActiveRecord::Base)
-        raise ArgumentError, "BetterModel::Stateable can only be included in ActiveRecord models"
+        raise BetterModel::Errors::Stateable::ConfigurationError, "BetterModel::Stateable can only be included in ActiveRecord models"
       end
 
       # Configurazione stateable (opt-in)
@@ -171,9 +179,7 @@ module BetterModel
       # Verifica se stateable è attivo
       #
       # @return [Boolean]
-      def stateable_enabled?
-        stateable_enabled == true
-      end
+      def stateable_enabled? = stateable_enabled == true
 
       private
 
@@ -214,7 +220,7 @@ module BetterModel
           end
 
           # Create new StateTransition class dynamically
-          transition_class = Class.new(BetterModel::StateTransition) do
+          transition_class = Class.new(BetterModel::Models::StateTransition) do
             self.table_name = table_name
           end
 
@@ -269,23 +275,23 @@ module BetterModel
     #
     # @param event [Symbol] Nome della transizione
     # @param metadata [Hash] Metadata opzionale da salvare nella StateTransition
-    # @raise [InvalidTransitionError] Se la transizione non è valida
-    # @raise [CheckFailedError] Se un check fallisce
-    # @raise [ValidationFailedError] Se una validazione fallisce
+    # @raise [BetterModel::Errors::Stateable::InvalidTransitionError] Se la transizione non è valida
+    # @raise [BetterModel::Errors::Stateable::CheckFailedError] Se un check fallisce
+    # @raise [BetterModel::Errors::Stateable::ValidationFailedError] Se una validazione fallisce
     # @return [Boolean] true se la transizione ha successo
     #
     def transition_to!(event, **metadata)
-      raise NotEnabledError unless self.class.stateable_enabled?
+      raise BetterModel::Errors::Stateable::NotEnabledError unless self.class.stateable_enabled?
 
       transition_config = self.class.stateable_transitions[event.to_sym]
-      raise ArgumentError, "Unknown transition: #{event}" unless transition_config
+      raise BetterModel::Errors::Stateable::ConfigurationError, "Unknown transition: #{event}" unless transition_config
 
       current_state = state.to_sym
 
       # Verifica che from_state sia valido
       from_states = Array(transition_config[:from])
       unless from_states.include?(current_state)
-        raise InvalidTransitionError.new(event, current_state, transition_config[:to])
+        raise BetterModel::Errors::Stateable::InvalidTransitionError.new(event, current_state, transition_config[:to])
       end
 
       # Esegui la transizione usando Transition executor
@@ -322,7 +328,7 @@ module BetterModel
     # @return [Array<Hash>] Array di transizioni con :event, :from, :to, :at, :metadata
     #
     def transition_history
-      raise NotEnabledError unless self.class.stateable_enabled?
+      raise BetterModel::Errors::Stateable::NotEnabledError unless self.class.stateable_enabled?
 
       state_transitions.map do |transition|
         {

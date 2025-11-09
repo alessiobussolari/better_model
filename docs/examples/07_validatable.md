@@ -74,61 +74,7 @@ article.errors[:title]
 
 **Output Explanation**: Validatable wraps standard Rails validations in a declarative DSL.
 
-## Example 2: Conditional Validations
-
-```ruby
-class Article < ApplicationRecord
-  include BetterModel
-
-  validatable do
-    # Always required
-    check :title, presence: true
-
-    # Conditional based on method
-    validate_if :published? do
-      check :published_at, presence: true
-      check :content, presence: true, length: { minimum: 100 }
-    end
-
-    # Conditional based on status
-    validate_if -> { status == "featured" } do
-      check :featured_image_url, presence: true
-    end
-
-    # Unless condition
-    validate_unless :draft? do
-      check :reviewed_by_id, presence: true
-    end
-  end
-
-  def published?
-    status == "published"
-  end
-
-  def draft?
-    status == "draft"
-  end
-end
-
-# Draft article - minimal validation
-draft = Article.new(title: "Draft", status: "draft")
-draft.valid?
-# => true (published_at not required for drafts)
-
-# Published article - strict validation
-published = Article.new(title: "Published", status: "published")
-published.valid?
-# => false (needs published_at and longer content)
-
-published.published_at = Time.current
-published.content = "A" * 100
-published.valid?
-# => true
-```
-
-**Output Explanation**: Conditional validations run only when conditions are met.
-
-## Example 3: Validation Groups
+## Example 2: Validation Groups
 
 Perfect for multi-step forms:
 
@@ -156,14 +102,18 @@ end
 
 # Validate specific group
 article = Article.new(title: "My Article")
-article.valid_for_group?(:basic_info)
+article.valid?(:basic_info)
 # => false (missing slug)
 
 article.slug = "my-article"
-article.valid_for_group?(:basic_info)
+article.valid?(:basic_info)
 # => true
 
-# Check multiple groups
+# Check multiple groups (custom logic)
+def valid_for_groups?(groups)
+  groups.all? { |group| valid?(group) }
+end
+
 article.valid_for_groups?([:basic_info, :content_info])
 # => false (missing content)
 
@@ -174,25 +124,43 @@ article.valid?
 
 **Output Explanation**: Validation groups allow step-by-step validation without triggering all validations at once.
 
-## Example 4: Cross-field Validation
+## Example 3: Cross-field Validation with Complex Validations
 
-Validate relationships between fields:
+Validate relationships between fields using complex validations:
 
 ```ruby
 class Article < ApplicationRecord
   include BetterModel
 
+  # Register cross-field validations
+  register_complex_validation :valid_date_range do
+    return if starts_at.blank? || ends_at.blank?
+
+    if starts_at >= ends_at
+      errors.add(:starts_at, "must be before ends at")
+    end
+  end
+
+  register_complex_validation :valid_schedule do
+    return if scheduled_at.blank? || expires_at.blank?
+
+    if scheduled_at >= expires_at
+      errors.add(:scheduled_at, "Schedule must be before expiration")
+    end
+  end
+
+  register_complex_validation :valid_view_range do
+    return if min_views.blank? || max_views.blank?
+
+    if min_views >= max_views
+      errors.add(:min_views, "must be less than max views")
+    end
+  end
+
   validatable do
-    # Ensure starts_at is before ends_at
-    validate_order :starts_at, :before, :ends_at
-
-    # With custom message
-    validate_order :scheduled_at, :before, :expires_at,
-      message: "Schedule must be before expiration"
-
-    # Other comparators
-    validate_order :min_views, :lt, :max_views
-    validate_order :created_at, :lteq, :published_at
+    check_complex :valid_date_range
+    check_complex :valid_schedule
+    check_complex :valid_view_range
   end
 end
 
@@ -214,34 +182,20 @@ article.valid?
 
 article.errors[:starts_at]
 # => ["must be before ends at"]
-
-# Available comparators:
-# :before, :after  - for dates/times
-# :lt, :gt, :lteq, :gteq  - for numbers and dates
 ```
 
-**Output Explanation**: `validate_order` ensures one field's value is ordered correctly relative to another.
+**Output Explanation**: Complex validations provide flexible cross-field validation with custom logic and messages.
 
-## Example 5: Business Rules
+## Example 4: Business Logic with Complex Validations
 
-Validate complex business logic:
+Validate complex business logic using complex validations:
 
 ```ruby
 class Article < ApplicationRecord
   include BetterModel
 
-  validatable do
-    check :title, :content, presence: true
-
-    # Custom business rule validation
-    validate_business_rule :published_article_must_be_complete
-    validate_business_rule :featured_requires_image
-    validate_business_rule :archived_must_have_reason
-  end
-
-  private
-
-  def published_article_must_be_complete
+  # Register complex validations for business rules
+  register_complex_validation :publication_requirements do
     return unless status == "published"
 
     errors.add(:base, "Published articles must have content") if content.blank?
@@ -249,7 +203,7 @@ class Article < ApplicationRecord
     errors.add(:base, "Published articles must be reviewed") if reviewed_by_id.blank?
   end
 
-  def featured_requires_image
+  register_complex_validation :featured_requirements do
     return unless featured?
 
     if featured_image_url.blank?
@@ -257,12 +211,20 @@ class Article < ApplicationRecord
     end
   end
 
-  def archived_must_have_reason
+  register_complex_validation :archive_requirements do
     return unless archived?
 
     if archive_reason.blank?
       errors.add(:archive_reason, "must be provided when archiving")
     end
+  end
+
+  validatable do
+    check :title, :content, presence: true
+
+    check_complex :publication_requirements
+    check_complex :featured_requirements
+    check_complex :archive_requirements
   end
 end
 
@@ -283,9 +245,9 @@ article.errors.full_messages
 # ]
 ```
 
-**Output Explanation**: Business rule validations check complex logic that doesn't fit standard validators.
+**Output Explanation**: Complex validations check business logic with access to all model attributes and methods.
 
-## Example 6: Multi-step Forms
+## Example 5: Multi-step Forms
 
 Complete multi-step form example:
 
@@ -309,27 +271,23 @@ class Article < ApplicationRecord
 
     # Step 3: Media
     validation_group :step3, [:featured_image_url]
-    validate_if -> { featured? } do
-      check :featured_image_url, presence: true
-    end
+    check :featured_image_url, presence: true, if: -> { featured? }
 
     # Step 4: Publishing
     validation_group :step4, [:status, :published_at]
-    validate_if -> { status == "published" } do
-      check :published_at, presence: true
-    end
+    check :published_at, presence: true, if: -> { status == "published" }
   end
 
   def valid_for_current_step?
     case current_step
     when 1
-      valid_for_group?(:step1)
+      valid?(:step1)
     when 2
-      valid_for_group?(:step2)
+      valid?(:step2)
     when 3
-      valid_for_group?(:step3)
+      valid?(:step3)
     when 4
-      valid_for_group?(:step4)
+      valid?(:step4)
     else
       valid?  # Final validation
     end
@@ -398,12 +356,14 @@ class Article < ApplicationRecord
   validates :title, uniqueness: { scope: :user_id }
 
   # Validatable for complex cases
-  validatable do
-    validate_if :published? do
-      check :content, presence: true
-    end
+  register_complex_validation :content_requirements do
+    return unless published?
+    errors.add(:content, "must be present for published articles") if content.blank?
+  end
 
-    validate_business_rule :content_quality
+  validatable do
+    check :content, presence: true, if: :published?
+    check_complex :content_requirements
   end
 end
 ```
@@ -430,9 +390,9 @@ RSpec.describe Article, type: :model do
     describe "validation groups" do
       it "validates step1 fields" do
         article = Article.new(title: "Valid")
-        expect(article.valid_for_group?(:step1)).to be false
+        expect(article.valid?(:step1)).to be false
         article.slug = "valid"
-        expect(article.valid_for_group?(:step1)).to be true
+        expect(article.valid?(:step1)).to be true
       end
     end
   end
@@ -441,15 +401,16 @@ end
 
 ### 5. Provide Clear Error Messages
 ```ruby
-validatable do
-  validate_order :starts_at, :before, :ends_at,
-    message: "Event must start before it ends"
+class Event < ApplicationRecord
+  register_complex_validation :valid_date_range do
+    return if starts_at.blank? || ends_at.blank?
 
-  validate_business_rule :sensible_duration
+    if starts_at >= ends_at
+      errors.add(:starts_at, "Event must start before it ends")
+    end
+  end
 
-  private
-
-  def sensible_duration
+  register_complex_validation :sensible_duration do
     return if starts_at.blank? || ends_at.blank?
 
     duration = ends_at - starts_at
@@ -457,8 +418,175 @@ validatable do
       errors.add(:ends_at, "Event cannot last more than 30 days")
     end
   end
+
+  validatable do
+    check_complex :valid_date_range
+    check_complex :sensible_duration
+  end
 end
 ```
+
+## Example 7: Complex Validations
+
+Complex validations allow you to register reusable validation logic that can combine multiple fields or implement custom business rules:
+
+```ruby
+class Product < ApplicationRecord
+  include BetterModel
+
+  # Register complex validations
+  register_complex_validation :valid_pricing do
+    # Skip if both prices are nil
+    return if price.nil? && sale_price.nil?
+
+    # Ensure sale price is less than regular price
+    if sale_price.present? && sale_price >= price
+      errors.add(:sale_price, "must be less than regular price")
+    end
+
+    # Ensure minimum profit margin
+    if sale_price.present? && price.present?
+      margin = ((price - sale_price) / price.to_f) * 100
+      if margin < 10
+        errors.add(:sale_price, "profit margin must be at least 10%")
+      end
+    end
+  end
+
+  register_complex_validation :valid_stock do
+    # Reserved stock validation
+    if reserved_stock.present? && reserved_stock > stock
+      errors.add(:reserved_stock, "cannot exceed total stock")
+    end
+
+    # Low stock warning
+    if stock.present? && stock < reorder_level
+      errors.add(:stock, "is below reorder level (#{reorder_level})")
+    end
+  end
+
+  validatable do
+    check :name, :sku, presence: true
+    check :price, numericality: { greater_than: 0 }
+
+    # Use complex validations
+    check_complex :valid_pricing
+    check_complex :valid_stock
+  end
+end
+
+# Usage in controller
+class ProductsController < ApplicationController
+  def create
+    @product = Product.new(product_params)
+
+    if @product.valid?
+      @product.save
+      redirect_to @product, notice: "Product created successfully"
+    else
+      # Show specific error messages
+      render :new
+    end
+  end
+
+  private
+
+  def product_params
+    params.require(:product).permit(:name, :sku, :price, :sale_price, :stock, :reserved_stock, :reorder_level)
+  end
+end
+
+# Example validations
+product = Product.new(
+  name: "Widget",
+  sku: "WDG-001",
+  price: 100,
+  sale_price: 95,  # Only 5% margin - invalid
+  stock: 10,
+  reserved_stock: 5,
+  reorder_level: 20
+)
+
+product.valid?  # => false
+product.errors[:sale_price]  # => ["profit margin must be at least 10%"]
+product.errors[:stock]  # => ["is below reorder level (20)"]
+
+# Valid product
+product = Product.new(
+  name: "Widget",
+  sku: "WDG-001",
+  price: 100,
+  sale_price: 80,  # 20% margin - valid
+  stock: 30,
+  reserved_stock: 5,
+  reorder_level: 20
+)
+
+product.valid?  # => true
+```
+
+### Real-World Example: E-commerce Order
+
+```ruby
+class Order < ApplicationRecord
+  include BetterModel
+
+  belongs_to :customer
+  has_many :order_items
+
+  is :paid, -> { payment_status == "paid" }
+
+  register_complex_validation :valid_order_totals do
+    # Calculate totals
+    items_total = order_items.sum(&:total)
+    calculated_total = items_total + shipping_cost - discount_amount
+
+    # Validate total matches
+    if total.present? && (calculated_total - total).abs > 0.01
+      errors.add(:total, "does not match calculated total (#{calculated_total})")
+    end
+
+    # Validate discount
+    if discount_amount.present? && discount_amount > items_total
+      errors.add(:discount_amount, "cannot exceed items total")
+    end
+
+    # Validate minimum order
+    if items_total < 10.00
+      errors.add(:base, "Order must be at least $10.00")
+    end
+  end
+
+  register_complex_validation :valid_payment do
+    # Skip if not paid
+    return unless is_paid?
+
+    # Ensure payment details present
+    if payment_method.blank?
+      errors.add(:payment_method, "required for paid orders")
+    end
+
+    if paid_at.blank?
+      errors.add(:paid_at, "required for paid orders")
+    end
+
+    # Ensure payment amount matches
+    if payment_amount.present? && (payment_amount - total).abs > 0.01
+      errors.add(:payment_amount, "must match order total")
+    end
+  end
+
+  validatable do
+    check :customer_id, presence: true
+    check :payment_status, inclusion: { in: %w[pending paid cancelled] }
+
+    check_complex :valid_order_totals
+    check_complex :valid_payment
+  end
+end
+```
+
+**Output Explanation**: Complex validations encapsulate business logic and can be reused across the model. They execute in the instance context, so they can access all attributes, associations, and methods.
 
 ## Related Documentation
 

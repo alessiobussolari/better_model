@@ -443,7 +443,7 @@ module BetterModel
 
       instance = test_class.create!(title: "Test")
 
-      error = assert_raises(BetterModel::NotEnabledError) do
+      error = assert_raises(BetterModel::Errors::Traceable::NotEnabledError) do
         instance.changes_for(:status)
       end
 
@@ -1422,6 +1422,49 @@ module BetterModel
 
       # Article2 should remain unchanged
       assert_equal "Article 2 Updated", article2.title
+    end
+
+    # ========================================
+    # CONFIGURATION ERROR TESTS
+    # ========================================
+
+    test "ConfigurationError class exists" do
+      assert defined?(BetterModel::Errors::Traceable::ConfigurationError)
+    end
+
+    test "ConfigurationError inherits from ArgumentError" do
+      assert BetterModel::Errors::Traceable::ConfigurationError < ArgumentError
+    end
+
+    test "ConfigurationError can be instantiated with message" do
+      error = BetterModel::Errors::Traceable::ConfigurationError.new("test message")
+      assert_equal "test message", error.message
+    end
+
+    test "ConfigurationError can be caught as ArgumentError" do
+      begin
+        raise BetterModel::Errors::Traceable::ConfigurationError, "test"
+      rescue ArgumentError => e
+        assert_instance_of BetterModel::Errors::Traceable::ConfigurationError, e
+      end
+    end
+
+    test "ConfigurationError has correct namespace" do
+      assert_equal "BetterModel::Errors::Traceable::ConfigurationError",
+                   BetterModel::Errors::Traceable::ConfigurationError.name
+    end
+
+    # ========================================
+    # CONFIGURATION ERROR INTEGRATION TESTS
+    # ========================================
+
+    test "raises ConfigurationError when included in non-ActiveRecord class" do
+      error = assert_raises(BetterModel::Errors::Traceable::ConfigurationError) do
+        Class.new do
+          include BetterModel::Traceable
+        end
+      end
+      assert_match(/can only be included in ActiveRecord models/, error.message)
     end
   end
 end

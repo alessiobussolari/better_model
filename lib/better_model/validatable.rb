@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require_relative "errors/validatable/validatable_error"
+require_relative "errors/validatable/not_enabled_error"
+require_relative "errors/validatable/configuration_error"
+
 # Validatable - Sistema di validazioni dichiarativo per modelli Rails
 #
 # Questo concern permette di definire validazioni in modo dichiarativo e leggibile,
@@ -16,22 +20,23 @@
 #     is :draft, -> { status == "draft" }
 #     is :published, -> { status == "published" }
 #
+#     # Registra validazioni complesse
+#     register_complex_validation :valid_date_range do
+#       return if starts_at.blank? || ends_at.blank?
+#       errors.add(:starts_at, "must be before end date") if starts_at >= ends_at
+#     end
+#
 #     # Attiva validatable (opt-in)
 #     validatable do
 #       # Validazioni base
-#       validate :title, :content, presence: true
+#       check :title, :content, presence: true
 #
-#       # Validazioni condizionali
-#       validate_if :is_published? do
-#         validate :published_at, presence: true
-#         validate :author_id, presence: true
-#       end
+#       # Validazioni condizionali (usando Rails options)
+#       check :published_at, presence: true, if: -> { status == "published" }
+#       check :author_id, presence: true, if: :is_published?
 #
-#       # Cross-field validations
-#       validate_order :starts_at, :before, :ends_at
-#
-#       # Business rules
-#       validate_business_rule :valid_category
+#       # Validazioni complesse per cross-field e business logic
+#       check_complex :valid_date_range
 #
 #       # Gruppi di validazioni
 #       validation_group :step1, [:email, :password]
@@ -50,7 +55,7 @@ module BetterModel
     included do
       # Validazione ActiveRecord
       unless ancestors.include?(ActiveRecord::Base)
-        raise ArgumentError, "BetterModel::Validatable can only be included in ActiveRecord models"
+        raise BetterModel::Errors::Validatable::ConfigurationError, "BetterModel::Validatable can only be included in ActiveRecord models"
       end
 
       # Configurazione validatable (opt-in)
@@ -58,6 +63,8 @@ module BetterModel
       class_attribute :validatable_config, default: {}.freeze
       class_attribute :validatable_groups, default: {}.freeze
       class_attribute :_validatable_setup_done, default: false
+      # Registry dei complex validations custom
+      class_attribute :complex_validations_registry, default: {}.freeze
     end
 
     class_methods do
@@ -65,14 +72,12 @@ module BetterModel
       #
       # @example Attivazione base
       #   validatable do
-      #     validate :title, presence: true
+      #     check :title, presence: true
       #   end
       #
       # @example Con validazioni condizionali
       #   validatable do
-      #     validate_if :is_published? do
-      #       validate :published_at, presence: true
-      #     end
+      #     check :published_at, presence: true, if: :is_published?
       #   end
       #
       def validatable(&block)
@@ -99,9 +104,42 @@ module BetterModel
       # Verifica se validatable è attivo
       #
       # @return [Boolean]
-      def validatable_enabled?
-        validatable_enabled == true
+      def validatable_enabled? = validatable_enabled == true
+
+      # Registra una validazione complessa custom
+      #
+      # Permette di definire validazioni complesse riutilizzabili che possono combinare
+      # più campi o utilizzare logica custom non coperta dalle validazioni standard.
+      #
+      # @param name [Symbol] il nome della validazione
+      # @param block [Proc] il blocco di validazione che verrà eseguito nel contesto dell'istanza
+      #
+      # @example Validazione complessa base
+      #   register_complex_validation :valid_pricing do
+      #     if sale_price.present? && sale_price >= price
+      #       errors.add(:sale_price, "must be less than regular price")
+      #     end
+      #   end
+      #
+      # @example Con logica multi-campo
+      #   register_complex_validation :valid_dates do
+      #     if starts_at.present? && ends_at.present? && starts_at >= ends_at
+      #       errors.add(:ends_at, "must be after start date")
+      #     end
+      #   end
+      #
+      def register_complex_validation(name, &block)
+        raise BetterModel::Errors::Validatable::ConfigurationError, "Block required for complex validation" unless block_given?
+
+        # Registra nel registry
+        self.complex_validations_registry = complex_validations_registry.merge(name.to_sym => block).freeze
       end
+
+      # Verifica se una validazione complessa è stata registrata
+      #
+      # @param name [Symbol] il nome della validazione
+      # @return [Boolean]
+      def complex_validation?(name) = complex_validations_registry.key?(name.to_sym)
 
       private
 
@@ -109,87 +147,25 @@ module BetterModel
       def apply_validatable_config
         return unless validatable_config.present?
 
-        # Apply conditional validations
-        validatable_config[:conditional_validations]&.each do |conditional|
-          apply_conditional_validation(conditional)
-        end
-
-        # Apply order validations
-        validatable_config[:order_validations]&.each do |order_val|
-          apply_order_validation(order_val)
-        end
-
-        # Apply business rules
-        validatable_config[:business_rules]&.each do |rule|
-          apply_business_rule(rule)
+        # Apply complex validations
+        validatable_config[:complex_validations]&.each do |name|
+          apply_complex_validation(name)
         end
       end
 
-      # Applica una validazione condizionale
-      def apply_conditional_validation(conditional)
-        condition = conditional[:condition]
-        negate = conditional[:negate]
-        validations = conditional[:validations]
+      # Applica una validazione complessa
+      def apply_complex_validation(name)
+        block = complex_validations_registry[name]
+        return unless block
 
-        # Create a custom validator for this conditional block
+        # Crea un validator custom per questa validazione complessa
         validate do
-          condition_met = if condition.is_a?(Symbol)
-                            send(condition)
-          elsif condition.is_a?(Proc)
-                            instance_exec(&condition)
-          else
-                            raise ArgumentError, "Condition must be a Symbol or Proc"
-          end
-
-          condition_met = !condition_met if negate
-
-          if condition_met
-            validations.each do |validation|
-              apply_validation_in_context(validation)
-            end
-          end
+          instance_eval(&block)
         end
-      end
-
-      # Applica una validazione order (cross-field)
-      def apply_order_validation(order_val)
-        validates_with BetterModel::Validatable::OrderValidator,
-                       attributes: [ order_val[:first_field] ],
-                       second_field: order_val[:second_field],
-                       comparator: order_val[:comparator],
-                       **order_val[:options]
-      end
-
-      # Applica una business rule
-      def apply_business_rule(rule)
-        validates_with BetterModel::Validatable::BusinessRuleValidator,
-                       rule_name: rule[:name],
-                       **rule[:options]
       end
     end
 
     # Metodi di istanza
-
-    # Apply a validation in the context of the current instance
-    def apply_validation_in_context(validation)
-      fields = validation[:fields]
-      options = validation[:options]
-
-      fields.each do |field|
-        options.each do |validator_type, validator_options|
-          # Prepare validator options
-          # If validator_options is true, convert to empty hash
-          # If it's a hash, use as-is
-          opts = validator_options.is_a?(Hash) ? validator_options : {}
-
-          validator = ActiveModel::Validations.const_get("#{validator_type.to_s.camelize}Validator").new(
-            attributes: [ field ],
-            **opts
-          )
-          validator.validate(self)
-        end
-      end
-    end
 
     # Override valid? per supportare validation groups
     #
@@ -210,7 +186,7 @@ module BetterModel
     # @param group_name [Symbol] Nome del gruppo
     # @return [Boolean]
     def validate_group(group_name)
-      raise ValidatableNotEnabledError unless self.class.validatable_enabled?
+      raise BetterModel::Errors::Validatable::NotEnabledError unless self.class.validatable_enabled?
 
       group = self.class.validatable_groups[group_name]
       return false unless group
@@ -231,7 +207,7 @@ module BetterModel
     # @param group_name [Symbol] Nome del gruppo
     # @return [ActiveModel::Errors]
     def errors_for_group(group_name)
-      raise ValidatableNotEnabledError unless self.class.validatable_enabled?
+      raise BetterModel::Errors::Validatable::NotEnabledError unless self.class.validatable_enabled?
 
       group = self.class.validatable_groups[group_name]
       return errors unless group
@@ -259,12 +235,4 @@ module BetterModel
     end
   end
 
-  # Errori custom
-  class ValidatableError < StandardError; end
-
-  class ValidatableNotEnabledError < ValidatableError
-    def initialize(msg = nil)
-      super(msg || "Validatable is not enabled. Add 'validatable do...end' to your model.")
-    end
-  end
 end

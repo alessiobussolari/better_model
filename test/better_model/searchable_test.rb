@@ -80,7 +80,7 @@ module BetterModel
     end
 
     test "search validates predicate scopes" do
-      assert_raises(BetterModel::Searchable::InvalidPredicateError) do
+      assert_raises(BetterModel::Errors::Searchable::InvalidPredicateError) do
         Article.search({ nonexistent_scope: "value" })
       end
     end
@@ -155,7 +155,7 @@ module BetterModel
     end
 
     test "search validates predicates in OR conditions" do
-      assert_raises(BetterModel::Searchable::InvalidPredicateError) do
+      assert_raises(BetterModel::Errors::Searchable::InvalidPredicateError) do
         Article.search({
           or: [
             { nonexistent_scope: "value" }
@@ -191,7 +191,7 @@ module BetterModel
     end
 
     test "search validates order scopes" do
-      assert_raises(BetterModel::Searchable::InvalidOrderError) do
+      assert_raises(BetterModel::Errors::Searchable::InvalidOrderError) do
         Article.search({}, orders: [ :nonexistent_sort ])
       end
     end
@@ -288,13 +288,13 @@ module BetterModel
     end
 
     test "search raises error for invalid page" do
-      assert_raises(BetterModel::Searchable::InvalidPaginationError) do
+      assert_raises(BetterModel::Errors::Searchable::InvalidPaginationError) do
         Article.search({}, pagination: { page: 0 })
       end
     end
 
     test "search raises error for invalid per_page" do
-      assert_raises(BetterModel::Searchable::InvalidPaginationError) do
+      assert_raises(BetterModel::Errors::Searchable::InvalidPaginationError) do
         Article.search({}, pagination: { page: 1, per_page: 0 })
       end
     end
@@ -389,7 +389,7 @@ module BetterModel
     end
 
     test "search with security but missing required predicate raises error" do
-      assert_raises(BetterModel::Searchable::InvalidSecurityError, /requires the following predicates with valid values: status_eq/) do
+      assert_raises(BetterModel::Errors::Searchable::InvalidSecurityError, /requires the following predicates with valid values: status_eq/) do
         # Security :status_required requires :status_eq, but we don't provide it
         Article.search({ title_cont: "Test" }, security: :status_required)
       end
@@ -408,7 +408,7 @@ module BetterModel
         end
       end
 
-      error = assert_raises(BetterModel::Searchable::InvalidSecurityError) do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidSecurityError) do
         test_class.search({ title_cont: "Test" }, security: :multi)
       end
 
@@ -417,7 +417,7 @@ module BetterModel
     end
 
     test "search with unknown security raises error" do
-      error = assert_raises(BetterModel::Searchable::InvalidSecurityError) do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidSecurityError) do
         Article.search({ status_eq: "published" }, security: :nonexistent)
       end
 
@@ -471,7 +471,7 @@ module BetterModel
     end
 
     test "security rejects nil predicate value" do
-      error = assert_raises(BetterModel::Searchable::InvalidSecurityError) do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidSecurityError) do
         Article.search({ status_eq: nil }, security: :status_required)
       end
 
@@ -480,7 +480,7 @@ module BetterModel
     end
 
     test "security rejects empty string predicate value" do
-      error = assert_raises(BetterModel::Searchable::InvalidSecurityError) do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidSecurityError) do
         Article.search({ status_eq: "" }, security: :status_required)
       end
 
@@ -488,7 +488,7 @@ module BetterModel
     end
 
     test "security rejects empty array predicate value" do
-      error = assert_raises(BetterModel::Searchable::InvalidSecurityError) do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidSecurityError) do
         Article.search({ status_eq: [] }, security: :status_required)
       end
 
@@ -528,7 +528,7 @@ module BetterModel
       end
 
       # Both predicates present but one is nil - should fail
-      error = assert_raises(BetterModel::Searchable::InvalidSecurityError) do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidSecurityError) do
         test_class.search({ status_eq: "published", featured_true: nil }, security: :multi)
       end
 
@@ -831,7 +831,7 @@ module BetterModel
 
     test "apply_pagination raises error when page exceeds max_page" do
       # Default max_page is 10,000
-      error = assert_raises(BetterModel::Searchable::InvalidPaginationError) do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidPaginationError) do
         Article.search(pagination: { page: 10_001, per_page: 10 })
       end
 
@@ -849,7 +849,7 @@ module BetterModel
         end
       end
 
-      error = assert_raises(BetterModel::Searchable::InvalidPaginationError) do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidPaginationError) do
         test_class.search(pagination: { page: 101, per_page: 10 })
       end
 
@@ -984,7 +984,7 @@ module BetterModel
     test "search with invalid order scope raises error" do
       Article.create!(title: "Test", status: "draft")
 
-      error = assert_raises(BetterModel::Searchable::InvalidOrderError) do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidOrderError) do
         Article.search({}, orders: [ :nonexistent_sort_scope ])
       end
 
@@ -1000,7 +1000,7 @@ module BetterModel
       end
 
       # Invalid predicate should raise InvalidPredicateError
-      error = assert_raises(BetterModel::Searchable::InvalidPredicateError) do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidPredicateError) do
         Article.search({ nonexistent_predicate: "value" })
       end
 
@@ -1061,12 +1061,12 @@ module BetterModel
       10.times { |i| Article.create!(title: "Article #{i}", status: "draft") }
 
       # Page 0 should raise error
-      assert_raises(BetterModel::Searchable::InvalidPaginationError) do
+      assert_raises(BetterModel::Errors::Searchable::InvalidPaginationError) do
         Article.search({}, pagination: { page: 0, per_page: 10 })
       end
 
       # Negative per_page should raise error
-      assert_raises(BetterModel::Searchable::InvalidPaginationError) do
+      assert_raises(BetterModel::Errors::Searchable::InvalidPaginationError) do
         Article.search({}, pagination: { page: 1, per_page: -1 })
       end
 
@@ -1083,7 +1083,7 @@ module BetterModel
       # Default max_page is 10,000
       article = Article.create!(title: "SecurityTest1", status: "draft")
 
-      assert_raises(BetterModel::Searchable::InvalidPaginationError) do
+      assert_raises(BetterModel::Errors::Searchable::InvalidPaginationError) do
         Article.search({}, pagination: { page: 10001, per_page: 10 })
       end
 
@@ -1444,6 +1444,79 @@ module BetterModel
 
       article.destroy
       author.destroy
+    end
+
+    # ========================================
+    # CONFIGURATION ERROR TESTS
+    # ========================================
+
+    test "ConfigurationError class exists" do
+      assert defined?(BetterModel::Errors::Searchable::ConfigurationError)
+    end
+
+    test "ConfigurationError inherits from ArgumentError" do
+      assert BetterModel::Errors::Searchable::ConfigurationError < ArgumentError
+    end
+
+    test "ConfigurationError can be instantiated with message" do
+      error = BetterModel::Errors::Searchable::ConfigurationError.new("test message")
+      assert_equal "test message", error.message
+    end
+
+    test "ConfigurationError can be caught as ArgumentError" do
+      begin
+        raise BetterModel::Errors::Searchable::ConfigurationError, "test"
+      rescue ArgumentError => e
+        assert_instance_of BetterModel::Errors::Searchable::ConfigurationError, e
+      end
+    end
+
+    test "ConfigurationError has correct namespace" do
+      assert_equal "BetterModel::Errors::Searchable::ConfigurationError",
+                   BetterModel::Errors::Searchable::ConfigurationError.name
+    end
+
+    # ========================================
+    # CONFIGURATION ERROR INTEGRATION TESTS
+    # ========================================
+
+    test "raises ConfigurationError when included in non-ActiveRecord class" do
+      error = assert_raises(BetterModel::Errors::Searchable::ConfigurationError) do
+        Class.new do
+          include BetterModel::Searchable
+        end
+      end
+      assert_match(/can only be included in ActiveRecord models/, error.message)
+    end
+
+    test "raises ConfigurationError with unknown keyword arguments" do
+      article = Article.create!(title: "Test", content: "Content", status: "draft")
+
+      error = assert_raises(BetterModel::Errors::Searchable::ConfigurationError) do
+        Article.search({ status_eq: "draft" }, unknown_param: "value")
+      end
+      assert_match(/Unknown keyword arguments/, error.message)
+      assert_match(/Did you mean to pass predicates/, error.message)
+
+      article.destroy
+    end
+
+    test "raises ConfigurationError for security config without required predicates" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Searchable
+
+        searchable do
+          security :test_security
+        end
+      end
+
+      # This should raise an error during configuration
+      error = assert_raises(BetterModel::Errors::Searchable::ConfigurationError) do
+        # The error is raised during searchable block evaluation
+        test_class
+      end
+      assert_match(/must have at least one required predicate/, error.message)
     end
   end
 end

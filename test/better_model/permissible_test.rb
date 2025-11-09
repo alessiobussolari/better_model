@@ -653,5 +653,75 @@ module BetterModel
       assert instance.is_expired?
       refute instance.permit_edit?
     end
+
+    # ========================================
+    # CONFIGURATION ERROR TESTS
+    # ========================================
+
+    test "ConfigurationError class exists" do
+      assert defined?(BetterModel::Errors::Permissible::ConfigurationError)
+    end
+
+    test "ConfigurationError inherits from ArgumentError" do
+      assert BetterModel::Errors::Permissible::ConfigurationError < ArgumentError
+    end
+
+    test "ConfigurationError can be instantiated with message" do
+      error = BetterModel::Errors::Permissible::ConfigurationError.new("test message")
+      assert_equal "test message", error.message
+    end
+
+    test "ConfigurationError can be caught as ArgumentError" do
+      begin
+        raise BetterModel::Errors::Permissible::ConfigurationError, "test"
+      rescue ArgumentError => e
+        assert_instance_of BetterModel::Errors::Permissible::ConfigurationError, e
+      end
+    end
+
+    test "ConfigurationError has correct namespace" do
+      assert_equal "BetterModel::Errors::Permissible::ConfigurationError",
+                   BetterModel::Errors::Permissible::ConfigurationError.name
+    end
+
+    # ========================================
+    # CONFIGURATION ERROR INTEGRATION TESTS
+    # ========================================
+
+    test "raises ConfigurationError when permission name is blank" do
+      error = assert_raises(BetterModel::Errors::Permissible::ConfigurationError) do
+        Class.new(ApplicationRecord) do
+          self.table_name = "articles"
+          include BetterModel::Permissible
+
+          permit "", -> { true }
+        end
+      end
+      assert_match(/Permission name cannot be blank/, error.message)
+    end
+
+    test "raises ConfigurationError when condition is missing" do
+      error = assert_raises(BetterModel::Errors::Permissible::ConfigurationError) do
+        Class.new(ApplicationRecord) do
+          self.table_name = "articles"
+          include BetterModel::Permissible
+
+          permit :delete
+        end
+      end
+      assert_match(/Condition proc or block is required/, error.message)
+    end
+
+    test "raises ConfigurationError when condition does not respond to call" do
+      error = assert_raises(BetterModel::Errors::Permissible::ConfigurationError) do
+        Class.new(ApplicationRecord) do
+          self.table_name = "articles"
+          include BetterModel::Permissible
+
+          permit :delete, "not a proc"
+        end
+      end
+      assert_match(/Condition must respond to call/, error.message)
+    end
   end
 end

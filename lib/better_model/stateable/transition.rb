@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../errors/stateable/check_failed_error"
+require_relative "../errors/stateable/validation_failed_error"
+
 module BetterModel
   module Stateable
     # Transition executor per Stateable
@@ -23,8 +26,8 @@ module BetterModel
 
       # Esegue la transizione
       #
-      # @raise [CheckFailedError] Se un check fallisce
-      # @raise [ValidationFailedError] Se una validazione fallisce
+      # @raise [BetterModel::Errors::Stateable::CheckFailedError] Se un check fallisce
+      # @raise [BetterModel::Errors::Stateable::ValidationFailedError] Se una validazione fallisce
       # @raise [ActiveRecord::RecordInvalid] Se il save! fallisce
       # @return [Boolean] true se la transizione ha successo
       #
@@ -60,7 +63,7 @@ module BetterModel
           check = Guard.new(@instance, check_config)  # Guard class handles the logic
 
           unless check.evaluate
-            raise CheckFailedError.new(@event, check.description)
+            raise BetterModel::Errors::Stateable::CheckFailedError.new(@event, check.description)
           end
         end
       end
@@ -78,7 +81,7 @@ module BetterModel
         end
 
         if @instance.errors.any?
-          raise ValidationFailedError.new(@event, @instance.errors)
+          raise BetterModel::Errors::Stateable::ValidationFailedError.new(@event, @instance.errors)
         end
       end
 

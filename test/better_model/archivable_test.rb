@@ -147,7 +147,7 @@ module BetterModel
       article = Article.create!(title: "Test")
       article.archive!
 
-      error = assert_raises(BetterModel::AlreadyArchivedError) do
+      error = assert_raises(BetterModel::Errors::Archivable::AlreadyArchivedError) do
         article.archive!
       end
 
@@ -180,7 +180,7 @@ module BetterModel
       Article.class_eval { archivable }
       article = Article.create!(title: "Test")
 
-      error = assert_raises(BetterModel::NotArchivedError) do
+      error = assert_raises(BetterModel::Errors::Archivable::NotArchivedError) do
         article.restore!
       end
 
@@ -305,9 +305,9 @@ module BetterModel
     # ========================================
 
     test "should define custom error classes" do
-      assert defined?(BetterModel::AlreadyArchivedError)
-      assert defined?(BetterModel::NotArchivedError)
-      assert defined?(BetterModel::ArchivableNotEnabledError)
+      assert defined?(BetterModel::Errors::Archivable::AlreadyArchivedError)
+      assert defined?(BetterModel::Errors::Archivable::NotArchivedError)
+      assert defined?(BetterModel::Errors::Archivable::NotEnabledError)
     end
 
     test "should raise ArchivableNotEnabledError if archivable not configured" do
@@ -320,7 +320,7 @@ module BetterModel
 
       article = test_class.create!(title: "Test")
 
-      error = assert_raises(BetterModel::ArchivableNotEnabledError) do
+      error = assert_raises(BetterModel::Errors::Archivable::NotEnabledError) do
         article.archive!
       end
 
@@ -432,6 +432,64 @@ module BetterModel
       # archived_at and archived_by_id should still be set
       assert article.archived_at.present?
       assert_equal 42, article.archived_by_id
+    end
+
+    # ========================================
+    # CONFIGURATION ERROR TESTS
+    # ========================================
+
+    test "ConfigurationError class exists" do
+      assert defined?(BetterModel::Errors::Archivable::ConfigurationError)
+    end
+
+    test "ConfigurationError inherits from ArgumentError" do
+      assert BetterModel::Errors::Archivable::ConfigurationError < ArgumentError
+    end
+
+    test "ConfigurationError can be instantiated with message" do
+      error = BetterModel::Errors::Archivable::ConfigurationError.new("test message")
+      assert_equal "test message", error.message
+    end
+
+    test "ConfigurationError can be caught as ArgumentError" do
+      begin
+        raise BetterModel::Errors::Archivable::ConfigurationError, "test"
+      rescue ArgumentError => e
+        assert_instance_of BetterModel::Errors::Archivable::ConfigurationError, e
+      end
+    end
+
+    test "ConfigurationError has correct namespace" do
+      assert_equal "BetterModel::Errors::Archivable::ConfigurationError",
+                   BetterModel::Errors::Archivable::ConfigurationError.name
+    end
+
+    # ========================================
+    # CONFIGURATION ERROR INTEGRATION TESTS
+    # ========================================
+
+    test "raises ConfigurationError when included in non-ActiveRecord class" do
+      error = assert_raises(BetterModel::Errors::Archivable::ConfigurationError) do
+        Class.new do
+          include BetterModel::Archivable
+        end
+      end
+      assert_match(/can only be included in ActiveRecord models/, error.message)
+    end
+
+    test "raises ConfigurationError when archived_at column is missing" do
+      # Create a test class without archived_at column
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "comments"  # comments table doesn't have archived_at
+        include BetterModel
+      end
+
+      error = assert_raises(BetterModel::Errors::Archivable::ConfigurationError) do
+        test_class.class_eval do
+          archivable
+        end
+      end
+      assert_match(/requires an 'archived_at' datetime column/, error.message)
     end
   end
 end

@@ -1,41 +1,48 @@
 # frozen_string_literal: true
 
-# Archivable - Sistema di archiviazione dichiarativa per modelli Rails
+require_relative "errors/archivable/archivable_error"
+require_relative "errors/archivable/already_archived_error"
+require_relative "errors/archivable/not_archived_error"
+require_relative "errors/archivable/not_enabled_error"
+require_relative "errors/archivable/configuration_error"
+
+# Archivable - Declarative archiving system for Rails models.
 #
-# Questo concern permette di archiviare e ripristinare record utilizzando un DSL
-# semplice e dichiarativo, con supporto per predicati e scopes.
+# This concern enables archiving and restoring records using a simple, declarative DSL
+# with support for predicates and scopes.
 #
-# SETUP RAPIDO:
-#   # Opzione 1: Generator automatico (raccomandato)
+# @example Quick Setup - Option 1: Automatic Generator (Recommended)
 #   rails g better_model:archivable Article --with-tracking
 #   rails db:migrate
 #
-#   # Opzione 2: Migration manuale
+# @example Quick Setup - Option 2: Manual Migration
 #   rails g migration AddArchivableToArticles archived_at:datetime archived_by_id:integer archive_reason:string
 #   rails db:migrate
 #
-# APPROCCIO OPT-IN: L'archiviazione non è attiva automaticamente. Devi chiamare
-# esplicitamente `archivable do...end` nel tuo modello per attivarla.
+# @note OPT-IN APPROACH
+#   Archiving is not enabled automatically. You must explicitly call
+#   `archivable do...end` in your model to activate it.
 #
-# APPROCCIO IBRIDO: Usa i predicati esistenti (archived_at_present, archived_at_null, etc.)
-# e fornisce alias semantici (archived, not_archived) per una migliore leggibilità.
+# @note HYBRID APPROACH
+#   Uses existing predicates (archived_at_present, archived_at_null, etc.)
+#   and provides semantic aliases (archived, not_archived) for better readability.
 #
-# REQUISITI DATABASE:
-#   - archived_at (datetime)    - REQUIRED (obbligatorio)
-#   - archived_by_id (integer)  - OPTIONAL (per tracking utente)
-#   - archive_reason (string)   - OPTIONAL (per motivazione)
+# @note DATABASE REQUIREMENTS
+#   - archived_at (datetime)    - REQUIRED
+#   - archived_by_id (integer)  - OPTIONAL (for user tracking)
+#   - archive_reason (string)   - OPTIONAL (for reasoning)
 #
-# Esempio di utilizzo:
+# @example Basic Model Setup
 #   class Article < ApplicationRecord
 #     include BetterModel
 #
-#     # Attiva archivable (opt-in)
+#     # Enable archivable (opt-in)
 #     archivable do
-#       skip_archived_by_default true  # Opzionale: nascondi archiviati di default
+#       skip_archived_by_default true  # Optional: hide archived records by default
 #     end
 #   end
 #
-# Utilizzo:
+# @example Instance Methods Usage
 #   article.archive!                        # Archive the record
 #   article.archive!(by: user)              # Archive with user tracking
 #   article.archive!(reason: "Outdated")    # Archive with reason
@@ -43,22 +50,22 @@
 #   article.archived?                       # Check if archived
 #   article.active?                         # Check if not archived
 #
-#   # Scopes semantici
+# @example Semantic Scopes
 #   Article.archived                        # Find archived records
 #   Article.not_archived                    # Find active records
 #   Article.archived_only                   # Bypass default scope
 #
-#   # Predicati potenti (generati automaticamente)
+# @example Powerful Predicates (Auto-generated)
 #   Article.archived_at_within(7.days)      # Archived in last 7 days
 #   Article.archived_at_today               # Archived today
 #   Article.archived_at_between(start, end) # Archived in range
 #
-#   # Helper methods
+# @example Helper Methods
 #   Article.archived_today                  # Alias for archived_at_today
 #   Article.archived_this_week              # Alias for archived_at_this_week
 #   Article.archived_recently(7.days)       # Alias for archived_at_within
 #
-#   # Con Searchable
+# @example Integration with Searchable
 #   Article.search({ archived_at_null: true, status_eq: "published" })
 #
 module BetterModel
@@ -66,113 +73,166 @@ module BetterModel
     extend ActiveSupport::Concern
 
     included do
-      # Validazione ActiveRecord
+      # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
-        raise ArgumentError, "BetterModel::Archivable can only be included in ActiveRecord models"
+        raise BetterModel::Errors::Archivable::ConfigurationError, "BetterModel::Archivable can only be included in ActiveRecord models"
       end
 
-      # Configurazione archivable (opt-in)
+      # Archivable configuration (opt-in)
       class_attribute :archivable_enabled, default: false
       class_attribute :archivable_config, default: {}.freeze
     end
 
     class_methods do
-      # DSL per attivare e configurare archivable (OPT-IN)
+      # DSL to enable and configure archivable (OPT-IN).
       #
-      # @example Attivazione base
+      # This method activates archivable functionality on your model. It automatically
+      # defines predicates and sorts on archived_at, creates semantic scope aliases,
+      # and optionally configures default scoping behavior.
+      #
+      # @yield [configurator] Optional configuration block
+      # @raise [BetterModel::Errors::Archivable::ConfigurationError] If archived_at column doesn't exist
+      #
+      # @example Basic activation
       #   archivable
       #
-      # @example Con configurazione
+      # @example With configuration
       #   archivable do
       #     skip_archived_by_default true
       #   end
       def archivable(&block)
-        # Valida che archived_at esista
+        # Validate that archived_at exists
         unless column_names.include?("archived_at")
-          raise ArgumentError,
+          raise BetterModel::Errors::Archivable::ConfigurationError,
             "Archivable requires an 'archived_at' datetime column. " \
             "Add it with: rails g migration AddArchivedAtTo#{table_name.classify.pluralize} archived_at:datetime"
         end
 
-        # Attiva archivable
+        # Enable archivable
         self.archivable_enabled = true
 
-        # Definisci predicati su archived_at (opt-in!)
+        # Define predicates on archived_at (opt-in!)
         predicates :archived_at unless predicable_field?(:archived_at)
 
-        # Definisci anche sort su archived_at (opt-in!)
+        # Define sorting on archived_at (opt-in!)
         sort :archived_at unless sortable_field?(:archived_at)
 
-        # Definisci gli scope alias (approccio ibrido)
+        # Define semantic scope aliases (hybrid approach)
         scope :archived, -> { archived_at_present(true) }
         scope :not_archived, -> { archived_at_null(true) }
 
-        # Configura se passato un blocco
+        # Configure if block provided
         if block_given?
           configurator = ArchivableConfigurator.new(self)
           configurator.instance_eval(&block)
           self.archivable_config = configurator.to_h.freeze
 
-          # Applica default scope SOLO se configurato
+          # Apply default scope ONLY if configured
           if archivable_config[:skip_archived_by_default]
             default_scope -> { where(archived_at: nil) }
           end
         end
       end
 
-      # Trova SOLO record archiviati, bypassando default scope
+      # Find ONLY archived records, bypassing default scope.
       #
       # @return [ActiveRecord::Relation]
+      # @raise [BetterModel::Errors::Archivable::NotEnabledError] If archivable is not enabled
+      #
+      # @example
+      #   Article.archived_only
       def archived_only
-        raise ArchivableNotEnabledError unless archivable_enabled?
+        raise BetterModel::Errors::Archivable::NotEnabledError unless archivable_enabled?
         unscoped.archived
       end
 
-      # Helper: alias per archived_at_today
+      # Find records archived today.
+      #
+      # Helper alias for archived_at_today predicate.
+      #
+      # @return [ActiveRecord::Relation]
+      # @raise [BetterModel::Errors::Archivable::NotEnabledError] If archivable is not enabled
+      #
+      # @example
+      #   Article.archived_today
       def archived_today
-        raise ArchivableNotEnabledError unless archivable_enabled?
+        raise BetterModel::Errors::Archivable::NotEnabledError unless archivable_enabled?
         archived_at_today
       end
 
-      # Helper: alias per archived_at_this_week
+      # Find records archived this week.
+      #
+      # Helper alias for archived_at_this_week predicate.
+      #
+      # @return [ActiveRecord::Relation]
+      # @raise [BetterModel::Errors::Archivable::NotEnabledError] If archivable is not enabled
+      #
+      # @example
+      #   Article.archived_this_week
       def archived_this_week
-        raise ArchivableNotEnabledError unless archivable_enabled?
+        raise BetterModel::Errors::Archivable::NotEnabledError unless archivable_enabled?
         archived_at_this_week
       end
 
-      # Helper: alias per archived_at_within
+      # Find records archived within the specified duration.
       #
-      # @param duration [ActiveSupport::Duration] Durata (es: 7.days)
+      # Helper alias for archived_at_within predicate.
+      #
+      # @param duration [ActiveSupport::Duration] Time duration (e.g., 7.days)
       # @return [ActiveRecord::Relation]
+      # @raise [BetterModel::Errors::Archivable::NotEnabledError] If archivable is not enabled
+      #
+      # @example Find records archived in the last 7 days
+      #   Article.archived_recently(7.days)
+      #
+      # @example Find records archived in the last month
+      #   Article.archived_recently(1.month)
       def archived_recently(duration = 7.days)
-        raise ArchivableNotEnabledError unless archivable_enabled?
+        raise BetterModel::Errors::Archivable::NotEnabledError unless archivable_enabled?
         archived_at_within(duration)
       end
 
-      # Verifica se archivable è attivo
+      # Check if archivable is enabled on this model.
       #
-      # @return [Boolean]
-      def archivable_enabled?
-        archivable_enabled == true
-      end
+      # @return [Boolean] true if archivable is enabled, false otherwise
+      #
+      # @example
+      #   Article.archivable_enabled?  # => true
+      def archivable_enabled? = archivable_enabled == true
     end
 
-    # Metodi di istanza
+    # Instance Methods
 
-    # Archivia il record
+    # Archive this record.
     #
-    # @param by [Integer, Object] ID utente o oggetto user (opzionale)
-    # @param reason [String] Motivo dell'archiviazione (opzionale)
-    # @return [self]
-    # @raise [ArchivableNotEnabledError] se archivable non è attivo
-    # @raise [AlreadyArchivedError] se già archiviato
+    # Sets archived_at to current time and optionally tracks the user and reason.
+    # Bypasses validations when saving.
+    #
+    # @param by [Integer, Object, nil] User ID or user object (optional)
+    # @param reason [String, nil] Reason for archiving (optional)
+    # @return [self] Returns self for method chaining
+    # @raise [BetterModel::Errors::Archivable::NotEnabledError] If archivable is not enabled
+    # @raise [BetterModel::Errors::Archivable::AlreadyArchivedError] If already archived
+    #
+    # @example Basic archiving
+    #   article.archive!
+    #
+    # @example Archive with user tracking
+    #   article.archive!(by: current_user)
+    #   article.archive!(by: user.id)
+    #
+    # @example Archive with reason
+    #   article.archive!(reason: "Outdated content")
+    #
+    # @example Archive with both user and reason
+    #   article.archive!(by: current_user, reason: "Compliance violation")
     def archive!(by: nil, reason: nil)
-      raise ArchivableNotEnabledError unless self.class.archivable_enabled?
-      raise AlreadyArchivedError, "Record is already archived" if archived?
+      raise BetterModel::Errors::Archivable::NotEnabledError unless self.class.archivable_enabled?
+      raise BetterModel::Errors::Archivable::AlreadyArchivedError, "Record is already archived" if archived?
 
       self.archived_at = Time.current
 
-      # Set archived_by_id: accetta sia ID che oggetti con .id
+      # Set archived_by_id: accepts both ID and objects with .id
       if respond_to?(:archived_by_id=) && by.present?
         self.archived_by_id = by.respond_to?(:id) ? by.id : by
       end
@@ -183,14 +243,20 @@ module BetterModel
       self
     end
 
-    # Ripristina record archiviato
+    # Restore archived record.
     #
-    # @return [self]
-    # @raise [ArchivableNotEnabledError] se archivable non è attivo
-    # @raise [NotArchivedError] se non archiviato
+    # Clears archived_at, archived_by_id, and archive_reason.
+    # Bypasses validations when saving.
+    #
+    # @return [self] Returns self for method chaining
+    # @raise [BetterModel::Errors::Archivable::NotEnabledError] If archivable is not enabled
+    # @raise [BetterModel::Errors::Archivable::NotArchivedError] If not archived
+    #
+    # @example
+    #   article.restore!
     def restore!
-      raise ArchivableNotEnabledError unless self.class.archivable_enabled?
-      raise NotArchivedError, "Record is not archived" unless archived?
+      raise BetterModel::Errors::Archivable::NotEnabledError unless self.class.archivable_enabled?
+      raise BetterModel::Errors::Archivable::NotArchivedError, "Record is not archived" unless archived?
 
       self.archived_at = nil
       self.archived_by_id = nil if respond_to?(:archived_by_id=)
@@ -200,26 +266,47 @@ module BetterModel
       self
     end
 
-    # Verifica se il record è archiviato
+    # Check if record is archived.
     #
-    # @return [Boolean]
+    # @return [Boolean] true if archived, false otherwise
+    #
+    # @example
+    #   article.archived?  # => true
     def archived?
       return false unless self.class.archivable_enabled?
       archived_at.present?
     end
 
-    # Verifica se il record è attivo (non archiviato)
+    # Check if record is active (not archived).
     #
-    # @return [Boolean]
-    def active?
-      !archived?
-    end
+    # @return [Boolean] true if active, false otherwise
+    #
+    # @example
+    #   article.active?  # => true
+    def active? = !archived?
 
-    # Override as_json per includere info archivio
+    # Override as_json to include archive information.
     #
-    # @param options [Hash] Opzioni as_json
+    # Optionally includes detailed archive metadata when requested.
+    #
+    # @param options [Hash] Options for as_json
     # @option options [Boolean] :include_archive_info Include archive metadata
-    # @return [Hash]
+    # @return [Hash] JSON representation
+    #
+    # @example Basic JSON
+    #   article.as_json
+    #
+    # @example With archive info
+    #   article.as_json(include_archive_info: true)
+    #   # => {
+    #   #   ...,
+    #   #   "archive_info" => {
+    #   #     "archived" => true,
+    #   #     "archived_at" => "2025-01-15T10:30:00Z",
+    #   #     "archived_by_id" => 42,
+    #   #     "archive_reason" => "Outdated"
+    #   #   }
+    #   # }
     def as_json(options = {})
       result = super
 
@@ -236,21 +323,18 @@ module BetterModel
     end
   end
 
-  # Errori custom
-  class ArchivableError < StandardError; end
-  class AlreadyArchivedError < ArchivableError; end
-  class NotArchivedError < ArchivableError; end
 
-  class ArchivableNotEnabledError < ArchivableError
-    def initialize(msg = nil)
-      super(msg || "Archivable is not enabled. Add 'archivable do...end' to your model.")
-    end
-  end
-
-  # Configurator per archivable DSL
+  # Configurator for archivable DSL.
+  #
+  # Internal class used to configure archivable behavior through the DSL block.
+  #
+  # @api private
   class ArchivableConfigurator
     attr_reader :config
 
+    # Initialize a new configurator.
+    #
+    # @param model_class [Class] The model class being configured
     def initialize(model_class)
       @model_class = model_class
       @config = {
@@ -258,13 +342,25 @@ module BetterModel
       }
     end
 
-    # Configura default scope per nascondere archiviati
+    # Configure default scope to hide archived records.
     #
-    # @param value [Boolean] true per nascondere archiviati di default
+    # When enabled, adds a default scope that filters out archived records.
+    # Use Model.unscoped or Model.archived_only to access archived records.
+    #
+    # @param value [Boolean] true to hide archived records by default
+    #
+    # @example
+    #   archivable do
+    #     skip_archived_by_default true
+    #   end
     def skip_archived_by_default(value)
       @config[:skip_archived_by_default] = !!value
     end
 
+    # Convert configuration to hash.
+    #
+    # @return [Hash] Configuration hash
+    # @api private
     def to_h
       @config
     end

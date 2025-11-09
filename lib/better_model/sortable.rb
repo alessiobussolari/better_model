@@ -1,18 +1,21 @@
 # frozen_string_literal: true
 
-# Sortable - Sistema di ordinamento dichiarativo per modelli Rails
+require_relative "errors/sortable/sortable_error"
+require_relative "errors/sortable/configuration_error"
+
+# Sortable - Declarative sorting system for Rails models.
 #
-# Questo concern permette di definire ordinamenti sui modelli utilizzando un DSL
-# semplice e dichiarativo che genera automaticamente scope basati sul tipo di colonna.
+# This concern enables defining sorts on models using a simple, declarative DSL
+# that automatically generates scopes based on column type.
 #
-# Esempio di utilizzo:
+# @example Basic Usage
 #   class Article < ApplicationRecord
 #     include BetterModel::Sortable
 #
 #     sort :title, :view_count, :published_at
 #   end
 #
-# Utilizzo:
+# @example Generated Scopes
 #   Article.sort_title_asc                    # ORDER BY title ASC
 #   Article.sort_title_desc_i                 # ORDER BY LOWER(title) DESC
 #   Article.sort_view_count_desc_nulls_last   # ORDER BY view_count DESC NULLS LAST
@@ -23,26 +26,30 @@ module BetterModel
     extend ActiveSupport::Concern
 
     included do
-      # Valida che sia incluso solo in modelli ActiveRecord
+      # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
-        raise ArgumentError, "BetterModel::Sortable can only be included in ActiveRecord models"
+        raise BetterModel::Errors::Sortable::ConfigurationError, "BetterModel::Sortable can only be included in ActiveRecord models"
       end
 
-      # Registry dei campi sortable definiti per questa classe
+      # Registry of sortable fields defined for this class
       class_attribute :sortable_fields, default: Set.new
-      # Registry degli scope sortable generati
+      # Registry of generated sortable scopes
       class_attribute :sortable_scopes, default: Set.new
+      # Registry of custom complex sorts
+      class_attribute :complex_sorts_registry, default: {}.freeze
     end
 
     class_methods do
-      # DSL per definire campi sortable
+      # DSL to define sortable fields.
       #
-      # Genera automaticamente scope di ordinamento basati sul tipo di colonna:
+      # Automatically generates sorting scopes based on column type:
       # - String: _asc, _desc, _asc_i, _desc_i (case-insensitive)
       # - Numeric: _asc, _desc, _asc_nulls_last, _desc_nulls_last, etc.
       # - Date: _asc, _desc, _newest, _oldest
       #
-      # Esempio:
+      # @param field_names [Array<Symbol>] Field names to make sortable
+      #
+      # @example
       #   sort :title, :view_count, :published_at
       def sort(*field_names)
         field_names.each do |field_name|
@@ -67,36 +74,101 @@ module BetterModel
         end
       end
 
-      # Verifica se un campo è stato registrato come sortable
-      def sortable_field?(field_name)
-        sortable_fields.include?(field_name.to_sym)
+      # Register a custom complex sort.
+      #
+      # Allows defining complex sorts that combine multiple fields
+      # or use custom logic not covered by standard sorts.
+      #
+      # @param name [Symbol] Sort name (will be prefixed with sort_)
+      # @yield Sort implementation block
+      # @raise [BetterModel::Errors::Sortable::ConfigurationError] If block is not provided
+      #
+      # @example Multi-field sort
+      #   register_complex_sort :by_popularity do
+      #     order(view_count: :desc, published_at: :desc)
+      #   end
+      #
+      #   Article.sort_by_popularity
+      #
+      # @example Parametrized sort
+      #   register_complex_sort :by_relevance do |keyword|
+      #     order(Arel.sql("CASE WHEN title ILIKE '%#{sanitize_sql_like(keyword)}%' THEN 1 ELSE 2 END"))
+      #   end
+      #
+      #   Article.sort_by_relevance('rails')
+      def register_complex_sort(name, &block)
+        raise BetterModel::Errors::Sortable::ConfigurationError, "Block required for complex sort" unless block_given?
+
+        # Register in registry
+        self.complex_sorts_registry = complex_sorts_registry.merge(name.to_sym => block).freeze
+
+        # Define scope
+        scope :"sort_#{name}", block
+
+        # Register scope
+        register_sortable_scopes(:"sort_#{name}")
       end
 
-      # Verifica se uno scope sortable è stato generato
-      def sortable_scope?(scope_name)
-        sortable_scopes.include?(scope_name.to_sym)
-      end
+      # Check if a field has been registered as sortable.
+      #
+      # @param field_name [Symbol] Field name to check
+      # @return [Boolean] true if field is sortable
+      #
+      # @example
+      #   Article.sortable_field?(:title)  # => true
+      def sortable_field?(field_name) = sortable_fields.include?(field_name.to_sym)
+
+      # Check if a sortable scope has been generated.
+      #
+      # @param scope_name [Symbol] Scope name to check
+      # @return [Boolean] true if scope exists
+      #
+      # @example
+      #   Article.sortable_scope?(:sort_title_asc)  # => true
+      def sortable_scope?(scope_name) = sortable_scopes.include?(scope_name.to_sym)
+
+      # Check if a complex sort has been registered.
+      #
+      # @param name [Symbol] Sort name to check
+      # @return [Boolean] true if complex sort exists
+      #
+      # @example
+      #   Article.complex_sort?(:by_popularity)  # => true
+      def complex_sort?(name) = complex_sorts_registry.key?(name.to_sym)
 
       private
 
-      # Valida che il campo esista nella tabella
+      # Validate that field exists in table.
+      #
+      # @param field_name [Symbol] Field name to validate
+      # @raise [BetterModel::Errors::Sortable::ConfigurationError] If field doesn't exist
+      # @api private
       def validate_sortable_field!(field_name)
         unless column_names.include?(field_name.to_s)
-          raise ArgumentError, "Invalid field name: #{field_name}. Field does not exist in #{table_name}"
+          raise BetterModel::Errors::Sortable::ConfigurationError, "Invalid field name: #{field_name}. Field does not exist in #{table_name}"
         end
       end
 
-      # Registra un campo nel registry sortable_fields
+      # Register a field in sortable_fields registry.
+      #
+      # @param field_name [Symbol] Field name to register
+      # @api private
       def register_sortable_field(field_name)
         self.sortable_fields = (sortable_fields + [ field_name.to_sym ]).to_set.freeze
       end
 
-      # Registra scope nel registry sortable_scopes
+      # Register scopes in sortable_scopes registry.
+      #
+      # @param scope_names [Array<Symbol>] Scope names to register
+      # @api private
       def register_sortable_scopes(*scope_names)
         self.sortable_scopes = (sortable_scopes + scope_names.map(&:to_sym)).to_set.freeze
       end
 
-      # Genera scope base: sort_field_asc e sort_field_desc
+      # Generate base sorting scopes: sort_field_asc and sort_field_desc.
+      #
+      # @param field_name [Symbol] Field name
+      # @api private
       def define_base_sorting(field_name)
         quoted_field = connection.quote_column_name(field_name)
 
@@ -109,7 +181,10 @@ module BetterModel
         )
       end
 
-      # Genera scope per campi stringa (include case-insensitive)
+      # Generate sorting scopes for string fields (includes case-insensitive).
+      #
+      # @param field_name [Symbol] Field name
+      # @api private
       def define_string_sorting(field_name)
         quoted_field = connection.quote_column_name(field_name)
 
@@ -129,21 +204,24 @@ module BetterModel
         )
       end
 
-      # Genera scope per campi numerici (include gestione NULL)
+      # Generate sorting scopes for numeric fields (includes NULL handling).
+      #
+      # @param field_name [Symbol] Field name
+      # @api private
       def define_numeric_sorting(field_name)
         quoted_field = connection.quote_column_name(field_name)
 
-        # Scope base
+        # Base scopes
         scope :"sort_#{field_name}_asc", -> { order(Arel.sql("#{quoted_field} ASC")) }
         scope :"sort_#{field_name}_desc", -> { order(Arel.sql("#{quoted_field} DESC")) }
 
-        # Pre-calcola SQL per gestione NULL (necessario perché lo scope non ha accesso ai metodi privati)
+        # Pre-calculate SQL for NULL handling (necessary because scope doesn't have access to private methods)
         sql_asc_nulls_last = nulls_order_sql(field_name, "ASC", "LAST")
         sql_desc_nulls_last = nulls_order_sql(field_name, "DESC", "LAST")
         sql_asc_nulls_first = nulls_order_sql(field_name, "ASC", "FIRST")
         sql_desc_nulls_first = nulls_order_sql(field_name, "DESC", "FIRST")
 
-        # Scope con gestione NULL
+        # Scopes with NULL handling
         scope :"sort_#{field_name}_asc_nulls_last", -> {
           order(Arel.sql(sql_asc_nulls_last))
         }
@@ -167,15 +245,18 @@ module BetterModel
         )
       end
 
-      # Genera scope per campi data/datetime (include shortcuts semantici)
+      # Generate sorting scopes for date/datetime fields (includes semantic shortcuts).
+      #
+      # @param field_name [Symbol] Field name
+      # @api private
       def define_date_sorting(field_name)
         quoted_field = connection.quote_column_name(field_name)
 
-        # Scope base
+        # Base scopes
         scope :"sort_#{field_name}_asc", -> { order(Arel.sql("#{quoted_field} ASC")) }
         scope :"sort_#{field_name}_desc", -> { order(Arel.sql("#{quoted_field} DESC")) }
 
-        # Shortcuts semantici
+        # Semantic shortcuts
         scope :"sort_#{field_name}_newest", -> { order(Arel.sql("#{quoted_field} DESC")) }
         scope :"sort_#{field_name}_oldest", -> { order(Arel.sql("#{quoted_field} ASC")) }
 
@@ -187,19 +268,24 @@ module BetterModel
         )
       end
 
-      # Genera SQL per gestione NULL multi-database
+      # Generate SQL for NULL handling across different databases.
       #
-      # NOTA: Il blocco MySQL else qui sotto non è coperto da test automatici
-      # perché i test vengono eseguiti su SQLite. Testare manualmente su MySQL
-      # con: rails console RAILS_ENV=test
+      # @param field_name [Symbol] Field name
+      # @param direction [String] Sort direction ('ASC' or 'DESC')
+      # @param nulls_position [String] NULL position ('FIRST' or 'LAST')
+      # @return [String] SQL ORDER BY clause
+      # @api private
+      #
+      # @note The MySQL/MariaDB else block is not covered by automated tests
+      #   because tests run on SQLite. Test manually on MySQL with: rails console RAILS_ENV=test
       def nulls_order_sql(field_name, direction, nulls_position)
         quoted_field = connection.quote_column_name(field_name)
 
-        # PostgreSQL e SQLite 3.30+ supportano NULLS LAST/FIRST nativamente
+        # PostgreSQL and SQLite 3.30+ support NULLS LAST/FIRST natively
         if connection.adapter_name.match?(/PostgreSQL|SQLite/)
           "#{quoted_field} #{direction} NULLS #{nulls_position}"
         else
-          # MySQL/MariaDB: emulazione con CASE
+          # MySQL/MariaDB: emulate with CASE
           if nulls_position == "LAST"
             "CASE WHEN #{quoted_field} IS NULL THEN 1 ELSE 0 END, #{quoted_field} #{direction}"
           else # FIRST
@@ -209,9 +295,17 @@ module BetterModel
       end
     end
 
-    # Metodi di istanza
+    # Instance Methods
 
-    # Ritorna lista di attributi sortable (esclude campi sensibili)
+    # Returns list of sortable attributes (excludes sensitive fields).
+    #
+    # Automatically filters out password and encrypted fields for security.
+    #
+    # @return [Array<String>] Sortable attribute names
+    #
+    # @example
+    #   article.sortable_attributes
+    #   # => ["id", "title", "view_count", "published_at", "created_at", "updated_at"]
     def sortable_attributes
       self.class.column_names.reject do |attr|
         attr.start_with?("password", "encrypted_")

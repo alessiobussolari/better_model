@@ -176,6 +176,133 @@ end
 @users = User.sort_last_sign_in_at_desc_nulls_last
 ```
 
+### Complex Sort
+
+For multi-field ordering and advanced sorting logic, use `register_complex_sort`:
+
+#### API Reference: register_complex_sort
+
+**Method Signature:**
+```ruby
+register_complex_sort(name, &block)
+```
+
+**Parameters:**
+- `name` (Symbol): The name of the sort (will be registered as `sort_#{name}`)
+- `block` (Proc): Sorting logic that returns an ActiveRecord::Relation with ORDER BY
+
+**Returns:** Registers a new scope with `sort_` prefix and adds it to `complex_sorts_registry`
+
+**Thread Safety:** Registry is a frozen Hash, sorts defined at class load time
+
+#### Basic Examples
+
+**Multi-field sorting:**
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  sort :published_at, :view_count, :title
+
+  register_complex_sort :by_popularity do
+    order(published_at: :desc, view_count: :desc, title: :asc)
+  end
+end
+
+# Usage
+Article.sort_by_popularity
+# Equivalent to: ORDER BY published_at DESC, view_count DESC, title ASC
+```
+
+**Sorting with parameters:**
+```ruby
+register_complex_sort :by_relevance do |keyword|
+  order(
+    Arel.sql(
+      "CASE WHEN title ILIKE '%#{sanitize_sql_like(keyword)}%' THEN 0 " \
+      "WHEN content ILIKE '%#{sanitize_sql_like(keyword)}%' THEN 1 " \
+      "ELSE 2 END ASC, " \
+      "published_at DESC"
+    )
+  )
+end
+
+# Usage
+Article.sort_by_relevance('rails')
+# Title matches first, then content matches, then by date
+```
+
+**Conditional sorting with CASE WHEN:**
+```ruby
+register_complex_sort :by_priority do
+  order(
+    Arel.sql("CASE WHEN priority IS NULL THEN 1 ELSE 0 END"),
+    priority: :desc,
+    created_at: :desc
+  )
+end
+
+# Usage
+Article.sort_by_priority
+# Non-NULL priorities first (highest first), then by creation date
+```
+
+**Combining filtering and sorting:**
+```ruby
+register_complex_sort :featured_and_recent do
+  where(featured: true)
+    .order(published_at: :desc, view_count: :desc)
+end
+
+# Usage
+Article.sort_featured_and_recent
+Article.where(status: 'published').sort_featured_and_recent
+```
+
+#### Integration with Predicables
+
+Complex sorts work seamlessly with predicates:
+
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  predicates :status, :view_count, :published_at
+  sort :published_at
+
+  register_complex_sort :trending do
+    where("view_count >= ?", 500)
+      .order(view_count: :desc, published_at: :desc)
+  end
+end
+
+# Chainable usage
+Article
+  .status_eq("published")
+  .published_at_within(30.days)
+  .sort_trending
+  .limit(5)
+```
+
+#### Class Methods
+
+```ruby
+# Check if a complex sort is registered
+Article.complex_sort?(:by_popularity)  # => true
+
+# Get all registered complex sorts
+Article.complex_sorts_registry
+# => {:by_popularity => #<Proc>, :by_relevance => #<Proc>}
+```
+
+#### Use Cases
+
+- **Multi-field precedence:** Order by multiple fields with clear priority
+- **Relevance ranking:** Sort search results by relevance score
+- **Conditional ordering:** Use CASE WHEN for custom sort logic
+- **Performance-critical queries:** Pre-structure complex sorting for reusability
+- **Engagement metrics:** Sort by calculated scores from related records
+
 ### Database Compatibility
 
 Sortable works across all major databases with automatic adaptation:

@@ -157,6 +157,11 @@ class Page < ApplicationRecord
     check :template, presence: true
   end
 
+  # Helper method for multi-group validation
+  def valid_for_groups?(groups)
+    groups.all? { |group| valid?(group) }
+  end
+
   # Workflow
   stateable do
     state :editing, initial: true
@@ -164,11 +169,11 @@ class Page < ApplicationRecord
     state :published
 
     transition :preview_page, from: :editing, to: :preview do
-      guard { valid_for_groups?([:basic, :content, :seo]) }
+      check { valid_for_groups?([:basic, :content, :seo]) }
     end
 
     transition :publish_page, from: [:editing, :preview], to: :published do
-      guard { valid? }
+      check { valid? }
       before { self.published_at = Time.current }
     end
 
@@ -235,17 +240,17 @@ class Task < ApplicationRecord
     state :done
 
     transition :start, from: :todo, to: :in_progress do
-      guard { can?(:edit) }
+      check { can?(:edit) }
       before { self.started_at = Time.current }
     end
 
     transition :complete, from: [:todo, :in_progress], to: :done do
-      guard { can?(:complete) }
+      check { can?(:complete) }
       before { self.completed_at = Time.current }
     end
 
     transition :reopen, from: :done, to: :todo do
-      guard { can?(:edit) }
+      check { can?(:edit) }
     end
   end
 

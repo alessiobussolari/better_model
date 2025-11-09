@@ -430,6 +430,131 @@ Article.metadata_has_any_key(["author", "editor"])
 Article.metadata_jsonb_contains({ author: "John" })
 ```
 
+## Example 7: Complex Predicates
+
+For filtering logic that requires combining multiple fields or custom SQL, use `register_complex_predicate`:
+
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  predicates :title, :status, :view_count, :published_at
+
+  # Register a complex predicate for trending articles
+  # Combines view count and publication date logic
+  register_complex_predicate :trending do
+    where("view_count >= ? AND published_at >= ?", 1000, 7.days.ago)
+  end
+
+  # Register a complex predicate with parameters
+  register_complex_predicate :popular_within do |days, min_views|
+    where("published_at >= ? AND view_count >= ?", days.days.ago, min_views)
+  end
+
+  # Register a complex predicate with association logic
+  register_complex_predicate :with_active_author do
+    joins(:author).where(authors: { active: true })
+  end
+
+  # Register a complex predicate with OR conditions
+  register_complex_predicate :needs_review do
+    where("status = ? OR (published_at IS NULL AND created_at < ?)",
+          "draft", 30.days.ago)
+  end
+end
+
+# Usage: Complex predicates work like regular scopes
+
+# Simple usage (no parameters)
+@trending = Article.trending
+# => Articles with 1000+ views published in last 7 days
+
+# Parameterized usage
+@popular = Article.popular_within(14, 500)
+# => Articles with 500+ views published in last 14 days
+
+# Chaining with generated predicates
+@featured_trending = Article
+  .trending
+  .status_eq("published")
+  .limit(10)
+# => Top 10 published trending articles
+
+# Combining multiple complex predicates
+@high_quality = Article
+  .popular_within(30, 1000)
+  .with_active_author
+  .status_eq("published")
+# => Published articles by active authors with 1000+ views (last 30 days)
+
+# Using OR conditions
+@review_queue = Article
+  .needs_review
+  .order(created_at: :asc)
+# => Drafts or old unpublished articles
+```
+
+### Real-World Example: E-commerce Product Filtering
+
+```ruby
+class Product < ApplicationRecord
+  include BetterModel
+
+  predicates :name, :price, :stock, :rating, :category
+
+  # Low stock alert (complex logic)
+  register_complex_predicate :low_stock do
+    where("stock > 0 AND stock < 10")
+  end
+
+  # Best sellers (combines sales and ratings)
+  register_complex_predicate :best_sellers do |days = 30|
+    where("sales_count >= ? AND rating >= ? AND created_at >= ?",
+          100, 4.0, days.days.ago)
+  end
+
+  # Clearance items (old inventory with stock)
+  register_complex_predicate :clearance do
+    where("stock > 0 AND created_at < ? AND sales_count < ?",
+          6.months.ago, 10)
+  end
+
+  # Featured in category (joins categories table)
+  register_complex_predicate :featured_in_category do |category_name|
+    joins(:category)
+      .where(categories: { name: category_name }, featured: true)
+  end
+end
+
+# Controller usage
+class ProductsController < ApplicationController
+  def index
+    @products = Product.all
+
+    # Apply complex predicates based on filter params
+    case params[:filter]
+    when 'trending'
+      @products = @products.best_sellers(7)
+    when 'clearance'
+      @products = @products.clearance
+    when 'low_stock'
+      @products = @products.low_stock
+    end
+
+    # Combine with standard predicates
+    if params[:category].present?
+      @products = @products.featured_in_category(params[:category])
+    end
+
+    @products = @products
+      .price_between(params[:min_price], params[:max_price])
+      .page(params[:page])
+  end
+end
+```
+
+**Output Explanation**: Complex predicates encapsulate business logic and can be combined with generated predicates for powerful, maintainable queries.
+
 ## Related Documentation
 
 - [Main README](../../README.md#predicable) - Full Predicable documentation

@@ -312,7 +312,7 @@ module BetterModel
       record = SecureStateable.create!
 
       # Validazione dovrebbe impedire transizione (lanciando eccezione)
-      assert_raises(BetterModel::Stateable::ValidationFailedError) do
+      assert_raises(BetterModel::Errors::Stateable::ValidationFailedError) do
         record.publish!
       end
 
@@ -325,7 +325,7 @@ module BetterModel
     # ========================================
 
     test "before_transition callbacks execute safely" do
-      callback_executed = false
+      _callback_executed = false
 
       SecureStateable.class_eval do
         stateable do

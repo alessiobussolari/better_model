@@ -229,6 +229,23 @@ Article.created_at_within(90.days)
 
 For business logic that doesn't fit standard predicates, use `register_complex_predicate`:
 
+#### API Reference: register_complex_predicate
+
+**Method Signature:**
+```ruby
+register_complex_predicate(name, &block)
+```
+
+**Parameters:**
+- `name` (Symbol): The name of the predicate scope (required)
+- `block` (Proc): Filtering logic that returns an ActiveRecord::Relation
+
+**Returns:** Registers a new scope on the model and adds it to `complex_predicates_registry`
+
+**Thread Safety:** Registry is a frozen Hash, predicates defined at class load time
+
+#### Basic Usage
+
 ```ruby
 class Article < ApplicationRecord
   include BetterModel
@@ -247,10 +264,64 @@ class Article < ApplicationRecord
 end
 
 # Usage
-Article.recent_popular(7, 100)
-Article.trending
-Article.recent_popular.trending  # Can chain with other scopes
+Article.recent_popular(7, 100)  # Custom parameters
+Article.trending                 # Uses defaults
+Article.recent_popular.trending  # Chainable with other scopes
 ```
+
+#### Advanced Examples
+
+**Multi-field with OR conditions:**
+```ruby
+register_complex_predicate :high_visibility do
+  where("view_count > ? OR featured = ?", 1000, true)
+end
+
+Article.high_visibility  # Articles with >1000 views OR featured
+```
+
+**Association queries:**
+```ruby
+register_complex_predicate :with_recent_comments do
+  joins(:comments)
+    .where("comments.created_at > ?", 7.days.ago)
+    .distinct
+end
+
+Article.with_recent_comments  # Articles with comments from last 7 days
+```
+
+**Complex SQL with CASE WHEN:**
+```ruby
+register_complex_predicate :by_relevance do |keyword|
+  order(
+    Arel.sql(
+      "CASE WHEN title ILIKE '%#{sanitize_sql_like(keyword)}%' THEN 1 " \
+      "WHEN content ILIKE '%#{sanitize_sql_like(keyword)}%' THEN 2 " \
+      "ELSE 3 END"
+    )
+  )
+end
+
+Article.by_relevance('Rails').limit(10)  # Ordered by relevance
+```
+
+**Combining filters and sorting:**
+```ruby
+register_complex_predicate :trending_popular do |days = 7|
+  where("published_at >= ? AND view_count >= ?", days.days.ago, 500)
+    .order(view_count: :desc, published_at: :desc)
+end
+
+Article.trending_popular(14)  # Last 14 days, 500+ views, sorted
+```
+
+#### Use Cases
+
+- **Business logic aggregation:** Combine multiple conditions into named filters
+- **Cross-field filtering:** Conditions spanning multiple fields or associations
+- **Dynamic filtering:** Accept parameters for flexible, reusable predicates
+- **Performance optimization:** Pre-structure complex queries for reusability
 
 ### Class Methods
 

@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require_relative "errors/traceable/traceable_error"
+require_relative "errors/traceable/not_enabled_error"
+require_relative "errors/traceable/configuration_error"
+
 # Traceable - Change tracking con audit trail per modelli Rails
 #
 # Questo concern permette di tracciare automaticamente i cambiamenti ai record,
@@ -59,7 +63,7 @@ module BetterModel
     included do
       # Validazione ActiveRecord
       unless ancestors.include?(ActiveRecord::Base)
-        raise ArgumentError, "BetterModel::Traceable can only be included in ActiveRecord models"
+        raise BetterModel::Errors::Traceable::ConfigurationError, "BetterModel::Traceable can only be included in ActiveRecord models"
       end
 
       # Configurazione traceable (opt-in)
@@ -122,16 +126,14 @@ module BetterModel
       # Verifica se traceable è attivo
       #
       # @return [Boolean]
-      def traceable_enabled?
-        traceable_enabled == true
-      end
+      def traceable_enabled? = traceable_enabled == true
 
       # Find records changed by a specific user
       #
       # @param user_id [Integer] User ID
       # @return [ActiveRecord::Relation]
       def changed_by(user_id)
-        raise NotEnabledError unless traceable_enabled?
+        raise BetterModel::Errors::Traceable::NotEnabledError unless traceable_enabled?
 
         joins(:versions).where(traceable_table_name => { updated_by_id: user_id }).distinct
       end
@@ -142,7 +144,7 @@ module BetterModel
       # @param end_time [Time, Date] End time
       # @return [ActiveRecord::Relation]
       def changed_between(start_time, end_time)
-        raise NotEnabledError unless traceable_enabled?
+        raise BetterModel::Errors::Traceable::NotEnabledError unless traceable_enabled?
 
         joins(:versions).where(traceable_table_name => { created_at: start_time..end_time }).distinct
       end
@@ -152,7 +154,7 @@ module BetterModel
       # @param field [Symbol] Field name
       # @return [ChangeQuery]
       def field_changed(field)
-        raise NotEnabledError unless traceable_enabled?
+        raise BetterModel::Errors::Traceable::NotEnabledError unless traceable_enabled?
 
         ChangeQuery.new(self, field)
       end
@@ -202,7 +204,7 @@ module BetterModel
           end
 
           # Create new Version class dynamically
-          version_class = Class.new(BetterModel::Version) do
+          version_class = Class.new(BetterModel::Models::Version) do
             self.table_name = table_name
           end
 
@@ -220,7 +222,7 @@ module BetterModel
     # @param field [Symbol] Field name
     # @return [Array<Hash>] Array of changes with :before, :after, :at, :by
     def changes_for(field)
-      raise NotEnabledError unless self.class.traceable_enabled?
+      raise BetterModel::Errors::Traceable::NotEnabledError unless self.class.traceable_enabled?
 
       versions.select { |v| v.changed?(field) }.map do |version|
         change = version.change_for(field)
@@ -238,7 +240,7 @@ module BetterModel
     #
     # @return [Array<Hash>] Full audit trail
     def audit_trail
-      raise NotEnabledError unless self.class.traceable_enabled?
+      raise BetterModel::Errors::Traceable::NotEnabledError unless self.class.traceable_enabled?
 
       versions.map do |version|
         {
@@ -256,7 +258,7 @@ module BetterModel
     # @param timestamp [Time, Date] Point in time
     # @return [self] Reconstructed object (not saved)
     def as_of(timestamp)
-      raise NotEnabledError unless self.class.traceable_enabled?
+      raise BetterModel::Errors::Traceable::NotEnabledError unless self.class.traceable_enabled?
 
       # Get all versions up to timestamp, ordered from oldest to newest
       relevant_versions = versions.where("created_at <= ?", timestamp).order(created_at: :asc)
@@ -280,12 +282,12 @@ module BetterModel
 
     # Rollback to a specific version
     #
-    # @param version [BetterModel::Version, Integer] Version or version ID
+    # @param version [BetterModel::Models::Version, Integer] Version or version ID
     # @param updated_by_id [Integer] User ID performing rollback
     # @param updated_reason [String] Reason for rollback
     # @return [self]
     def rollback_to(version, updated_by_id: nil, updated_reason: nil, allow_sensitive: false)
-      raise NotEnabledError unless self.class.traceable_enabled?
+      raise BetterModel::Errors::Traceable::NotEnabledError unless self.class.traceable_enabled?
 
       version = versions.find(version) if version.is_a?(Integer)
 
@@ -478,14 +480,6 @@ module BetterModel
     end
   end
 
-  # Errori custom
-  class TraceableError < StandardError; end
-
-  class NotEnabledError < TraceableError
-    def initialize(msg = nil)
-      super(msg || "Traceable is not enabled. Add 'traceable do...end' to your model.")
-    end
-  end
 
   # Configurator per traceable DSL
   class TraceableConfigurator

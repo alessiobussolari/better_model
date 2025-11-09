@@ -1,0 +1,71 @@
+# frozen_string_literal: true
+
+<% if options[:namespace] -%>
+module <%= options[:namespace] %>
+  class <%= class_name %>Repository < <%= base_repository_class %>
+    def model_class = <%= class_name %>
+
+    # Add your custom query methods here
+    #
+    # Example methods:
+    # def active
+    #   search({ status_eq: "active" })
+    # end
+    #
+    # def recent(days: 7)
+    #   search({ created_at_gteq: days.days.ago }, order_scope: { field: :created_at, direction: :desc })
+    # end
+    #
+    # def find_with_details(id)
+    #   search({ id_eq: id }, includes: [:associated_records], limit: 1)
+    # end
+<% if model_class_exists? && model_class.respond_to?(:predicable_fields) && model_class.predicable_fields.any? -%>
+
+    # Available predicates for <%= class_name %>:
+<% model_class.predicable_fields.each do |field| -%>
+    #   <%= field %>: <%= model_class.searchable_predicates_for(field).map { |p| ":#{p}" }.join(", ") %>
+<% end -%>
+<% end -%>
+<% if model_class_exists? && model_class.respond_to?(:sortable_fields) && model_class.sortable_fields.any? -%>
+
+    # Available sort scopes for <%= class_name %>:
+<% model_class.sortable_fields.each do |field| -%>
+    #   <%= field %>: <%= model_class.searchable_sorts_for(field).join(", ") %>
+<% end -%>
+<% end -%>
+  end
+end
+<% else -%>
+class <%= class_name %>Repository < <%= base_repository_class %>
+  def model_class = <%= class_name %>
+
+  # Add your custom query methods here
+  #
+  # Example methods:
+  # def active
+  #   search({ status_eq: "active" })
+  # end
+  #
+  # def recent(days: 7)
+  #   search({ created_at_gteq: days.days.ago }, order_scope: { field: :created_at, direction: :desc })
+  # end
+  #
+  # def find_with_details(id)
+  #   search({ id_eq: id }, includes: [:associated_records], limit: 1)
+  # end
+<% if model_class_exists? && model_class.respond_to?(:predicable_fields) && model_class.predicable_fields.any? -%>
+
+  # Available predicates for <%= class_name %>:
+<% model_class.predicable_fields.each do |field| -%>
+  #   <%= field %>: <%= model_class.searchable_predicates_for(field).map { |p| ":#{p}" }.join(", ") %>
+<% end -%>
+<% end -%>
+<% if model_class_exists? && model_class.respond_to?(:sortable_fields) && model_class.sortable_fields.any? -%>
+
+  # Available sort scopes for <%= class_name %>:
+<% model_class.sortable_fields.each do |field| -%>
+  #   <%= field %>: <%= model_class.searchable_sorts_for(field).join(", ") %>
+<% end -%>
+<% end -%>
+end
+<% end -%>

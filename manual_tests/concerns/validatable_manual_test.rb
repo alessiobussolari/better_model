@@ -8,28 +8,34 @@ section("VALIDATABLE - Setup and Configuration")
 
 # Activate validatable for testing
 Article.class_eval do
+  # Register complex validations
+  register_complex_validation :check_view_limit do
+    if max_views.present? && view_count.present? && view_count > max_views
+      errors.add(:view_count, "cannot exceed max views (#{max_views})")
+    end
+  end
+
+  register_complex_validation :valid_date_order do
+    return if starts_at.blank? || ends_at.blank?
+
+    if starts_at >= ends_at
+      errors.add(:starts_at, "must be before end date")
+    end
+  end
+
   validatable do
     # Basic validations
     check :title, presence: true, length: { minimum: 3 }
     check :content, presence: true
 
     # Conditional validation - published articles need published_at
-    validate_if :is_published? do
-      check :published_at, presence: true
-    end
+    check :published_at, presence: true, if: :is_published?
 
-    # Order validation - dates must be in correct order
-    validate_order :starts_at, :before, :ends_at, if: -> { starts_at.present? && ends_at.present? }
+    # Cross-field validation - dates must be in correct order
+    check_complex :valid_date_order
 
     # Business rule - view_count cannot exceed max_views
-    validate_business_rule :check_view_limit
-  end
-
-  # Business rule implementation
-  def check_view_limit
-    if max_views.present? && view_count.present? && view_count > max_views
-      errors.add(:view_count, "cannot exceed max views (#{max_views})")
-    end
+    check_complex :check_view_limit
   end
 end
 puts "  Validatable attivato su Article"
@@ -54,7 +60,7 @@ test("validation accepts valid article") do
   article.valid?
 end
 
-section("VALIDATABLE - Conditional Validations (validate_if)")
+section("VALIDATABLE - Conditional Validations (if: option)")
 
 test("draft article does not require published_at") do
   article = Article.new(title: "Draft Article", content: "Content", status: "draft", published_at: nil)
@@ -85,7 +91,7 @@ test("published article with published_at is valid") do
   article.valid?
 end
 
-section("VALIDATABLE - Order Validations (Cross-Field)")
+section("VALIDATABLE - Complex Validations (Cross-Field)")
 
 test("order validation accepts starts_at before ends_at") do
   article = Article.new(
@@ -120,7 +126,7 @@ test("order validation skipped when dates are nil") do
   article.valid?
 end
 
-section("VALIDATABLE - Business Rules")
+section("VALIDATABLE - Complex Validations (Business Rules)")
 
 test("business rule allows view_count below max_views") do
   article = Article.new(

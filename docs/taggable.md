@@ -658,7 +658,7 @@ class Document < ApplicationRecord
     state :published
 
     transition :submit_for_review, from: :draft, to: :review do
-      guard { tags.include?("categorized") }
+      check { tags.include?("categorized") }
     end
 
     transition :approve, from: :review, to: :approved

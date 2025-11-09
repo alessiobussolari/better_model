@@ -143,7 +143,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
 
     article = article_class.create!(title: "Test")
 
-    error = assert_raises(BetterModel::Stateable::InvalidTransitionError) do
+    error = assert_raises(BetterModel::Errors::Stateable::InvalidTransitionError) do
       article.archive!  # Can't archive from draft
     end
 
@@ -163,7 +163,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
     end
 
     article = article_class.create!(title: "Hi")
-    assert_raises(BetterModel::Stateable::CheckFailedError) do
+    assert_raises(BetterModel::Errors::Stateable::CheckFailedError) do
       article.publish!
     end
 
@@ -189,7 +189,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
     end
 
     article = article_class.create!(title: "Test", content: nil)
-    assert_raises(BetterModel::Stateable::CheckFailedError) do
+    assert_raises(BetterModel::Errors::Stateable::CheckFailedError) do
       article.publish!
     end
 
@@ -344,7 +344,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
 
     article = article_class.create!(title: "Test", content: nil)
 
-    error = assert_raises(BetterModel::Stateable::ValidationFailedError) do
+    error = assert_raises(BetterModel::Errors::Stateable::ValidationFailedError) do
       article.publish!
     end
 
@@ -608,13 +608,13 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
 
     # Both checks fail
     article = article_class.create!(title: "Hi")
-    assert_raises(BetterModel::Stateable::CheckFailedError) do
+    assert_raises(BetterModel::Errors::Stateable::CheckFailedError) do
       article.publish!
     end
 
     # First check passes, second fails
     article.title = "Test"
-    assert_raises(BetterModel::Stateable::CheckFailedError) do
+    assert_raises(BetterModel::Errors::Stateable::CheckFailedError) do
       article.publish!
     end
 
@@ -707,7 +707,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
     article.publish!
 
     # Try to publish again from published state (invalid)
-    error = assert_raises(BetterModel::Stateable::InvalidTransitionError) do
+    error = assert_raises(BetterModel::Errors::Stateable::InvalidTransitionError) do
       article.publish!
     end
 
@@ -830,10 +830,75 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
 
     article = article_class.create!(title: "Test")
 
-    error = assert_raises(BetterModel::Stateable::StateableError) do
+    error = assert_raises(BetterModel::Errors::Stateable::StateableError) do
       article.publish!
     end
 
     assert_match(/Unknown check type: invalid_type/, error.message)
+  end
+
+  # ========================================
+  # CONFIGURATION ERROR TESTS
+  # ========================================
+
+  test "ConfigurationError class exists" do
+    assert defined?(BetterModel::Errors::Stateable::ConfigurationError)
+  end
+
+  test "ConfigurationError inherits from ArgumentError" do
+    assert BetterModel::Errors::Stateable::ConfigurationError < ArgumentError
+  end
+
+  test "ConfigurationError can be instantiated with message" do
+    error = BetterModel::Errors::Stateable::ConfigurationError.new("test message")
+    assert_equal "test message", error.message
+  end
+
+  test "ConfigurationError can be caught as ArgumentError" do
+    begin
+      raise BetterModel::Errors::Stateable::ConfigurationError, "test"
+    rescue ArgumentError => e
+      assert_instance_of BetterModel::Errors::Stateable::ConfigurationError, e
+    end
+  end
+
+  test "ConfigurationError has correct namespace" do
+    assert_equal "BetterModel::Errors::Stateable::ConfigurationError",
+                 BetterModel::Errors::Stateable::ConfigurationError.name
+  end
+
+  # ========================================
+  # CONFIGURATION ERROR INTEGRATION TESTS
+  # ========================================
+
+  test "raises ConfigurationError when included in non-ActiveRecord class" do
+    error = assert_raises(BetterModel::Errors::Stateable::ConfigurationError) do
+      Class.new do
+        include BetterModel::Stateable
+      end
+    end
+    assert_match(/can only be included in ActiveRecord models/, error.message)
+  end
+
+  test "raises ConfigurationError when unknown transition is used" do
+    article_class = Class.new(ApplicationRecord) do
+      self.table_name = "articles"
+      include BetterModel::Stateable
+
+      stateable do
+        state :draft, initial: true
+        state :published
+        # Define only :publish transition
+        transition :publish, from: :draft, to: :published
+      end
+    end
+
+    article = article_class.create!(title: "Test")
+
+    # Try to use unknown transition via transition_to!
+    error = assert_raises(BetterModel::Errors::Stateable::ConfigurationError) do
+      article.transition_to!(:nonexistent_transition)
+    end
+    assert_match(/Unknown transition/, error.message)
   end
 end

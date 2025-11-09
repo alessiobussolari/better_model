@@ -2,16 +2,13 @@
 
 ## Overview
 
-Validatable provides a declarative validation system for Rails models with enhanced features beyond standard ActiveModel validations:
+Validatable provides a simplified declarative validation system for Rails models with three core features:
 
 - **Opt-in Activation**: Not active by default - must enable with `validatable do...end`
 - **Declarative DSL**: Clean, readable syntax with `check` method
-- **Conditional Validations**: Apply rules only when conditions are met (`validate_if`, `validate_unless`)
-- **Cross-Field Validations**: Compare values between fields with `validate_order`
-- **Business Rules**: Delegate complex logic to custom methods with `validate_business_rule`
+- **Complex Validations**: Reusable validation blocks for any complex logic including cross-field comparisons
 - **Validation Groups**: Partial validation for multi-step forms and wizards
-- **Statusable Integration**: Use status predicates in conditional validations
-- **Full Rails Compatibility**: Works seamlessly with ActiveModel validations
+- **Full Rails Compatibility**: Works seamlessly with ActiveModel validations and contexts
 - **Thread-safe**: Immutable configuration and registry
 
 ## Requirements
@@ -36,1768 +33,773 @@ class Article < ApplicationRecord
 end
 ```
 
-## Basic Configuration
+## Core Features
 
-### Enabling Validatable
+Validatable offers exactly **3 core features**:
 
-Use the `validatable do...end` block to activate:
+1. **Basic Validations** (`check`) - Standard Rails validations with declarative syntax
+2. **Complex Validations** (`register_complex_validation` + `check_complex`) - Reusable validation blocks
+3. **Validation Groups** (`validation_group`) - Partial validation for multi-step forms
+
+---
+
+## 1. Basic Validations
+
+### API Reference: check
+
+**Method Signature:**
+```ruby
+check(*fields, **options)
+```
+
+**Parameters:**
+- `fields` (Array<Symbol>): One or more field names
+- `options` (Hash): Standard Rails validation options (presence, format, length, etc.)
+
+**Behavior:**
+- Delegates directly to Rails' `validates` method
+- Supports all ActiveModel validation options
+- Supports Rails conditional options (`if`, `unless`, `on`)
+
+### Usage Examples
 
 ```ruby
 class Article < ApplicationRecord
   include BetterModel
 
   validatable do
-    check :title, presence: true
-    check :content, presence: true
-  end
-end
-```
-
-### Without Configuration
-
-If you don't call `validatable`, the concern is not active:
-
-```ruby
-class Article < ApplicationRecord
-  include BetterModel
-
-  # Validatable not active - use standard Rails validations
-  validates :title, presence: true
-end
-```
-
-### Empty Configuration
-
-Activate Validatable without adding validations (useful for validation groups):
-
-```ruby
-validatable do
-  # Empty block - Validatable active but no rules yet
-end
-```
-
-## Basic Validations
-
-Use `check` to define validations inside the `validatable` block:
-
-```ruby
-class Article < ApplicationRecord
-  include BetterModel
-
-  validatable do
-    # Single field validation
+    # Single field
     check :title, presence: true
 
     # Multiple fields with same validation
     check :title, :content, presence: true
 
-    # Multiple validation types on one field
+    # Multiple validation types
     check :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
 
-    # Numeric validations
-    check :view_count, numericality: { greater_than_or_equal_to: 0 }
-    check :rating, numericality: { in: 1..5 }
-
-    # Inclusion/exclusion
-    check :status, inclusion: { in: %w[draft published archived] }
-    check :category, exclusion: { in: %w[forbidden restricted] }
-
     # Length validations
-    check :title, length: { minimum: 3, maximum: 255 }
-    check :slug, length: { is: 20 }
+    check :title, length: { minimum: 5, maximum: 200 }
 
-    # Uniqueness
-    check :slug, uniqueness: true
-    check :email, uniqueness: { case_sensitive: false }
+    # Numericality
+    check :view_count, numericality: { greater_than_or_equal_to: 0 }
+
+    # Inclusion
+    check :status, inclusion: { in: %w[draft published archived] }
+
+    # Conditional using Rails options
+    check :published_at, presence: true, if: :published?
+    check :author_id, presence: true, if: -> { status == "published" }
+
+    # Context-specific
+    check :reviewer_id, presence: true, on: :publish
   end
 end
-
-# Usage
-article = Article.new
-article.valid?  # => false
-article.errors[:title]  # => ["can't be blank"]
-
-article.title = "My Article"
-article.content = "Article content here"
-article.valid?  # => true
 ```
 
-### Supported Validation Options
+### Supported Rails Options
 
-All ActiveModel validation options are supported:
+All standard ActiveModel validation options are supported:
+- `presence`, `absence`
+- `format` (with regex)
+- `length` (minimum, maximum, in, is)
+- `numericality` (greater_than, less_than, equal_to, etc.)
+- `inclusion`, `exclusion`
+- `uniqueness`
+- `acceptance`
+- `confirmation`
 
-- `presence: true` - Field must be present
-- `format: { with: regex }` - Field must match pattern
-- `numericality: { ... }` - Numeric constraints (greater_than, less_than, equal_to, etc.)
-- `inclusion: { in: array }` - Value must be in list
-- `exclusion: { in: array }` - Value must not be in list
-- `length: { minimum:, maximum:, is:, in: }` - String length constraints
-- `uniqueness: true` - Value must be unique in database
+Plus Rails conditional/context options:
+- `if`, `unless` (method name or lambda)
+- `on` (:create, :update, or custom context)
+- `message` (custom error message)
+- `allow_nil`, `allow_blank`
 
-## Conditional Validations
+---
 
-### validate_if
+## 2. Complex Validations
 
-Apply validations only when a condition is true:
+Complex validations allow you to register reusable validation logic that can:
+- Combine multiple fields
+- Implement cross-field comparisons (date/number ranges)
+- Execute custom business logic
+- Add multiple errors to different fields
+
+They follow the same pattern as `complex_predicates` and `complex_sorts`.
+
+### API Reference: register_complex_validation
+
+**Method Signature:**
+```ruby
+register_complex_validation(name, &block)
+```
+
+**Parameters:**
+- `name` (Symbol): The name of the validation (required)
+- `block` (Proc): Validation logic that runs in the instance context (required)
+
+**Returns:** Registers the validation in `complex_validations_registry` (frozen Hash)
+
+**Thread Safety:** Registry is frozen, validations defined at class load time
+
+**Behavior:**
+- Block executes in the instance context (access to all attributes and methods)
+- Can add multiple errors to different fields
+- Can access associations and other model methods
+- Registry is inherited by subclasses
+- Must use `check_complex` in `validatable` block to activate
+
+### API Reference: check_complex
+
+**Method Signature:**
+```ruby
+check_complex(name)
+```
+
+**Parameters:**
+- `name` (Symbol): Name of registered complex validation
+
+**Behavior:**
+- Validates that the complex validation exists (raises ArgumentError if not)
+- Adds the validation to the model's validation chain
+- Runs during normal validation (`valid?` call)
+
+### Helper Method: complex_validation?
 
 ```ruby
-class Article < ApplicationRecord
+Model.complex_validation?(:name)  # => true/false
+```
+
+Checks if a complex validation is registered.
+
+### Basic Usage
+
+```ruby
+class Product < ApplicationRecord
   include BetterModel
 
-  # Define statuses with Statusable
-  is :published, -> { status == "published" }
-  is :scheduled, -> { status == "scheduled" }
-  is :featured, -> { featured? }
+  # Register complex validation
+  register_complex_validation :valid_pricing do
+    return if sale_price.blank?  # Nil handling
+
+    if sale_price >= price
+      errors.add(:sale_price, "must be less than regular price")
+    end
+  end
 
   validatable do
-    # Always required
-    check :title, :content, presence: true
-
-    # Required only when published
-    validate_if :is_published? do
-      check :published_at, presence: true
-      check :author_id, presence: true
-      check :reviewer_id, presence: true
-    end
-
-    # Required only when scheduled
-    validate_if :is_scheduled? do
-      check :scheduled_for, presence: true
-    end
-
-    # Using lambda instead of method
-    validate_if -> { status == "featured" } do
-      check :featured_image_url, presence: true
-      check :featured_excerpt, presence: true
-    end
+    check :name, :price, presence: true
+    check_complex :valid_pricing
   end
 end
 
 # Usage
-article = Article.new(status: "draft", title: "Test", content: "...")
-article.valid?  # => true (published_at not required for drafts)
-
-article.status = "published"
-article.valid?  # => false (published_at now required)
-article.errors[:published_at]  # => ["can't be blank"]
-
-article.published_at = Time.current
-article.author_id = 1
-article.reviewer_id = 2
-article.valid?  # => true
+product = Product.new(price: 100, sale_price: 120)
+product.valid?  # => false
+product.errors[:sale_price]  # => ["must be less than regular price"]
 ```
 
-### Condition Types
+### Cross-Field Validations
 
-**Symbol** - References a method (usually Statusable predicate):
-```ruby
-validate_if :is_published? do
-  check :published_at, presence: true
-end
-```
-
-**Proc/Lambda** - Inline condition evaluated in instance context:
-```ruby
-validate_if -> { status == "published" } do
-  check :published_at, presence: true
-end
-```
-
-### validate_unless
-
-Apply validations only when a condition is false (negated `validate_if`):
-
-```ruby
-class Article < ApplicationRecord
-  include BetterModel
-
-  is :draft, -> { status == "draft" }
-
-  validatable do
-    # Required unless draft
-    validate_unless :is_draft? do
-      check :reviewer_id, presence: true
-      check :reviewed_at, presence: true
-    end
-
-    # Using lambda
-    validate_unless -> { internal_only? } do
-      check :public_url, presence: true
-      check :seo_title, presence: true
-    end
-  end
-end
-
-# Usage
-article = Article.new(status: "draft")
-article.valid?  # => true (reviewer not required for drafts)
-
-article.status = "published"
-article.valid?  # => false (reviewer now required)
-article.errors[:reviewer_id]  # => ["can't be blank"]
-```
-
-## Cross-Field Validations
-
-Use `validate_order` to compare values between two fields:
+Complex validations are perfect for comparing fields:
 
 ```ruby
 class Event < ApplicationRecord
   include BetterModel
 
-  validatable do
-    # Date/time comparisons
-    check :starts_at, :ends_at, presence: true
-    validate_order :starts_at, :before, :ends_at
-    validate_order :published_at, :after, :created_at
+  # Date comparison
+  register_complex_validation :valid_date_range do
+    return if starts_at.blank? || ends_at.blank?
 
-    # Numeric comparisons
-    validate_order :min_price, :lteq, :max_price
-    validate_order :discount, :lt, :price
-    validate_order :stock, :gteq, :reserved_stock
+    if starts_at >= ends_at
+      errors.add(:starts_at, "must be before end date")
+    end
+  end
+
+  # Numeric comparison
+  register_complex_validation :capacity_check do
+    return if registered_count.blank? || max_attendees.blank?
+
+    if registered_count > max_attendees
+      errors.add(:registered_count, "exceeds capacity (#{max_attendees})")
+    end
+  end
+
+  # Price range
+  register_complex_validation :valid_price_range do
+    return if min_price.blank? || max_price.blank?
+
+    if min_price > max_price
+      errors.add(:min_price, "must be less than or equal to max price")
+    end
+  end
+
+  validatable do
+    check_complex :valid_date_range
+    check_complex :capacity_check
+    check_complex :valid_price_range
   end
 end
-
-# Usage
-event = Event.new(starts_at: 1.day.ago, ends_at: Time.current)
-event.valid?  # => true
-
-event = Event.new(starts_at: Time.current, ends_at: 1.day.ago)
-event.valid?  # => false
-event.errors[:starts_at]  # => ["must be before ends at"]
 ```
 
-### Supported Comparators
+### Multiple Errors
 
-| Comparator | Operator | Use Case | Example |
-|------------|----------|----------|---------|
-| `:before` | `<` | Dates/times | `starts_at` before `ends_at` |
-| `:after` | `>` | Dates/times | `published_at` after `created_at` |
-| `:lteq` | `<=` | Numbers | `min_price` ≤ `max_price` |
-| `:gteq` | `>=` | Numbers | `stock` ≥ `reserved_stock` |
-| `:lt` | `<` | Numbers | `discount` < `price` |
-| `:gt` | `>` | Numbers | `total` > `subtotal` |
-
-### With Options
+Complex validations can add multiple errors:
 
 ```ruby
-validatable do
-  # Custom error message
-  validate_order :starts_at, :before, :ends_at,
-                 message: "must be before event end"
+register_complex_validation :order_totals do
+  # Calculate totals
+  items_total = order_items.sum(&:total)
+  calculated_total = items_total + shipping_cost - discount_amount
 
-  # Only on create
-  validate_order :discount, :lteq, :price, on: :create
+  # Multiple validation checks
+  if total.present? && (calculated_total - total).abs > 0.01
+    errors.add(:total, "does not match calculated total (#{calculated_total})")
+  end
 
-  # Conditional
-  validate_order :min_age, :lteq, :max_age, if: :has_age_restriction?
+  if discount_amount.present? && discount_amount > items_total
+    errors.add(:discount_amount, "cannot exceed items total")
+  end
+
+  if items_total < 10.00
+    errors.add(:base, "Order must be at least $10.00")
+  end
 end
 ```
 
-### Nil Handling
+### Integration with Statusable
 
-Cross-field validations are skipped if either field is `nil`. Use presence validations to ensure fields exist:
-
-```ruby
-validatable do
-  check :starts_at, :ends_at, presence: true  # Ensure not nil
-  validate_order :starts_at, :before, :ends_at   # Then compare
-end
-```
-
-## Business Rules
-
-Use `validate_business_rule` to delegate complex validation logic to custom methods:
+Complex validations can use Statusable predicates:
 
 ```ruby
 class Article < ApplicationRecord
   include BetterModel
 
+  is :published, -> { status == "published" }
+  is :draft, -> { status == "draft" }
+
+  register_complex_validation :publication_requirements do
+    return unless is_published?
+
+    errors.add(:published_at, "required for published articles") if published_at.blank?
+    errors.add(:author_id, "required for published articles") if author_id.blank?
+    errors.add(:content, "must be at least 100 chars") if content && content.length < 100
+  end
+
   validatable do
-    # Basic business rule
-    validate_business_rule :valid_category
-
-    # With options
-    validate_business_rule :author_has_permission, on: :create
-    validate_business_rule :can_change_status, if: :status_changed?
-  end
-
-  # Implement business rule methods
-  # Add errors using errors.add if validation fails
-  def valid_category
-    return if category_id.blank?
-
-    unless Category.exists?(id: category_id)
-      errors.add(:category_id, "must be a valid category")
-    end
-  end
-
-  def author_has_permission
-    return if author.blank?
-
-    unless author.can_create_articles?
-      errors.add(:author_id, "does not have permission to create articles")
-    end
-  end
-
-  def can_change_status
-    return unless status_changed?
-
-    old_status, new_status = status_change
-    unless valid_status_transition?(old_status, new_status)
-      errors.add(:status, "cannot transition from #{old_status} to #{new_status}")
-    end
-  end
-
-  private
-
-  def valid_status_transition?(from, to)
-    allowed_transitions = {
-      "draft" => %w[published archived],
-      "published" => %w[archived],
-      "archived" => []
-    }
-
-    allowed_transitions[from]&.include?(to)
+    check :title, presence: true
+    check_complex :publication_requirements
   end
 end
-
-# Usage
-article = Article.new(category_id: 999)
-article.valid?  # => false
-article.errors[:category_id]  # => ["must be a valid category"]
 ```
 
-### Key Points
+### Advanced Patterns
 
-- Business rule methods must be defined in the model
-- Methods should add errors using `errors.add(field, message)`
-- Methods are called during validation like any other validator
-- If the method doesn't exist, a `NoMethodError` is raised with helpful message
+**Pattern 1: Conditional Logic Within Validation**
+```ruby
+register_complex_validation :pricing_rules do
+  # Different rules based on product type
+  case product_type
+  when "physical"
+    errors.add(:weight, "required for physical products") if weight.blank?
+    errors.add(:shipping_cost, "required") if shipping_cost.blank?
+  when "digital"
+    errors.add(:download_url, "required for digital products") if download_url.blank?
+  when "service"
+    errors.add(:duration, "required for services") if duration.blank?
+  end
+end
+```
 
-## Validation Groups
+**Pattern 2: Association Validation**
+```ruby
+register_complex_validation :valid_order_items do
+  if order_items.empty?
+    errors.add(:base, "Order must have at least one item")
+  end
 
-Validation groups enable partial validation for multi-step forms, wizards, or progressive data entry:
+  order_items.each_with_index do |item, index|
+    if item.quantity <= 0
+      errors.add(:base, "Item #{index + 1} must have positive quantity")
+    end
+  end
+end
+```
+
+**Pattern 3: Calculated Field Validation**
+```ruby
+register_complex_validation :profit_margin do
+  return if cost.blank? || price.blank?
+
+  margin = ((price - cost) / price.to_f) * 100
+
+  if margin < 10
+    errors.add(:price, "profit margin (#{margin.round(1)}%) must be at least 10%")
+  elsif margin > 80
+    errors.add(:price, "profit margin (#{margin.round(1)}%) seems too high")
+  end
+end
+```
+
+### Class Methods
+
+```ruby
+# Check if validation is registered
+Product.complex_validation?(:valid_pricing)  # => true
+
+# Get all registered validations
+Product.complex_validations_registry
+# => {:valid_pricing => #<Proc>, :valid_stock => #<Proc>}
+```
+
+### Best Practices
+
+1. **Always handle nil values** - Use early returns
+   ```ruby
+   register_complex_validation :date_range do
+     return if starts_at.blank? || ends_at.blank?
+     # validation logic
+   end
+   ```
+
+2. **Keep validations focused** - One validation per concern
+   ```ruby
+   # Good - separate concerns
+   register_complex_validation :valid_dates do ... end
+   register_complex_validation :capacity_check do ... end
+
+   # Avoid - mixing concerns
+   register_complex_validation :validate_everything do ... end
+   ```
+
+3. **Use descriptive names**
+   ```ruby
+   # Good
+   register_complex_validation :publication_requirements
+   register_complex_validation :profit_margin_check
+
+   # Avoid
+   register_complex_validation :check1
+   register_complex_validation :validation
+   ```
+
+4. **Provide clear error messages**
+   ```ruby
+   errors.add(:field, "specific reason why it failed")
+   # Not just: errors.add(:field, "invalid")
+   ```
+
+---
+
+## 3. Validation Groups
+
+Validation groups enable partial validation of specific fields, perfect for:
+- Multi-step forms
+- Wizard-style flows
+- Progressive data entry
+- Step-by-step validation
+
+### API Reference: validation_group
+
+**Method Signature:**
+```ruby
+validation_group(group_name, fields)
+```
+
+**Parameters:**
+- `group_name` (Symbol): Unique name for the group (required)
+- `fields` (Array<Symbol>): Array of field names to validate in this group (required)
+
+**Raises:**
+- `ArgumentError` if group_name is not a Symbol
+- `ArgumentError` if fields is not an Array
+- `ArgumentError` if group is already defined
+
+**Behavior:**
+- Groups are stored in `validatable_groups` (frozen Hash)
+- Groups define which fields to validate, not which validations to run
+- All validations defined in `validatable` block apply, but only errors for grouped fields are checked
+
+### Basic Usage
 
 ```ruby
 class User < ApplicationRecord
   include BetterModel
 
   validatable do
-    # Step 1: Account creation
+    # Define validations for all fields
     check :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
     check :password, presence: true, length: { minimum: 8 }
-
-    # Step 2: Personal details
     check :first_name, :last_name, presence: true
-
-    # Step 3: Contact info
-    check :phone, :address, :city, :zip_code, presence: true
+    check :address, :city, :zip_code, presence: true
 
     # Define validation groups
-    validation_group :account, [:email, :password]
-    validation_group :personal, [:first_name, :last_name]
-    validation_group :contact, [:phone, :address, :city, :zip_code]
+    validation_group :step1, [:email, :password]
+    validation_group :step2, [:first_name, :last_name]
+    validation_group :step3, [:address, :city, :zip_code]
   end
 end
 
-# Usage
-user = User.new
+# Validate specific group
+user = User.new(email: "user@example.com")
+user.valid?(:step1)  # => false (missing password)
 
-# Validate only account fields
-user.valid?(:account)  # => false (email and password missing)
+user.password = "secure123"
+user.valid?(:step1)  # => true
 
-user.email = "user@example.com"
-user.password = "secret123"
-user.valid?(:account)  # => true
-
-# Full validation still validates everything
-user.valid?  # => false (first_name, last_name, etc. missing)
+# Full validation validates all fields
+user.valid?  # => false (missing step2 and step3 fields)
 ```
 
-### Get Errors for Specific Group
+### Instance Methods
+
+**valid?(context_or_group)**
+
+Override of ActiveModel's `valid?` with group support:
 
 ```ruby
-user = User.new
-user.valid?  # Run full validation
-
-# Get only errors for account group
-account_errors = user.errors_for_group(:account)
-account_errors[:email]  # => ["can't be blank"]
-account_errors[:first_name]  # => [] (not in account group)
+user.valid?            # Full validation (all fields)
+user.valid?(:step1)    # Only validates fields in :step1 group
+user.valid?(:create)   # Rails context validation
 ```
+
+**validate_group(group_name)**
+
+Explicitly validate only a specific group:
+
+```ruby
+user.validate_group(:step1)  # => true/false
+```
+
+Raises `BetterModel::ValidatableNotEnabledError` if Validatable not enabled.
+
+**errors_for_group(group_name)**
+
+Get errors filtered to a specific group:
+
+```ruby
+user.valid?  # Run full validation first
+errors = user.errors_for_group(:step1)
+errors[:email]      # => errors for email (in step1)
+errors[:first_name] # => [] (not in step1)
+```
+
+Raises `BetterModel::ValidatableNotEnabledError` if Validatable not enabled.
 
 ### Multi-step Form Example
 
 ```ruby
-class RegistrationForm
-  def initialize(user)
-    @user = user
+class RegistrationController < ApplicationController
+  def create_step1
+    @user = User.new(step1_params)
+
+    if @user.valid?(:step1)
+      session[:user_data] = @user.attributes
+      redirect_to registration_step2_path
+    else
+      @errors = @user.errors_for_group(:step1)
+      render :step1
+    end
   end
 
-  def validate_step(step_name)
-    @user.valid?(step_name)
+  def create_step2
+    @user = User.new(session[:user_data].merge(step2_params))
+
+    if @user.valid?(:step2)
+      session[:user_data] = @user.attributes
+      redirect_to registration_step3_path
+    else
+      @errors = @user.errors_for_group(:step2)
+      render :step2
+    end
   end
 
-  def errors_for_step(step_name)
-    @user.errors_for_group(step_name)
+  def create_step3
+    @user = User.new(session[:user_data].merge(step3_params))
+
+    if @user.valid?  # Full validation on final step
+      @user.save!
+      session.delete(:user_data)
+      redirect_to dashboard_path
+    else
+      @errors = @user.errors_for_group(:step3)
+      render :step3
+    end
   end
 end
+```
 
-# In controller
-def create_account_step
-  @user = User.new(account_params)
-  form = RegistrationForm.new(@user)
+### Semantic Group Names
 
-  if form.validate_step(:account)
-    session[:user_data] = @user.attributes
-    redirect_to registration_personal_path
-  else
-    @errors = form.errors_for_step(:account)
-    render :account_step
-  end
+Use descriptive names that reflect the purpose:
+
+```ruby
+# Good - semantic names
+validation_group :account_setup, [:email, :password]
+validation_group :personal_info, [:first_name, :last_name, :date_of_birth]
+validation_group :contact_details, [:phone, :address, :city]
+
+# Avoid - generic names
+validation_group :step1, [:email, :password]
+validation_group :step2, [:first_name, :last_name]
+```
+
+### Groups with Different Contexts
+
+You can combine groups with Rails validation contexts:
+
+```ruby
+validatable do
+  # Basic fields
+  check :email, presence: true
+  check :password, presence: true
+
+  # Create-only validation
+  check :terms_accepted, acceptance: true, on: :create
+
+  # Publish-specific validation
+  check :reviewed_by_id, presence: true, on: :publish
+
+  # Groups for multi-step
+  validation_group :basics, [:email, :password]
+  validation_group :publishing, [:reviewed_by_id]
 end
+
+# Use contexts
+user.valid?(:create)   # Validates with :create context
+user.valid?(:publish)  # Validates with :publish context
+
+# Use groups
+user.valid?(:basics)     # Validates :basics group
+user.valid?(:publishing) # Validates :publishing group
 ```
 
-## Instance Methods
+---
 
-### valid?(context)
+## Integration with Rails
 
-Override of ActiveModel's `valid?` method with support for validation groups:
+### Using Rails Conditional Options
 
-```ruby
-# Standard validation (all validations)
-article.valid?
-
-# Validation group
-user.valid?(:account)
-user.valid?(:personal)
-
-# Rails validation context
-article.valid?(:create)
-article.valid?(:update)
-```
-
-### validate_group(group_name)
-
-Validate only fields in a specific group:
-
-```ruby
-user.validate_group(:account)  # => true/false
-```
-
-**Raises:**
-- `BetterModel::ValidatableNotEnabledError` if Validatable is not enabled
-
-### errors_for_group(group_name)
-
-Get errors filtered to a specific group's fields:
-
-```ruby
-user.valid?  # Run full validation first
-errors = user.errors_for_group(:account)
-errors[:email]  # => ["can't be blank"]
-errors[:first_name]  # => [] (not in account group)
-```
-
-**Raises:**
-- `BetterModel::ValidatableNotEnabledError` if Validatable is not enabled
-
-## Integration with Statusable
-
-Validatable works seamlessly with Statusable for status-based conditional validations:
+For conditional validations, use Rails' built-in `if` and `unless` options:
 
 ```ruby
 class Article < ApplicationRecord
   include BetterModel
 
-  # Define statuses with Statusable
-  is :draft, -> { status == "draft" }
   is :published, -> { status == "published" }
-  is :scheduled, -> { status == "scheduled" }
-  is :archived, -> { status == "archived" }
 
-  # Use statuses in conditional validations
   validatable do
     # Always required
     check :title, :content, presence: true
 
-    # Published-specific validations
-    validate_if :is_published? do
-      check :published_at, presence: true
-      check :author_id, presence: true
-      check :reviewer_id, presence: true
-    end
+    # Conditional using Statusable predicate
+    check :published_at, presence: true, if: :is_published?
+    check :author_id, presence: true, if: :is_published?
 
-    # Scheduled-specific validations
-    validate_if :is_scheduled? do
-      check :scheduled_for, presence: true
-      validate_order :scheduled_for, :after, :created_at
-    end
+    # Conditional using lambda
+    check :featured_image_url, presence: true, if: -> { featured? }
 
-    # Only non-drafts require category
-    validate_unless :is_draft? do
-      check :category_id, presence: true
-    end
+    # Unless condition
+    check :category_id, presence: true, unless: :is_draft?
   end
 end
-
-# Usage
-article = Article.new(status: "draft", title: "Test", content: "...")
-article.valid?  # => true (no category required for drafts)
-
-article.status = "published"
-article.valid?  # => false (now requires published_at, author_id, reviewer_id, category_id)
 ```
 
-**Benefits:**
+### Using Rails Validation Contexts
 
-- Readable, self-documenting validation logic
-- Centralized status definitions in one place (Statusable)
-- Conditional validations reference status predicates directly
-- Easy to test status-based validation scenarios
-
----
-
-## Example 1: Multi-step Registration Form
-
-Complete user registration with progressive validation across 4 steps.
+Validatable works seamlessly with Rails validation contexts:
 
 ```ruby
-# app/models/user.rb
-class User < ApplicationRecord
-  include BetterModel
+validatable do
+  # Always validated
+  check :title, presence: true
 
-  has_secure_password
+  # Only on create
+  check :author_id, presence: true, on: :create
 
-  validatable do
-    # Step 1: Account creation
-    check :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
-    check :email, uniqueness: { case_sensitive: false }
-    check :password, presence: true, length: { minimum: 8 }
-    check :password_confirmation, presence: true
+  # Only on update
+  check :updated_reason, presence: true, on: :update
 
-    # Step 2: Profile information
-    check :first_name, :last_name, presence: true
-    check :first_name, :last_name, length: { minimum: 2, maximum: 50 }
-    check :date_of_birth, presence: true
-
-    # Date of birth must be at least 18 years ago
-    validate_business_rule :minimum_age_requirement
-
-    # Step 3: Contact details
-    check :phone, presence: true, format: { with: /\A\d{10}\z/ }
-    check :address, :city, :zip_code, presence: true
-    check :zip_code, format: { with: /\A\d{5}\z/ }
-
-    # Step 4: Preferences
-    check :notification_preferences, presence: true
-    check :timezone, presence: true
-
-    # Define validation groups
-    validation_group :account, [:email, :password, :password_confirmation]
-    validation_group :profile, [:first_name, :last_name, :date_of_birth]
-    validation_group :contact, [:phone, :address, :city, :zip_code]
-    validation_group :preferences, [:notification_preferences, :timezone]
-  end
-
-  def minimum_age_requirement
-    return if date_of_birth.blank?
-
-    if date_of_birth > 18.years.ago.to_date
-      errors.add(:date_of_birth, "you must be at least 18 years old")
-    end
-  end
+  # Custom context
+  check :published_at, presence: true, on: :publish
+  check :reviewer_id, presence: true, on: :publish
 end
 
-# app/controllers/registrations_controller.rb
-class RegistrationsController < ApplicationController
-  def new_account
-    @user = User.new
-  end
+# Use with contexts
+article.valid?(:create)   # Validates with :create context
+article.valid?(:update)   # Validates with :update context
+article.valid?(:publish)  # Validates with :publish context
+```
 
-  def create_account
-    @user = User.new(account_params)
+### Combining Groups and Contexts
 
-    if @user.valid?(:account)
-      session[:registration] = @user.attributes.except("id")
-      redirect_to new_profile_registration_path
-    else
-      @errors = @user.errors_for_group(:account)
-      render :new_account
-    end
-  end
+You can use both validation groups and Rails contexts:
 
-  def new_profile
-    @user = User.new(session[:registration])
-  end
+```ruby
+validatable do
+  check :title, presence: true
+  check :author_id, presence: true, on: :create
+  check :published_at, presence: true, if: :published?
 
-  def create_profile
-    @user = User.new(session[:registration].merge(profile_params))
-
-    if @user.valid?(:profile)
-      session[:registration] = @user.attributes.except("id")
-      redirect_to new_contact_registration_path
-    else
-      @errors = @user.errors_for_group(:profile)
-      render :new_profile
-    end
-  end
-
-  def new_contact
-    @user = User.new(session[:registration])
-  end
-
-  def create_contact
-    @user = User.new(session[:registration].merge(contact_params))
-
-    if @user.valid?(:contact)
-      session[:registration] = @user.attributes.except("id")
-      redirect_to new_preferences_registration_path
-    else
-      @errors = @user.errors_for_group(:contact)
-      render :new_contact
-    end
-  end
-
-  def new_preferences
-    @user = User.new(session[:registration])
-  end
-
-  def create_preferences
-    @user = User.new(session[:registration].merge(preferences_params))
-
-    if @user.valid?(:preferences) && @user.save
-      session.delete(:registration)
-      redirect_to dashboard_path, notice: "Registration complete!"
-    else
-      @errors = @user.errors_for_group(:preferences)
-      render :new_preferences
-    end
-  end
-
-  private
-
-  def account_params
-    params.require(:user).permit(:email, :password, :password_confirmation)
-  end
-
-  def profile_params
-    params.require(:user).permit(:first_name, :last_name, :date_of_birth)
-  end
-
-  def contact_params
-    params.require(:user).permit(:phone, :address, :city, :zip_code)
-  end
-
-  def preferences_params
-    params.require(:user).permit(:notification_preferences, :timezone)
-  end
+  validation_group :basic_info, [:title]
+  validation_group :publishing_info, [:published_at, :author_id]
 end
 
-# Usage in views
-# app/views/registrations/new_account.html.erb
-<%= form_with model: @user, url: create_account_registration_path do |f| %>
-  <%= f.label :email %>
-  <%= f.email_field :email %>
-  <%= @errors&.dig(:email)&.join(", ") %>
+# Groups ignore contexts
+article.valid?(:basic_info)      # Only validates :title
 
-  <%= f.label :password %>
-  <%= f.password_field :password %>
-  <%= @errors&.dig(:password)&.join(", ") %>
-
-  <%= f.label :password_confirmation %>
-  <%= f.password_field :password_confirmation %>
-  <%= @errors&.dig(:password_confirmation)&.join(", ") %>
-
-  <%= f.submit "Next: Profile Info" %>
-<% end %>
+# Contexts ignore groups
+article.valid?(:create)          # Validates :title and :author_id
 ```
 
 ---
 
-## Example 2: Event Management System
+## Complete Examples
 
-Event validation with date comparisons, capacity limits, and status-based rules.
-
-```ruby
-# app/models/event.rb
-class Event < ApplicationRecord
-  include BetterModel
-
-  belongs_to :organizer, class_name: 'User'
-  belongs_to :venue, optional: true
-  has_many :registrations, dependent: :destroy
-
-  # Statusable integration
-  is :upcoming, -> { starts_at > Time.current }
-  is :ongoing, -> { starts_at <= Time.current && ends_at >= Time.current }
-  is :past, -> { ends_at < Time.current }
-  is :published, -> { published? }
-  is :full, -> { registrations.count >= max_attendees }
-
-  validatable do
-    # Basic validations
-    check :title, :description, presence: true
-    check :title, length: { minimum: 5, maximum: 255 }
-    check :description, length: { minimum: 20 }
-
-    # Date validations
-    check :starts_at, :ends_at, presence: true
-    validate_order :starts_at, :before, :ends_at
-    validate_order :starts_at, :after, :created_at
-
-    # Capacity validations
-    check :max_attendees, numericality: { greater_than: 0 }
-    validate_order :registered_count, :lteq, :max_attendees
-
-    # Published events require more fields
-    validate_if :is_published? do
-      check :venue_id, presence: true
-      check :ticket_price, presence: true
-      check :ticket_price, numericality: { greater_than_or_equal_to: 0 }
-      check :category, presence: true
-    end
-
-    # Business rules
-    validate_business_rule :valid_venue
-    validate_business_rule :can_modify_event, on: :update
-    validate_business_rule :registration_deadline_before_start
-  end
-
-  def valid_venue
-    return if venue_id.blank?
-
-    unless Venue.active.exists?(id: venue_id)
-      errors.add(:venue_id, "must be an active venue")
-    end
-
-    # Check venue capacity
-    if venue && max_attendees > venue.capacity
-      errors.add(:max_attendees, "exceeds venue capacity of #{venue.capacity}")
-    end
-  end
-
-  def can_modify_event
-    return unless persisted?
-
-    # Cannot modify past events
-    if is_past?
-      errors.add(:base, "cannot modify past events")
-      return
-    end
-
-    # Cannot change start time if registrations exist
-    if starts_at_changed? && registrations.any?
-      errors.add(:starts_at, "cannot be changed after registrations exist")
-    end
-
-    # Cannot reduce capacity below current registration count
-    if max_attendees_changed? && max_attendees < registrations.count
-      errors.add(:max_attendees, "cannot be less than current registrations (#{registrations.count})")
-    end
-  end
-
-  def registration_deadline_before_start
-    return if registration_deadline.blank? || starts_at.blank?
-
-    if registration_deadline >= starts_at
-      errors.add(:registration_deadline, "must be before event start time")
-    end
-  end
-
-  def registered_count
-    registrations.count
-  end
-end
-
-# Usage Examples
-
-# 1. Create draft event
-event = Event.new(
-  title: "Ruby Conference 2025",
-  description: "Annual Ruby developers conference with workshops and talks",
-  starts_at: 3.months.from_now,
-  ends_at: 3.months.from_now + 2.days,
-  max_attendees: 500,
-  organizer: current_user
-)
-event.valid?  # => true (venue not required for drafts)
-
-# 2. Publish event (requires venue)
-event.published = true
-event.valid?  # => false
-event.errors[:venue_id]  # => ["can't be blank"]
-event.errors[:ticket_price]  # => ["can't be blank"]
-
-event.venue = Venue.first
-event.ticket_price = 299.00
-event.category = "Technology"
-event.valid?  # => true
-
-# 3. Try to set invalid dates
-event.ends_at = event.starts_at - 1.day
-event.valid?  # => false
-event.errors[:starts_at]  # => ["must be before ends at"]
-
-# 4. Try to exceed venue capacity
-event.venue = Venue.find_by(capacity: 200)
-event.max_attendees = 500
-event.valid?  # => false
-event.errors[:max_attendees]  # => ["exceeds venue capacity of 200"]
-
-# 5. Try to modify event with registrations
-event.save!
-50.times { event.registrations.create!(attendee: User.create!(...)) }
-
-event.starts_at = 2.months.from_now
-event.valid?  # => false
-event.errors[:starts_at]  # => ["cannot be changed after registrations exist"]
-
-event.max_attendees = 30
-event.valid?  # => false
-event.errors[:max_attendees]  # => ["cannot be less than current registrations (50)"]
-```
-
----
-
-## Example 3: E-commerce Product Validation
-
-Product validation with price comparisons, stock management, and conditional requirements.
+### Example 1: E-commerce Product
 
 ```ruby
-# app/models/product.rb
 class Product < ApplicationRecord
   include BetterModel
 
-  belongs_to :category
-  has_many :variants, dependent: :destroy
-  has_many :images, dependent: :destroy
-
-  # Statusable integration
-  is :active, -> { active? && stock > 0 }
   is :on_sale, -> { sale_price.present? && sale_price < price }
   is :low_stock, -> { stock > 0 && stock <= low_stock_threshold }
-  is :out_of_stock, -> { stock <= 0 }
-  is :requires_shipping, -> { physical? }
+
+  # Complex validations for business rules
+  register_complex_validation :pricing_rules do
+    return if price.blank?
+
+    # Sale price must be less than regular price
+    if sale_price.present? && sale_price >= price
+      errors.add(:sale_price, "must be less than regular price")
+    end
+
+    # Ensure minimum profit margin
+    if sale_price.present? && cost.present?
+      margin = ((sale_price - cost) / sale_price.to_f) * 100
+      if margin < 10
+        errors.add(:sale_price, "profit margin must be at least 10%")
+      end
+    end
+  end
+
+  register_complex_validation :stock_validation do
+    # Reserved stock cannot exceed total
+    if reserved_stock.present? && stock.present? && reserved_stock > stock
+      errors.add(:reserved_stock, "cannot exceed total stock")
+    end
+
+    # Low stock warning
+    if stock.present? && stock < reorder_level
+      errors.add(:stock, "is below reorder level (#{reorder_level})")
+    end
+  end
 
   validatable do
     # Basic validations
     check :name, :sku, presence: true
-    check :sku, uniqueness: { case_sensitive: false }
-    check :name, length: { minimum: 3, maximum: 255 }
-
-    # Price validations
-    check :price, presence: true
+    check :sku, uniqueness: true
     check :price, numericality: { greater_than: 0 }
-
-    # Sale price validations (only if on sale)
-    validate_if :is_on_sale? do
-      check :sale_price, presence: true
-      validate_order :sale_price, :lt, :price
-      check :sale_starts_at, :sale_ends_at, presence: true
-      validate_order :sale_starts_at, :before, :sale_ends_at
-    end
-
-    # Stock validations
-    check :stock, presence: true
     check :stock, numericality: { greater_than_or_equal_to: 0 }
-    validate_order :reserved_stock, :lteq, :stock
 
-    # Shipping validations (only if physical product)
-    validate_if :is_requires_shipping? do
-      check :weight, :dimensions, presence: true
-      check :weight, numericality: { greater_than: 0 }
-      check :shipping_cost, numericality: { greater_than_or_equal_to: 0 }
-    end
+    # Complex validations
+    check_complex :pricing_rules
+    check_complex :stock_validation
 
-    # Published products require more info
-    validate_if -> { published? } do
-      check :description, presence: true
-      check :description, length: { minimum: 50 }
-      validate_business_rule :has_at_least_one_image
-    end
-
-    # Business rules
-    validate_business_rule :valid_category
-    validate_business_rule :valid_variants
-    validate_business_rule :valid_stock_levels
-  end
-
-  def valid_category
-    return if category_id.blank?
-
-    unless Category.active.exists?(id: category_id)
-      errors.add(:category_id, "must be an active category")
-    end
-
-    # Check category allows this product type
-    if category && category.product_type != self.product_type
-      errors.add(:category_id, "does not accept #{product_type} products")
-    end
-  end
-
-  def valid_variants
-    return if variants.empty?
-
-    # All variants must have valid SKUs
-    if variants.any? { |v| v.sku.blank? }
-      errors.add(:variants, "must all have SKUs")
-    end
-
-    # Variant prices cannot exceed base price
-    if variants.any? { |v| v.price > price }
-      errors.add(:variants, "prices cannot exceed base price of #{price}")
-    end
-
-    # Variants must have unique combinations
-    combinations = variants.map { |v| [v.size, v.color].compact }
-    if combinations.uniq.length != combinations.length
-      errors.add(:variants, "must have unique size/color combinations")
-    end
-  end
-
-  def valid_stock_levels
-    # Low stock threshold must be reasonable
-    if low_stock_threshold && low_stock_threshold > stock
-      errors.add(:low_stock_threshold, "cannot be greater than current stock")
-    end
-
-    # Reserved stock must be tracked
-    if reserved_stock > 0 && !track_inventory?
-      errors.add(:reserved_stock, "cannot be set when inventory tracking is disabled")
-    end
-  end
-
-  def has_at_least_one_image
-    if images.none?
-      errors.add(:images, "must include at least one product image")
-    end
+    # Conditional validations
+    check :sale_price, presence: true, if: :is_on_sale?
   end
 end
-
-# Usage Examples
-
-# 1. Create basic product
-product = Product.new(
-  name: "Wireless Headphones",
-  sku: "WH-1000XM4",
-  price: 349.99,
-  stock: 50,
-  category: electronics_category
-)
-product.valid?  # => true
-
-# 2. Create sale product
-product.sale_price = 299.99
-product.sale_starts_at = Date.today
-product.sale_ends_at = 1.week.from_now
-product.valid?  # => true (sale_price < price)
-
-# Try invalid sale price
-product.sale_price = 400.00
-product.valid?  # => false
-product.errors[:sale_price]  # => ["must be less than price"]
-
-# 3. Physical product validations
-product.physical = true
-product.valid?  # => false
-product.errors[:weight]  # => ["can't be blank"]
-product.errors[:dimensions]  # => ["can't be blank"]
-
-product.weight = 0.25  # kg
-product.dimensions = "20x15x8"  # cm
-product.shipping_cost = 9.99
-product.valid?  # => true
-
-# 4. Publishing validations
-product.published = true
-product.valid?  # => false
-product.errors[:description]  # => ["can't be blank"]
-product.errors[:images]  # => ["must include at least one product image"]
-
-product.description = "Premium wireless headphones with active noise cancellation..." * 3
-product.images.create!(url: "https://example.com/image1.jpg")
-product.valid?  # => true
-
-# 5. Stock management
-product.stock = 5
-product.reserved_stock = 10
-product.valid?  # => false
-product.errors[:reserved_stock]  # => ["must be less than or equal to stock"]
-
-product.reserved_stock = 3
-product.valid?  # => true
 ```
 
----
-
-## Example 4: Invoice with Complex Business Rules
-
-Invoice validation demonstrating business rules, cross-field validations, and validation groups.
+### Example 2: Multi-step Registration
 
 ```ruby
-# app/models/invoice.rb
-class Invoice < ApplicationRecord
+class User < ApplicationRecord
   include BetterModel
 
-  belongs_to :customer
-  belongs_to :issued_by, class_name: 'User'
-  has_many :line_items, dependent: :destroy
+  register_complex_validation :password_strength do
+    return if password.blank?
 
-  # Statusable
-  is :draft, -> { status == "draft" }
-  is :sent, -> { status == "sent" }
-  is :paid, -> { status == "paid" }
-  is :overdue, -> { due_date.present? && due_date < Date.current && status == "sent" }
-  is :tax_exempt, -> { customer.tax_exempt? }
+    errors.add(:password, "must include at least one number") unless password.match?(/\d/)
+    errors.add(:password, "must include at least one uppercase letter") unless password.match?(/[A-Z]/)
+    errors.add(:password, "must include at least one special character") unless password.match?(/[!@#$%^&*]/)
+  end
 
   validatable do
-    # Basic info
-    check :invoice_number, presence: true, uniqueness: true
-    check :invoice_date, presence: true
-    check :customer_id, presence: true
+    # Step 1: Account
+    check :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }, uniqueness: true
+    check :password, presence: true, length: { minimum: 8 }
+    check :password_confirmation, presence: true
+    check_complex :password_strength
 
-    # Line items required
-    validate_business_rule :has_line_items
+    # Step 2: Profile
+    check :first_name, :last_name, presence: true
+    check :date_of_birth, presence: true
 
-    # Amount validations
-    check :subtotal, :total, presence: true
-    check :subtotal, :total, numericality: { greater_than: 0 }
-    validate_order :subtotal, :lteq, :total
-
-    # Tax validations (unless tax exempt)
-    validate_unless :is_tax_exempt? do
-      check :tax_rate, presence: true
-      check :tax_amount, presence: true
-      check :tax_rate, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }
-      validate_business_rule :correct_tax_calculation
-    end
-
-    # Sent invoices require more info
-    validate_unless :is_draft? do
-      check :due_date, presence: true
-      validate_order :due_date, :after, :invoice_date
-      check :payment_terms, presence: true
-    end
-
-    # Paid invoices
-    validate_if :is_paid? do
-      check :paid_date, presence: true
-      check :payment_method, presence: true
-      validate_order :paid_date, :gteq, :invoice_date
-    end
-
-    # Business rules
-    validate_business_rule :valid_customer
-    validate_business_rule :within_customer_credit_limit
-    validate_business_rule :line_items_match_subtotal
-
-    # Validation groups
-    validation_group :basic_info, [:invoice_number, :invoice_date, :customer_id]
-    validation_group :amounts, [:subtotal, :tax_rate, :tax_amount, :total]
-    validation_group :payment, [:due_date, :payment_terms]
-  end
-
-  def has_line_items
-    if line_items.empty?
-      errors.add(:line_items, "invoice must have at least one line item")
-    end
-  end
-
-  def correct_tax_calculation
-    return if tax_rate.blank? || subtotal.blank?
-
-    expected_tax = (subtotal * tax_rate).round(2)
-    actual_tax = tax_amount || 0
-
-    if (expected_tax - actual_tax).abs > 0.01  # Allow 1 cent rounding
-      errors.add(:tax_amount, "should be #{expected_tax} (#{tax_rate * 100}% of #{subtotal})")
-    end
-  end
-
-  def valid_customer
-    return if customer_id.blank?
-
-    unless Customer.active.exists?(id: customer_id)
-      errors.add(:customer_id, "must be an active customer")
-    end
-
-    if customer && customer.blocked?
-      errors.add(:customer_id, "is currently blocked from new invoices")
-    end
-  end
-
-  def within_customer_credit_limit
-    return if customer.blank? || total.blank?
-    return if is_paid?  # Already paid invoices don't count
-
-    outstanding = customer.invoices.where(status: %w[sent overdue]).sum(:total)
-    new_total = outstanding + total
-
-    if new_total > customer.credit_limit
-      errors.add(:total, "would exceed customer credit limit (outstanding: #{outstanding}, limit: #{customer.credit_limit})")
-    end
-  end
-
-  def line_items_match_subtotal
-    return if line_items.empty?
-
-    calculated_subtotal = line_items.sum { |item| item.quantity * item.unit_price }
-
-    if (calculated_subtotal - subtotal.to_f).abs > 0.01
-      errors.add(:subtotal, "should match sum of line items (#{calculated_subtotal})")
-    end
-  end
-end
-
-# Usage Examples
-
-# 1. Create draft invoice (minimal validation)
-invoice = Invoice.new(
-  invoice_number: "INV-2025-001",
-  invoice_date: Date.current,
-  customer: customer,
-  status: "draft"
-)
-invoice.line_items.build(description: "Consulting", quantity: 10, unit_price: 150.00)
-invoice.subtotal = 1500.00
-invoice.total = 1500.00
-invoice.valid?  # => true (draft doesn't require due_date, payment_terms)
-
-# 2. Validate specific groups
-invoice.valid?(:basic_info)  # => true
-invoice.valid?(:amounts)  # => true
-invoice.valid?(:payment)  # => false (due_date missing)
-
-# 3. Send invoice (requires more fields)
-invoice.status = "sent"
-invoice.valid?  # => false
-invoice.errors[:due_date]  # => ["can't be blank"]
-invoice.errors[:payment_terms]  # => ["can't be blank"]
-
-invoice.due_date = 30.days.from_now
-invoice.payment_terms = "Net 30"
-invoice.valid?  # => true
-
-# 4. Tax calculations
-invoice.tax_rate = 0.08
-invoice.tax_amount = 120.00
-invoice.total = 1620.00
-invoice.valid?  # => true
-
-invoice.tax_amount = 100.00  # Wrong amount
-invoice.valid?  # => false
-invoice.errors[:tax_amount]  # => ["should be 120.0 (8.0% of 1500.0)"]
-
-# 5. Mark as paid
-invoice.status = "paid"
-invoice.valid?  # => false
-invoice.errors[:paid_date]  # => ["can't be blank"]
-invoice.errors[:payment_method]  # => ["can't be blank"]
-
-invoice.paid_date = Date.current
-invoice.payment_method = "credit_card"
-invoice.valid?  # => true
-
-# 6. Credit limit check
-high_value_invoice = Invoice.new(
-  customer: small_customer,  # credit_limit: 5000
-  total: 6000.00,
-  # ... other fields
-)
-high_value_invoice.valid?  # => false
-high_value_invoice.errors[:total]  # => ["would exceed customer credit limit..."]
-```
-
-## Example 5: Loan Application with Stepped Validation
-
-Financial loan application with progressive validation, credit checks, and approval rules.
-
-```ruby
-class LoanApplication < ApplicationRecord
-  include BetterModel
-
-  belongs_to :applicant, class_name: 'User'
-  belongs_to :co_applicant, class_name: 'User', optional: true
-
-  # Statusable integration
-  is :draft, -> { status == "draft" }
-  is :submitted, -> { status == "submitted" }
-  is :under_review, -> { status == "under_review" }
-  is :approved, -> { status == "approved" }
-  is :rejected, -> { status == "rejected" }
-  is :requires_co_applicant, -> { loan_amount > 100_000 && employment_years < 3 }
-  is :high_risk, -> { credit_score.present? && credit_score < 620 }
-
-  validatable do
-    # Step 1: Personal Information
-    check :first_name, :last_name, :date_of_birth, :ssn, presence: true
-    check :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
+    # Step 3: Contact
     check :phone, presence: true, format: { with: /\A\d{10}\z/ }
+    check :address, :city, :zip_code, presence: true
 
-    # Age requirement
-    validate_business_rule :minimum_age_requirement
-
-    # Step 2: Employment & Income
-    check :employer_name, :job_title, :employment_years, presence: true
-    check :annual_income, presence: true, numericality: { greater_than: 0 }
-    check :employment_years, numericality: { greater_than_or_equal_to: 0 }
-
-    # Income validation
-    validate_business_rule :sufficient_income_for_loan
-
-    # Step 3: Loan Details
-    check :loan_amount, :loan_purpose, :loan_term_months, presence: true
-    check :loan_amount, numericality: { greater_than: 1000, less_than_or_equal_to: 500_000 }
-    check :loan_term_months, numericality: { in: [12, 24, 36, 48, 60, 84, 120] }
-
-    # Step 4: Credit Information
-    check :credit_score, presence: true, numericality: { in: 300..850 }
-    check :bankruptcy_history, inclusion: { in: [true, false] }
-
-    # Conditional: Co-applicant required for large loans with short employment
-    validate_if :is_requires_co_applicant? do
-      check :co_applicant_id, presence: true
-    end
-
-    # Conditional: Additional documentation for high-risk applicants
-    validate_if :is_high_risk? do
-      check :additional_income_proof, presence: true
-      check :employer_verification_letter, presence: true
-    end
-
-    # Conditional: Bankruptcy disclosures
-    validate_if -> { bankruptcy_history == true } do
-      check :bankruptcy_discharge_date, presence: true
-      check :bankruptcy_type, presence: true
-      validate_order :bankruptcy_discharge_date, :before, -> { Date.current }
-    end
-
-    # Submitted applications must have complete info
-    validate_unless :is_draft? do
-      check :property_address, :property_value, presence: true
-      check :property_value, numericality: { greater_than: 0 }
-      validate_order :loan_amount, :lteq, -> { property_value * 0.95 }
-    end
-
-    # Under review applications need credit check
-    validate_if :is_under_review? do
-      check :credit_check_completed_at, presence: true
-      check :debt_to_income_ratio, presence: true
-      validate_business_rule :acceptable_debt_to_income
-    end
-
-    # Business rules
-    validate_business_rule :loan_to_value_ratio, unless: :is_draft?
-    validate_business_rule :no_recent_bankruptcy
-    validate_business_rule :employment_stability, on: :submit
-
-    # Validation groups for multi-step form
-    validation_group :personal_info, [:first_name, :last_name, :date_of_birth, :email, :phone, :ssn]
-    validation_group :employment, [:employer_name, :job_title, :employment_years, :annual_income]
-    validation_group :loan_details, [:loan_amount, :loan_purpose, :loan_term_months]
-    validation_group :credit_info, [:credit_score, :bankruptcy_history]
-    validation_group :property_info, [:property_address, :property_value]
-  end
-
-  # Business rule implementations
-  def minimum_age_requirement
-    return if date_of_birth.blank?
-
-    age = ((Date.current - date_of_birth) / 365.25).floor
-    if age < 18
-      errors.add(:date_of_birth, "applicant must be at least 18 years old")
-    end
-  end
-
-  def sufficient_income_for_loan
-    return if loan_amount.blank? || annual_income.blank?
-
-    monthly_income = annual_income / 12.0
-    estimated_monthly_payment = calculate_monthly_payment
-
-    if estimated_monthly_payment > monthly_income * 0.43
-      errors.add(:annual_income, "insufficient for requested loan amount (max 43% DTI)")
-    end
-  end
-
-  def acceptable_debt_to_income
-    return if debt_to_income_ratio.blank?
-
-    if debt_to_income_ratio > 0.50
-      errors.add(:debt_to_income_ratio, "too high (maximum 50%)")
-    end
-  end
-
-  def loan_to_value_ratio
-    return if loan_amount.blank? || property_value.blank?
-
-    ltv = (loan_amount.to_f / property_value * 100).round(2)
-
-    if ltv > 95
-      errors.add(:loan_amount, "exceeds 95% of property value (LTV: #{ltv}%)")
-    end
-  end
-
-  def no_recent_bankruptcy
-    return unless bankruptcy_history?
-    return if bankruptcy_discharge_date.blank?
-
-    years_since = ((Date.current - bankruptcy_discharge_date) / 365.25).floor
-
-    min_years = bankruptcy_type == "Chapter 7" ? 4 : 2
-
-    if years_since < min_years
-      errors.add(:base, "bankruptcy must be discharged at least #{min_years} years ago")
-    end
-  end
-
-  def employment_stability
-    return if employment_years.blank?
-
-    if employment_years < 2 && loan_amount > 200_000
-      errors.add(:employment_years, "minimum 2 years required for loans over $200k")
-    end
-  end
-
-  def calculate_monthly_payment
-    return 0 if loan_amount.blank? || loan_term_months.blank?
-
-    # Simple interest calculation (real-world would use amortization)
-    interest_rate = 0.05  # 5% APR
-    monthly_rate = interest_rate / 12
-    ((loan_amount * monthly_rate) / (1 - (1 + monthly_rate)**-loan_term_months)).round(2)
+    # Groups
+    validation_group :account, [:email, :password, :password_confirmation]
+    validation_group :profile, [:first_name, :last_name, :date_of_birth]
+    validation_group :contact, [:phone, :address, :city, :zip_code]
   end
 end
-
-# Usage Examples
-
-# 1. Step-by-step form validation
-application = LoanApplication.new
-
-# Step 1: Personal info
-application.first_name = "John"
-application.last_name = "Doe"
-application.date_of_birth = 30.years.ago.to_date
-application.email = "john@example.com"
-application.phone = "5551234567"
-application.ssn = "123-45-6789"
-
-application.valid?(:personal_info)  # => true
-
-# Step 2: Employment
-application.employer_name = "Tech Corp"
-application.job_title = "Software Engineer"
-application.employment_years = 5
-application.annual_income = 120_000
-
-application.valid?(:employment)  # => true
-
-# Step 3: Loan details
-application.loan_amount = 250_000
-application.loan_purpose = "home_purchase"
-application.loan_term_months = 360  # 30 years
-
-application.valid?(:loan_details)  # => true (not enough income)
-application.errors[:annual_income]  # => ["insufficient for requested loan amount..."]
-
-# Adjust loan amount
-application.loan_amount = 150_000
-application.valid?(:loan_details)  # => true
-
-# Step 4: Credit info
-application.credit_score = 720
-application.bankruptcy_history = false
-
-application.valid?(:credit_info)  # => true
-
-# 2. Draft vs Submitted validation
-application.status = "draft"
-application.valid?  # => false (still missing property info)
-
-# Property info not required for drafts
-application.valid?  # Can save draft without property info
-
-application.status = "submitted"
-application.valid?  # => false (now property info required)
-
-application.property_address = "123 Main St"
-application.property_value = 200_000
-application.valid?  # => true
-
-# 3. Co-applicant requirement
-large_loan = LoanApplication.new(
-  loan_amount: 350_000,
-  employment_years: 1,  # Less than 3 years
-  # ... other required fields
-)
-
-large_loan.is_requires_co_applicant?  # => true
-large_loan.valid?  # => false
-large_loan.errors[:co_applicant_id]  # => ["can't be blank"]
-
-large_loan.co_applicant = User.find(2)
-large_loan.valid?  # => true
-
-# 4. High-risk applicant requirements
-high_risk = LoanApplication.new(
-  credit_score: 580,  # Below 620 threshold
-  # ... other required fields
-)
-
-high_risk.is_high_risk?  # => true
-high_risk.valid?  # => false
-high_risk.errors[:additional_income_proof]  # => ["can't be blank"]
-high_risk.errors[:employer_verification_letter]  # => ["can't be blank"]
-
-# 5. Bankruptcy disclosure
-with_bankruptcy = LoanApplication.new(
-  bankruptcy_history: true,
-  # ... other required fields
-)
-
-with_bankruptcy.valid?  # => false
-with_bankruptcy.errors[:bankruptcy_discharge_date]  # => ["can't be blank"]
-with_bankruptcy.errors[:bankruptcy_type]  # => ["can't be blank"]
-
-with_bankruptcy.bankruptcy_type = "Chapter 7"
-with_bankruptcy.bankruptcy_discharge_date = 3.years.ago.to_date
-with_bankruptcy.valid?  # => false
-with_bankruptcy.errors[:base]  # => ["bankruptcy must be discharged at least 4 years ago"]
-
-# 6. Loan-to-value validation
-application = LoanApplication.new(
-  loan_amount: 200_000,
-  property_value: 200_000,
-  status: "submitted",
-  # ... other required fields
-)
-
-application.valid?  # => false
-application.errors[:loan_amount]  # => ["exceeds 95% of property value (LTV: 100%)"]
-
-application.loan_amount = 190_000  # 95% LTV
-application.valid?  # => true
-
-# 7. Review stage validation
-application.status = "under_review"
-application.valid?  # => false
-application.errors[:credit_check_completed_at]  # => ["can't be blank"]
-application.errors[:debt_to_income_ratio]  # => ["can't be blank"]
-
-application.credit_check_completed_at = Time.current
-application.debt_to_income_ratio = 0.38
-application.valid?  # => true
 ```
 
-## Example 6: Healthcare Patient Registration
-
-Medical patient intake with insurance verification, medical history, and consent validations.
+### Example 3: Event Management
 
 ```ruby
-class PatientRegistration < ApplicationRecord
+class Event < ApplicationRecord
   include BetterModel
 
-  belongs_to :patient, class_name: 'User'
-  has_many :emergency_contacts, dependent: :destroy
-  has_many :insurance_policies, dependent: :destroy
-  has_many :medical_conditions, dependent: :destroy
-  has_many :allergies, dependent: :destroy
+  is :upcoming, -> { starts_at > Time.current }
+  is :ongoing, -> { starts_at <= Time.current && ends_at >= Time.current }
+  is :past, -> { ends_at < Time.current }
 
-  # Statusable
-  is :incomplete, -> { completed_at.blank? }
-  is :complete, -> { completed_at.present? }
-  is :verified, -> { insurance_verified_at.present? }
-  is :minor, -> { patient_age < 18 }
-  is :requires_guardian, -> { patient_age < 18 }
+  register_complex_validation :date_consistency do
+    return if starts_at.blank? || ends_at.blank?
+
+    if starts_at >= ends_at
+      errors.add(:starts_at, "must be before end date")
+    end
+
+    if starts_at < Time.current
+      errors.add(:starts_at, "cannot be in the past")
+    end
+
+    duration = ends_at - starts_at
+    if duration > 30.days
+      errors.add(:ends_at, "event cannot last more than 30 days")
+    end
+  end
+
+  register_complex_validation :capacity_limits do
+    return if max_attendees.blank?
+
+    if registered_count > max_attendees
+      errors.add(:registered_count, "exceeds capacity (#{max_attendees})")
+    end
+
+    if max_attendees > venue.capacity
+      errors.add(:max_attendees, "exceeds venue capacity (#{venue.capacity})")
+    end
+  end
 
   validatable do
-    # Basic patient information
-    check :first_name, :last_name, :date_of_birth, :gender, presence: true
-    check :phone, :email, presence: true
-    check :phone, format: { with: /\A\d{10}\z/ }
-    check :email, format: { with: URI::MailTo::EMAIL_REGEXP }
+    check :title, :description, presence: true
+    check :title, length: { minimum: 5, maximum: 255 }
+    check :starts_at, :ends_at, presence: true
+    check :max_attendees, numericality: { greater_than: 0 }
 
-    # Address information
-    check :street_address, :city, :state, :zip_code, presence: true
-    check :zip_code, format: { with: /\A\d{5}(-\d{4})?\z/ }
+    check_complex :date_consistency
+    check_complex :capacity_limits
 
-    # Guardian required for minors
-    validate_if :is_minor? do
-      check :guardian_name, :guardian_relationship, :guardian_phone, presence: true
-      check :guardian_consent_signature, presence: true
-      check :guardian_consent_date, presence: true
-      validate_order :guardian_consent_date, :before, -> { Date.current + 1.day }
-    end
-
-    # Insurance information (optional but validated if provided)
-    validate_if -> { insurance_policies.any? } do
-      validate_business_rule :valid_insurance_information
-    end
-
-    # Emergency contacts (at least one required)
-    validate_business_rule :has_emergency_contacts
-
-    # Medical history
-    check :primary_care_physician, presence: true
-    check :pharmacy_name, :pharmacy_phone, presence: true
-
-    # Allergies and conditions
-    validate_business_rule :documented_allergies
-    validate_business_rule :documented_medical_conditions
-
-    # Consent forms
-    check :hipaa_consent, :treatment_consent, inclusion: { in: [true] }
-    check :hipaa_consent_date, :treatment_consent_date, presence: true
-    validate_order :hipaa_consent_date, :before, -> { Date.current + 1.day }
-    validate_order :treatment_consent_date, :before, -> { Date.current + 1.day }
-
-    # Privacy preferences
-    check :privacy_level, inclusion: { in: %w[full partial minimal] }
-
-    # Medication list
-    validate_if -> { taking_medications? } do
-      validate_business_rule :complete_medication_list
-    end
-
-    # Complete registration requirements
-    validate_if :is_complete? do
-      check :completed_by, presence: true
-      check :completed_at, presence: true
-    end
-
-    # Business rules
-    validate_business_rule :patient_age_valid
-    validate_business_rule :valid_emergency_contact_relationships
-    validate_business_rule :insurance_policy_dates, if: -> { insurance_policies.any? }
-
-    # Validation groups
-    validation_group :basic_info, [:first_name, :last_name, :date_of_birth, :gender, :phone, :email]
-    validation_group :address, [:street_address, :city, :state, :zip_code]
-    validation_group :insurance, [:insurance_policies]
-    validation_group :emergency_contacts, [:emergency_contacts]
-    validation_group :medical_history, [:primary_care_physician, :pharmacy_name, :pharmacy_phone]
-    validation_group :consent_forms, [:hipaa_consent, :treatment_consent, :hipaa_consent_date, :treatment_consent_date]
-  end
-
-  # Helper methods
-  def patient_age
-    return nil if date_of_birth.blank?
-    ((Date.current - date_of_birth) / 365.25).floor
-  end
-
-  # Business rule implementations
-  def patient_age_valid
-    return if date_of_birth.blank?
-
-    age = patient_age
-
-    if age < 0
-      errors.add(:date_of_birth, "cannot be in the future")
-    elsif age > 120
-      errors.add(:date_of_birth, "appears to be invalid (age > 120)")
-    end
-  end
-
-  def has_emergency_contacts
-    if emergency_contacts.empty?
-      errors.add(:emergency_contacts, "must have at least one emergency contact")
-    end
-  end
-
-  def valid_emergency_contact_relationships
-    emergency_contacts.each_with_index do |contact, index|
-      if contact.relationship.blank?
-        errors.add(:emergency_contacts, "contact #{index + 1} must have a relationship specified")
-      end
-
-      if contact.phone.blank?
-        errors.add(:emergency_contacts, "contact #{index + 1} must have a phone number")
-      end
-    end
-  end
-
-  def valid_insurance_information
-    insurance_policies.each_with_index do |policy, index|
-      if policy.policy_number.blank?
-        errors.add(:insurance_policies, "policy #{index + 1} must have a policy number")
-      end
-
-      if policy.group_number.blank? && policy.requires_group_number?
-        errors.add(:insurance_policies, "policy #{index + 1} must have a group number")
-      end
-
-      if policy.expiration_date.present? && policy.expiration_date < Date.current
-        errors.add(:insurance_policies, "policy #{index + 1} has expired")
-      end
-    end
-  end
-
-  def insurance_policy_dates
-    insurance_policies.each_with_index do |policy, index|
-      if policy.effective_date.present? && policy.expiration_date.present?
-        if policy.effective_date > policy.expiration_date
-          errors.add(:insurance_policies, "policy #{index + 1} effective date must be before expiration date")
-        end
-      end
-    end
-  end
-
-  def documented_allergies
-    if allergies_status == "has_allergies" && allergies.empty?
-      errors.add(:allergies, "must be documented when patient reports having allergies")
-    end
-
-    if allergies_status == "no_allergies" && allergies.any?
-      errors.add(:allergies, "should not be present when patient reports no allergies")
-    end
-  end
-
-  def documented_medical_conditions
-    if has_medical_conditions? && medical_conditions.empty?
-      errors.add(:medical_conditions, "must be documented when patient reports having conditions")
-    end
-  end
-
-  def complete_medication_list
-    if current_medications.blank?
-      errors.add(:current_medications, "must be documented when patient is taking medications")
-    end
-
-    medications_list.each_with_index do |med, index|
-      if med[:name].blank?
-        errors.add(:current_medications, "medication #{index + 1} must have a name")
-      end
-
-      if med[:dosage].blank?
-        errors.add(:current_medications, "medication #{index + 1} must have a dosage")
-      end
-    end
+    # Published events need venue
+    check :venue_id, :address, :city, presence: true, if: :published?
   end
 end
-
-# Usage Examples
-
-# 1. Step-by-step registration
-registration = PatientRegistration.new(patient: current_user)
-
-# Step 1: Basic info
-registration.first_name = "Jane"
-registration.last_name = "Smith"
-registration.date_of_birth = 25.years.ago.to_date
-registration.gender = "female"
-registration.phone = "5559876543"
-registration.email = "jane@example.com"
-
-registration.valid?(:basic_info)  # => true
-
-# Step 2: Address
-registration.street_address = "456 Oak Street"
-registration.city = "Springfield"
-registration.state = "IL"
-registration.zip_code = "62701"
-
-registration.valid?(:address)  # => true
-
-# Step 3: Emergency contacts
-registration.emergency_contacts.build(
-  name: "John Smith",
-  relationship: "spouse",
-  phone: "5551112222"
-)
-
-registration.valid?(:emergency_contacts)  # => true
-
-# Step 4: Medical history
-registration.primary_care_physician = "Dr. Johnson"
-registration.pharmacy_name = "Main Street Pharmacy"
-registration.pharmacy_phone = "5553334444"
-
-registration.valid?(:medical_history)  # => true
-
-# Step 5: Consent forms
-registration.hipaa_consent = true
-registration.hipaa_consent_date = Date.current
-registration.treatment_consent = true
-registration.treatment_consent_date = Date.current
-registration.privacy_level = "full"
-
-registration.valid?(:consent_forms)  # => true
-
-# 2. Minor patient registration
-minor = PatientRegistration.new(
-  first_name: "Tommy",
-  last_name: "Lee",
-  date_of_birth: 10.years.ago.to_date,
-  # ... other fields
-)
-
-minor.is_minor?  # => true
-minor.is_requires_guardian?  # => true
-
-minor.valid?  # => false
-minor.errors[:guardian_name]  # => ["can't be blank"]
-minor.errors[:guardian_consent_signature]  # => ["can't be blank"]
-
-minor.guardian_name = "Sarah Lee"
-minor.guardian_relationship = "mother"
-minor.guardian_phone = "5557778888"
-minor.guardian_consent_signature = "Sarah Lee"
-minor.guardian_consent_date = Date.current
-
-minor.valid?  # => true
-
-# 3. Insurance validation
-registration.insurance_policies.build(
-  policy_number: "ABC123456",
-  group_number: "GRP789",
-  carrier_name: "Blue Cross",
-  effective_date: Date.current,
-  expiration_date: 1.year.from_now
-)
-
-registration.valid?(:insurance)  # => true
-
-# Expired insurance
-registration.insurance_policies.build(
-  policy_number: "XYZ789",
-  expiration_date: 1.month.ago
-)
-
-registration.valid?  # => false
-registration.errors[:insurance_policies]  # => ["policy 2 has expired"]
-
-# 4. Allergy documentation
-registration.allergies_status = "has_allergies"
-registration.valid?  # => false
-registration.errors[:allergies]  # => ["must be documented when patient reports having allergies"]
-
-registration.allergies.build(
-  allergen: "Penicillin",
-  reaction: "Hives",
-  severity: "moderate"
-)
-registration.valid?  # => true
-
-# 5. Medication list validation
-registration.taking_medications = true
-registration.valid?  # => false
-registration.errors[:current_medications]  # => ["must be documented when patient is taking medications"]
-
-registration.current_medications = [
-  { name: "Lisinopril", dosage: "10mg", frequency: "once daily" },
-  { name: "Metformin", dosage: "500mg", frequency: "twice daily" }
-]
-registration.valid?  # => true
-
-# 6. Complete registration
-registration.completed_by = current_staff_member.id
-registration.completed_at = Time.current
-registration.valid?  # => true
-
-registration.save!
-# => Patient registration complete and saved
 ```
 
 ---
@@ -1806,194 +808,157 @@ registration.save!
 
 ### 1. Enable Validatable Explicitly
 
-Always use the `validatable do...end` block to activate the concern:
+Always use the `validatable do...end` block:
 
 ```ruby
-# Good - Validatable active
+# Good
 validatable do
   check :title, presence: true
 end
 
 # Bad - Validatable not active
-check :title, presence: true  # Standard Rails validation
+validates :title, presence: true
 ```
 
-### 2. Combine with Statusable for Status-based Logic
-
-Use Statusable predicates in conditional validations:
+### 2. Use Complex Validations for Cross-field Logic
 
 ```ruby
-# Good - readable, maintainable
-is :published, -> { status == "published" }
-
-validatable do
-  validate_if :is_published? do
-    check :published_at, presence: true
-  end
+# Good - reusable and clear
+register_complex_validation :valid_date_range do
+  return if starts_at.blank? || ends_at.blank?
+  errors.add(:starts_at, "must be before end date") if starts_at >= ends_at
 end
 
-# Avoid - inline conditions harder to test and reuse
 validatable do
-  validate_if -> { status == "published" } do
-    check :published_at, presence: true
-  end
+  check_complex :valid_date_range
 end
 ```
 
-### 3. Use Validation Groups for Multi-step Forms
-
-Define clear, semantic group names:
+### 3. Always Handle Nil in Complex Validations
 
 ```ruby
-# Good - descriptive names
+# Good - explicit nil handling
+register_complex_validation :valid_dates do
+  return if starts_at.blank? || ends_at.blank?
+  # validation logic
+end
+
+# Avoid - will crash on nil
+register_complex_validation :valid_dates do
+  errors.add(:starts_at, "invalid") if starts_at >= ends_at
+end
+```
+
+### 4. Use Semantic Validation Group Names
+
+```ruby
+# Good
 validation_group :account_setup, [:email, :password]
 validation_group :personal_info, [:first_name, :last_name]
-validation_group :contact_details, [:phone, :address]
 
-# Avoid - generic names
+# Avoid
 validation_group :step1, [:email, :password]
 validation_group :step2, [:first_name, :last_name]
 ```
 
-### 4. Keep Business Rules Focused
-
-Each business rule should validate one concern:
+### 5. Keep Complex Validations Focused
 
 ```ruby
 # Good - single responsibility
-def valid_category
-  return if category_id.blank?
-  errors.add(:category_id, "invalid") unless Category.exists?(id: category_id)
-end
-
-def valid_price_range
-  return if price.blank? || max_price.blank?
-  errors.add(:price, "exceeds maximum") if price > max_price
-end
+register_complex_validation :valid_dates do ... end
+register_complex_validation :capacity_check do ... end
 
 # Avoid - multiple responsibilities
-def valid_product
-  errors.add(:category_id, "invalid") unless Category.exists?(id: category_id)
-  errors.add(:price, "exceeds maximum") if price > max_price
-  # ... many more validations
+register_complex_validation :validate_everything do
+  # 50 lines of various checks
 end
 ```
 
-### 5. Use Cross-field Validations for Related Fields
-
-Prefer `validate_order` over custom validations for comparisons:
+### 6. Use Rails Options for Simple Conditionals
 
 ```ruby
-# Good - declarative
-validate_order :starts_at, :before, :ends_at
+# Good - simple conditional
+check :published_at, presence: true, if: :published?
 
-# Avoid - custom validator for simple comparison
-validate_business_rule :starts_before_ends
-
-def starts_before_ends
-  return if starts_at.blank? || ends_at.blank?
-  errors.add(:starts_at, "must be before ends_at") if starts_at >= ends_at
+# Avoid - overly complex for simple case
+register_complex_validation :published_at_check do
+  return unless published?
+  errors.add(:published_at, "can't be blank") if published_at.blank?
 end
 ```
 
-### 6. Handle Nil Values Explicitly
-
-Use presence validations before order validations:
+### 7. Combine with Standard Rails Validations
 
 ```ruby
-# Good - ensures fields exist first
-check :starts_at, :ends_at, presence: true
-validate_order :starts_at, :before, :ends_at
+# You can mix standard Rails validations with Validatable
+validates :user, presence: true
+validates :title, uniqueness: { scope: :user_id }
 
-# Avoid - order validation silently skips nil values
-validate_order :starts_at, :before, :ends_at
-```
-
-### 7. Organize Validations Logically
-
-Group related validations together:
-
-```ruby
 validatable do
-  # Basic required fields
-  check :title, :content, presence: true
+  check :content, presence: true, if: :published?
+  check_complex :content_quality
+end
+```
 
-  # Format validations
-  check :email, format: { with: URI::MailTo::EMAIL_REGEXP }
-  check :slug, format: { with: /\A[a-z0-9-]+\z/ }
+### 8. Test Validations Thoroughly
 
-  # Numeric validations
-  check :view_count, numericality: { greater_than_or_equal_to: 0 }
+```ruby
+RSpec.describe Product, type: :model do
+  describe "validations" do
+    it "requires name and price" do
+      product = Product.new
+      expect(product).not_to be_valid
+      expect(product.errors[:name]).to include("can't be blank")
+      expect(product.errors[:price]).to include("can't be blank")
+    end
 
-  # Conditional validations
-  validate_if :is_published? do
-    check :published_at, presence: true
+    describe "pricing rules" do
+      it "requires sale_price < price" do
+        product = Product.new(price: 100, sale_price: 120)
+        expect(product).not_to be_valid
+        expect(product.errors[:sale_price]).to include("must be less than regular price")
+      end
+    end
   end
-
-  # Cross-field validations
-  validate_order :starts_at, :before, :ends_at
-
-  # Business rules
-  validate_business_rule :valid_category
-  validate_business_rule :valid_author
 end
 ```
 
-### 8. Test Validation Groups Independently
+---
 
-Write tests for each validation group:
+## Error Handling
+
+### ValidatableNotEnabledError
+
+Raised when calling validation group methods without enabling Validatable:
 
 ```ruby
-test "account group requires email and password" do
-  user = User.new
-  assert_not user.valid?(:account)
-  assert user.errors_for_group(:account)[:email].any?
-  assert user.errors_for_group(:account)[:password].any?
-end
-
-test "account group passes with valid email and password" do
-  user = User.new(email: "test@example.com", password: "secret123")
-  assert user.valid?(:account)
-end
+user.errors_for_group(:step1)
+# => BetterModel::ValidatableNotEnabledError: Validatable is not enabled. Add 'validatable do...end' to your model.
 ```
 
-### 9. Document Complex Business Rules
-
-Add comments explaining complex validation logic:
+### ArgumentError for Unknown Complex Validation
 
 ```ruby
 validatable do
-  # Users must be 18+ to register
-  # Date of birth validated against current date minus 18 years
-  validate_business_rule :minimum_age_requirement
-
-  # Account status transitions: draft → active → suspended → deleted
-  # Transitions can only move forward, never backward
-  validate_business_rule :valid_status_transition, on: :update
+  check_complex :nonexistent
 end
+# => ArgumentError: Unknown complex validation: nonexistent. Use register_complex_validation to define it first.
 ```
 
-### 10. Prefer Declarative Over Procedural
+---
 
-Use Validatable's DSL instead of custom validation methods when possible:
+## Summary
 
-```ruby
-# Good - declarative
-validatable do
-  check :title, presence: true, length: { minimum: 5 }
-  validate_order :starts_at, :before, :ends_at
-end
+Validatable provides **3 core features**:
 
-# Avoid - procedural custom methods for simple cases
-validate_business_rule :title_present_and_long_enough
-validate_business_rule :starts_before_ends
+1. **`check`** - Basic validations with declarative syntax
+2. **`register_complex_validation` + `check_complex`** - Reusable validation blocks for complex logic
+3. **`validation_group`** - Partial validation for multi-step forms
 
-def title_present_and_long_enough
-  errors.add(:title, "can't be blank") if title.blank?
-  errors.add(:title, "too short") if title && title.length < 5
-end
+All features work seamlessly with:
+- Rails conditional options (`if`, `unless`)
+- Rails validation contexts (`on: :create`, `on: :update`, custom contexts)
+- Statusable predicates
+- Standard Rails validations
 
-def starts_before_ends
-  errors.add(:starts_at, "must be before ends_at") if starts_at >= ends_at
-end
-```
+**Thread-safe**, **opt-in**, and **fully compatible** with ActiveModel validations.

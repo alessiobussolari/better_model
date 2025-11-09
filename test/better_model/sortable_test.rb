@@ -584,5 +584,357 @@ module BetterModel
       # Non-NULL values should be sorted descending
       assert results[1][1] > results[2][1], "Non-NULL values should be sorted descending"
     end
+
+    # ========================================
+    # COMPLEX SORT TESTS
+    # ========================================
+
+    test "complex_sorts_registry should be initialized as Hash" do
+      assert_instance_of Hash, Article.complex_sorts_registry
+    end
+
+    test "register_complex_sort should require a block" do
+      assert_raises(ArgumentError, /Block required/) do
+        Class.new(ApplicationRecord) do
+          self.table_name = "articles"
+          include BetterModel::Sortable
+
+          register_complex_sort :by_something
+        end
+      end
+    end
+
+    test "register_complex_sort creates a scope with sort_ prefix" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Sortable
+
+        register_complex_sort :by_popularity do
+          order(view_count: :desc, published_at: :desc)
+        end
+      end
+
+      assert test_class.respond_to?(:sort_by_popularity)
+    end
+
+    test "register_complex_sort registers in complex_sorts_registry" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Sortable
+
+        register_complex_sort :by_popularity do
+          order(view_count: :desc)
+        end
+      end
+
+      assert test_class.complex_sort?(:by_popularity)
+      assert test_class.complex_sorts_registry.key?(:by_popularity)
+    end
+
+    test "register_complex_sort registers in sortable_scopes" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Sortable
+
+        register_complex_sort :by_popularity do
+          order(view_count: :desc)
+        end
+      end
+
+      assert test_class.sortable_scope?(:sort_by_popularity)
+    end
+
+    test "complex_sort? returns false for non-existent sort" do
+      assert_not Article.complex_sort?(:nonexistent)
+    end
+
+    test "complex sort with multi-field ordering works" do
+      Article.create!(title: "A", view_count: 100, published_at: 3.days.ago)
+      Article.create!(title: "B", view_count: 100, published_at: 1.day.ago)
+      Article.create!(title: "C", view_count: 50, published_at: 2.days.ago)
+
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Sortable
+
+        register_complex_sort :by_popularity do
+          order(view_count: :desc, published_at: :desc)
+        end
+      end
+
+      results = test_class.sort_by_popularity.pluck(:title)
+
+      # Should order by view_count DESC first, then published_at DESC
+      assert_equal "B", results[0] # 100 views, 1 day ago (most recent with 100)
+      assert_equal "A", results[1] # 100 views, 3 days ago
+      assert_equal "C", results[2] # 50 views
+    end
+
+    test "complex sort with parameters works" do
+      Article.create!(title: "Rails Tutorial", view_count: 100)
+      Article.create!(title: "Python Guide", view_count: 50)
+      Article.create!(title: "Rails Advanced", view_count: 75)
+
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Sortable
+
+        register_complex_sort :by_relevance do |keyword|
+          order(Arel.sql("CASE WHEN title LIKE '%#{sanitize_sql_like(keyword)}%' THEN 0 ELSE 1 END, view_count DESC"))
+        end
+      end
+
+      results = test_class.sort_by_relevance("Rails").pluck(:title)
+
+      # "Rails" articles should come first, ordered by view_count DESC
+      assert_equal "Rails Tutorial", results[0] # matches + highest views
+      assert_equal "Rails Advanced", results[1] # matches + lower views
+      assert_equal "Python Guide", results[2]   # no match
+    end
+
+    test "complex sort with custom SQL works" do
+      Article.create!(title: "zzz", status: "published", view_count: 100)
+      Article.create!(title: "aaa", status: "draft", view_count: 50)
+      Article.create!(title: "mmm", status: "published", view_count: 75)
+
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Sortable
+
+        register_complex_sort :published_first do
+          order(Arel.sql("CASE WHEN status = 'published' THEN 0 ELSE 1 END, view_count DESC"))
+        end
+      end
+
+      results = test_class.sort_published_first.pluck(:title)
+
+      # Published articles first, ordered by view_count DESC
+      assert_equal "zzz", results[0] # published, 100 views
+      assert_equal "mmm", results[1] # published, 75 views
+      assert_equal "aaa", results[2] # draft, 50 views
+    end
+
+    test "multiple complex sorts can be registered" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Sortable
+
+        register_complex_sort :by_popularity do
+          order(view_count: :desc)
+        end
+
+        register_complex_sort :by_recency do
+          order(published_at: :desc)
+        end
+      end
+
+      assert test_class.complex_sort?(:by_popularity)
+      assert test_class.complex_sort?(:by_recency)
+      assert test_class.respond_to?(:sort_by_popularity)
+      assert test_class.respond_to?(:sort_by_recency)
+    end
+
+    test "complex sort can be chained with other scopes" do
+      Article.create!(title: "A", status: "published", view_count: 100)
+      Article.create!(title: "B", status: "draft", view_count: 200)
+      Article.create!(title: "C", status: "published", view_count: 50)
+
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Sortable
+
+        register_complex_sort :by_views do
+          order(view_count: :desc)
+        end
+
+        scope :published, -> { where(status: "published") }
+      end
+
+      results = test_class.published.sort_by_views.pluck(:title)
+
+      assert_equal ["A", "C"], results # Only published, ordered by views DESC
+    end
+
+    test "complex_sorts_registry is thread-safe (frozen)" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Sortable
+
+        register_complex_sort :by_popularity do
+          order(view_count: :desc)
+        end
+      end
+
+      registry = test_class.complex_sorts_registry
+      assert registry.frozen?, "Registry should be frozen for thread-safety"
+    end
+
+    test "complex sorts are inherited by subclasses" do
+      parent_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Sortable
+
+        register_complex_sort :parent_sort do
+          order(view_count: :desc)
+        end
+      end
+
+      child_class = Class.new(parent_class)
+
+      assert child_class.complex_sort?(:parent_sort)
+      assert child_class.respond_to?(:sort_parent_sort)
+    end
+
+    test "complex sorts generate valid SQL" do
+      Article.create!(title: "A", view_count: 100)
+      Article.create!(title: "B", view_count: 50)
+
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Sortable
+
+        register_complex_sort :by_views do
+          order(view_count: :desc)
+        end
+      end
+
+      # Should not raise SQL error
+      results = test_class.sort_by_views.to_a
+      assert_equal 2, results.count
+      assert_equal "A", results.first.title # Highest view_count first
+    end
+
+    test "complex sorts work with count and exists" do
+      Article.create!(title: "A", view_count: 100, status: "published")
+      Article.create!(title: "B", view_count: 50, status: "draft")
+
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Sortable
+
+        register_complex_sort :by_views do
+          order(view_count: :desc)
+        end
+      end
+
+      # Count should work
+      assert_equal 2, test_class.sort_by_views.count
+
+      # Exists should work
+      assert test_class.sort_by_views.exists?
+    end
+
+    test "complex sort with filtering and ordering" do
+      Article.create!(title: "A", status: "published", view_count: 100)
+      Article.create!(title: "B", status: "draft", view_count: 200)
+      Article.create!(title: "C", status: "published", view_count: 50)
+      Article.create!(title: "D", status: "published", view_count: 150)
+
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Sortable
+
+        register_complex_sort :published_by_popularity do
+          where(status: "published").order(view_count: :desc)
+        end
+      end
+
+      results = test_class.sort_published_by_popularity.pluck(:title)
+
+      # Should filter to published AND order by view_count DESC
+      assert_equal ["D", "A", "C"], results
+    end
+
+    test "complex sort can be combined with standard sort scopes" do
+      Article.create!(title: "AAA", view_count: 100, published_at: 3.days.ago)
+      Article.create!(title: "ZZZ", view_count: 100, published_at: 1.day.ago)
+      Article.create!(title: "MMM", view_count: 50, published_at: 2.days.ago)
+
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Sortable
+
+        sort :title
+
+        register_complex_sort :by_views_then_title do
+          order(view_count: :desc).order(title: :asc)
+        end
+      end
+
+      results = test_class.sort_by_views_then_title.pluck(:title)
+
+      # Should order by view_count DESC, then title ASC
+      assert_equal "AAA", results[0] # 100 views, "AAA" alphabetically first
+      assert_equal "ZZZ", results[1] # 100 views, "ZZZ" alphabetically last
+      assert_equal "MMM", results[2] # 50 views
+    end
+
+    # ========================================
+    # CONFIGURATION ERROR TESTS
+    # ========================================
+
+    test "ConfigurationError class exists" do
+      assert defined?(BetterModel::Errors::Sortable::ConfigurationError)
+    end
+
+    test "ConfigurationError inherits from ArgumentError" do
+      assert BetterModel::Errors::Sortable::ConfigurationError < ArgumentError
+    end
+
+    test "ConfigurationError can be instantiated with message" do
+      error = BetterModel::Errors::Sortable::ConfigurationError.new("test message")
+      assert_equal "test message", error.message
+    end
+
+    test "ConfigurationError can be caught as ArgumentError" do
+      begin
+        raise BetterModel::Errors::Sortable::ConfigurationError, "test"
+      rescue ArgumentError => e
+        assert_instance_of BetterModel::Errors::Sortable::ConfigurationError, e
+      end
+    end
+
+    test "ConfigurationError has correct namespace" do
+      assert_equal "BetterModel::Errors::Sortable::ConfigurationError",
+                   BetterModel::Errors::Sortable::ConfigurationError.name
+    end
+
+    # ========================================
+    # CONFIGURATION ERROR INTEGRATION TESTS
+    # ========================================
+
+    test "raises ConfigurationError when included in non-ActiveRecord class" do
+      error = assert_raises(BetterModel::Errors::Sortable::ConfigurationError) do
+        Class.new do
+          include BetterModel::Sortable
+        end
+      end
+      assert_match(/can only be included in ActiveRecord models/, error.message)
+    end
+
+    test "raises ConfigurationError when field does not exist" do
+      error = assert_raises(BetterModel::Errors::Sortable::ConfigurationError) do
+        Class.new(ApplicationRecord) do
+          self.table_name = "articles"
+          include BetterModel::Sortable
+
+          sort :nonexistent_field
+        end
+      end
+      assert_match(/Invalid field name/, error.message)
+      assert_match(/does not exist/, error.message)
+    end
+
+    test "raises ConfigurationError when register_complex_sort has no block" do
+      error = assert_raises(BetterModel::Errors::Sortable::ConfigurationError) do
+        Class.new(ApplicationRecord) do
+          self.table_name = "articles"
+          include BetterModel::Sortable
+
+          register_complex_sort :test_sort
+        end
+      end
+      assert_match(/Block required for complex sort/, error.message)
+    end
   end
 end

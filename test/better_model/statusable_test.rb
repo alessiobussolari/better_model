@@ -335,5 +335,75 @@ module BetterModel
       assert @article.is_expired?
       refute @article.is_active?
     end
+
+    # ========================================
+    # CONFIGURATION ERROR TESTS
+    # ========================================
+
+    test "ConfigurationError class exists" do
+      assert defined?(BetterModel::Errors::Statusable::ConfigurationError)
+    end
+
+    test "ConfigurationError inherits from ArgumentError" do
+      assert BetterModel::Errors::Statusable::ConfigurationError < ArgumentError
+    end
+
+    test "ConfigurationError can be instantiated with message" do
+      error = BetterModel::Errors::Statusable::ConfigurationError.new("test message")
+      assert_equal "test message", error.message
+    end
+
+    test "ConfigurationError can be caught as ArgumentError" do
+      begin
+        raise BetterModel::Errors::Statusable::ConfigurationError, "test"
+      rescue ArgumentError => e
+        assert_instance_of BetterModel::Errors::Statusable::ConfigurationError, e
+      end
+    end
+
+    test "ConfigurationError has correct namespace" do
+      assert_equal "BetterModel::Errors::Statusable::ConfigurationError",
+                   BetterModel::Errors::Statusable::ConfigurationError.name
+    end
+
+    # ========================================
+    # CONFIGURATION ERROR INTEGRATION TESTS
+    # ========================================
+
+    test "raises ConfigurationError when status name is blank" do
+      error = assert_raises(BetterModel::Errors::Statusable::ConfigurationError) do
+        Class.new(ApplicationRecord) do
+          self.table_name = "articles"
+          include BetterModel::Statusable
+
+          is "", -> { true }
+        end
+      end
+      assert_match(/Status name cannot be blank/, error.message)
+    end
+
+    test "raises ConfigurationError when condition is missing" do
+      error = assert_raises(BetterModel::Errors::Statusable::ConfigurationError) do
+        Class.new(ApplicationRecord) do
+          self.table_name = "articles"
+          include BetterModel::Statusable
+
+          is :draft
+        end
+      end
+      assert_match(/Condition proc or block is required/, error.message)
+    end
+
+    test "raises ConfigurationError when condition does not respond to call" do
+      error = assert_raises(BetterModel::Errors::Statusable::ConfigurationError) do
+        Class.new(ApplicationRecord) do
+          self.table_name = "articles"
+          include BetterModel::Statusable
+
+          is :draft, "not a proc"
+        end
+      end
+      assert_match(/Condition must respond to call/, error.message)
+    end
   end
 end

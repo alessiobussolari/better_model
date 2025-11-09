@@ -385,6 +385,288 @@ Product.sort_name_asc_i              # Name will be overridden by price groups
 
 ---
 
+## Complex Sort
+
+For multi-field ordering and advanced sorting logic not covered by standard predicates, use `register_complex_sort` to define custom sorting scopes that can combine multiple fields, use CASE WHEN logic, or integrate filtering with ordering.
+
+### API Reference: register_complex_sort
+
+**Method Signature:**
+```ruby
+register_complex_sort(name, &block)
+```
+
+**Parameters:**
+- `name` (Symbol): The name of the sort (will be registered as `sort_#{name}`)
+- `block` (Proc): Sorting logic that returns an ActiveRecord::Relation with ORDER BY (required)
+
+**Returns:** Registers a new scope with `sort_` prefix and adds it to `complex_sorts_registry`
+
+**Thread Safety:** Registry is a frozen Hash, sorts defined at class load time
+
+**Behavior:**
+- The block receives optional parameters and must return an `ActiveRecord::Relation`
+- Generated scope is prefixed with `sort_` (e.g., `register_complex_sort :by_popularity` → `sort_by_popularity`)
+- Can be chained with other scopes and predicates
+- Complex sorts appear in `complex_sorts_registry`
+
+### Basic Examples
+
+**Multi-field sorting:**
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  sort :published_at, :view_count, :title
+
+  register_complex_sort :by_popularity do
+    order(published_at: :desc, view_count: :desc, title: :asc)
+  end
+end
+
+# Usage
+Article.sort_by_popularity
+# Equivalent to: ORDER BY published_at DESC, view_count DESC, title ASC
+```
+
+**Sorting with parameters:**
+```ruby
+register_complex_sort :by_relevance do |keyword|
+  order(
+    Arel.sql(
+      "CASE WHEN title ILIKE '%#{sanitize_sql_like(keyword)}%' THEN 0 " \
+      "WHEN content ILIKE '%#{sanitize_sql_like(keyword)}%' THEN 1 " \
+      "ELSE 2 END ASC, " \
+      "published_at DESC"
+    )
+  )
+end
+
+# Usage
+Article.sort_by_relevance('rails')
+# Title matches first, then content matches, then by date
+```
+
+**Conditional sorting with CASE WHEN:**
+```ruby
+register_complex_sort :by_priority do
+  order(
+    Arel.sql("CASE WHEN priority IS NULL THEN 1 ELSE 0 END"),
+    priority: :desc,
+    created_at: :desc
+  )
+end
+
+# Usage
+Article.sort_by_priority
+# Non-NULL priorities first (highest first), then by creation date
+```
+
+**Combining filtering and sorting:**
+```ruby
+register_complex_sort :featured_and_recent do
+  where(featured: true)
+    .order(published_at: :desc, view_count: :desc)
+end
+
+# Usage
+Article.sort_featured_and_recent
+Article.where(status: 'published').sort_featured_and_recent
+```
+
+### Integration with Predicables
+
+Complex sorts work seamlessly with predicates:
+
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  predicates :status, :view_count, :published_at
+  sort :published_at
+
+  register_complex_sort :trending do
+    where("view_count >= ?", 500)
+      .order(view_count: :desc, published_at: :desc)
+  end
+end
+
+# Chainable usage
+Article
+  .status_eq("published")
+  .published_at_within(30.days)
+  .sort_trending
+  .limit(5)
+```
+
+### Class Methods
+
+```ruby
+# Check if a complex sort is registered
+Article.complex_sort?(:by_popularity)  # => true
+
+# Get all registered complex sorts
+Article.complex_sorts_registry
+# => {:by_popularity => #<Proc>, :by_relevance => #<Proc>}
+```
+
+### Advanced Examples
+
+**Real-World: Task Urgency Sorting**
+
+```ruby
+class Task < ApplicationRecord
+  include BetterModel
+
+  sort :priority, :due_date, :created_at
+
+  # Complex urgency calculation
+  register_complex_sort :by_urgency do
+    order(
+      Arel.sql(
+        "CASE " \
+        "WHEN due_date < CURRENT_DATE THEN 0 " \
+        "WHEN due_date = CURRENT_DATE THEN 1 " \
+        "WHEN due_date <= CURRENT_DATE + INTERVAL '3 days' THEN 2 " \
+        "WHEN due_date <= CURRENT_DATE + INTERVAL '7 days' THEN 3 " \
+        "ELSE 4 END"
+      ),
+      priority: :desc,
+      due_date: :asc
+    )
+  end
+end
+
+# Usage
+Task.where.not(status: 'completed').sort_by_urgency
+# Overdue first, then due today, then due soon, etc.
+```
+
+**Real-World: E-commerce Product Ranking**
+
+```ruby
+class Product < ApplicationRecord
+  include BetterModel
+
+  sort :name, :price, :rating, :sales_count
+
+  # Best value: good ratings, reasonable price
+  register_complex_sort :best_value do
+    where("rating >= ?", 4.0)
+      .order(
+        Arel.sql("(rating * 100) / NULLIF(price, 0) DESC"),
+        sales_count: :desc
+      )
+  end
+
+  # Trending: recent sales with high engagement
+  register_complex_sort :trending do |days = 7|
+    joins(:order_items)
+      .where("order_items.created_at >= ?", days.days.ago)
+      .group("products.id")
+      .order(Arel.sql("COUNT(order_items.id) DESC"), rating: :desc)
+  end
+end
+
+# Usage
+Product.where("stock > 0").sort_best_value.limit(10)
+Product.sort_trending(14)  # Last 14 days
+```
+
+**Real-World: Content Recommendation**
+
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  sort :published_at, :view_count, :title
+
+  # Personalized recommendation score
+  register_complex_sort :recommended_for do |user_id, limit_days = 30|
+    joins(:user_interactions)
+      .where("user_interactions.user_id = ?", user_id)
+      .where("articles.published_at >= ?", limit_days.days.ago)
+      .group("articles.id")
+      .order(
+        Arel.sql(
+          "SUM(CASE " \
+          "WHEN user_interactions.action = 'like' THEN 3 " \
+          "WHEN user_interactions.action = 'share' THEN 5 " \
+          "WHEN user_interactions.action = 'bookmark' THEN 4 " \
+          "ELSE 1 END) DESC"
+        ),
+        view_count: :desc
+      )
+  end
+end
+
+# Usage
+Article.recommended_for(current_user.id, 60)
+```
+
+### Use Cases
+
+- **Multi-field precedence:** Order by multiple fields with clear priority
+- **Relevance ranking:** Sort search results by relevance score
+- **Conditional ordering:** Use CASE WHEN for custom sort logic
+- **Performance-critical queries:** Pre-structure complex sorting for reusability
+- **Engagement metrics:** Sort by calculated scores from related records
+- **Business rules:** Encapsulate domain-specific ordering logic
+- **Dynamic parameters:** Accept arguments for flexible sorting behavior
+
+### Best Practices
+
+1. **Use meaningful names:** Choose names that clearly describe the sorting logic
+   ```ruby
+   # ✅ Good
+   register_complex_sort :by_popularity
+   register_complex_sort :trending_last_week
+
+   # ❌ Poor
+   register_complex_sort :sort1
+   register_complex_sort :custom_order
+   ```
+
+2. **Document complex logic:** Add comments explaining non-obvious CASE WHEN or calculations
+   ```ruby
+   # Calculate urgency score: overdue (0), due today (1), due soon (2), future (3)
+   register_complex_sort :by_urgency do
+     order(Arel.sql("CASE WHEN due_date < CURRENT_DATE THEN 0 ..."))
+   end
+   ```
+
+3. **Validate parameters:** Check parameters to prevent errors
+   ```ruby
+   register_complex_sort :trending do |days = 7|
+     raise ArgumentError, "days must be positive" if days.to_i <= 0
+     where("view_count >= 100").order(published_at: :desc).limit(days)
+   end
+   ```
+
+4. **Use Arel for complex SQL:** Arel is safer than string interpolation
+   ```ruby
+   # ✅ Good: Using Arel
+   register_complex_sort :by_ratio do
+     order(arel_table[:sales].div(arel_table[:views]).desc)
+   end
+
+   # ⚠️ Acceptable: SQL with parameter binding
+   register_complex_sort :by_score do |weight|
+     order(Arel.sql("(rating * ?) DESC"), weight)
+   end
+   ```
+
+5. **Combine with predicates:** Use complex sorts with filtering for powerful queries
+   ```ruby
+   Article
+     .status_eq("published")
+     .published_at_within(30.days)
+     .sort_trending
+     .limit(10)
+   ```
+
+---
+
 ## Controller Integration
 
 Map URL parameters to sort scopes for user-controlled ordering.

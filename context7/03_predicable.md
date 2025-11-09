@@ -438,6 +438,29 @@ Registering business-specific filtering logic with `register_complex_predicate`
 
 For filtering logic that doesn't fit standard predicates or requires combining multiple fields with custom SQL, use `register_complex_predicate` to define named scopes that can accept parameters and be chained with other predicates. Complex predicates are defined with a block that receives parameters and returns an ActiveRecord::Relation, allowing you to use `where`, `joins`, `group`, and other query methods.
 
+### API Reference: register_complex_predicate
+
+**Method Signature:**
+```ruby
+register_complex_predicate(name, &block)
+```
+
+**Parameters:**
+- `name` (Symbol): The name of the predicate scope (required)
+- `block` (Proc): Filtering logic that returns an ActiveRecord::Relation (required)
+
+**Returns:** Registers a new scope on the model and adds it to `complex_predicates_registry`
+
+**Thread Safety:** Registry is a frozen Hash, predicates defined at class load time
+
+**Behavior:**
+- The block receives optional parameters and must return an `ActiveRecord::Relation`
+- Generated scope can be chained with other predicates
+- Scope is accessible as an instance method on the model class
+- Complex predicates appear in `complex_predicates_registry`
+
+### Basic Usage
+
 ```ruby
 class Article < ApplicationRecord
   include BetterModel

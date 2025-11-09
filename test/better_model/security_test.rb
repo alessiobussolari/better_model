@@ -154,7 +154,7 @@ module BetterModel
     end
 
     test "search should limit maximum page number" do
-      error = assert_raises(BetterModel::Searchable::InvalidPaginationError) do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidPaginationError) do
         Article.search({}, pagination: { page: 10_001, per_page: 10 })
       end
 
@@ -170,7 +170,7 @@ module BetterModel
       end
 
       # Ma page 10001 dovrebbe fallire
-      error = assert_raises(BetterModel::Searchable::InvalidPaginationError) do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidPaginationError) do
         Article.search({}, pagination: { page: 10_001, per_page: 100 })
       end
 
@@ -183,13 +183,13 @@ module BetterModel
 
     test "predicates should not execute arbitrary code through symbols" do
       # Verifica che non si possano chiamare metodi arbitrari
-      assert_raises(BetterModel::Searchable::InvalidPredicateError) do
+      assert_raises(BetterModel::Errors::Searchable::InvalidPredicateError) do
         Article.search({ destroy_all: true })
       end
     end
 
     test "predicates should validate scope names" do
-      error = assert_raises(BetterModel::Searchable::InvalidPredicateError) do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidPredicateError) do
         Article.search({ nonexistent_predicate: "value" })
       end
 

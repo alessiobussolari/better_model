@@ -1,18 +1,21 @@
 # frozen_string_literal: true
 
-# Predicable - Sistema di filtri/predicati dichiarativo per modelli Rails
+require_relative "errors/predicable/predicable_error"
+require_relative "errors/predicable/configuration_error"
+
+# Predicable - Declarative filters/predicates system for Rails models.
 #
-# Questo concern permette di definire predicati di ricerca sui modelli utilizzando un DSL
-# semplice e dichiarativo che genera automaticamente scope basati sul tipo di colonna.
+# This concern enables defining search predicates on models using a simple, declarative DSL
+# that automatically generates scopes based on column type.
 #
-# Esempio di utilizzo:
+# @example Basic Usage
 #   class Article < ApplicationRecord
 #     include BetterModel::Predicable
 #
 #     predicates :title, :status, :view_count, :published_at, :featured
 #   end
 #
-# Utilizzo:
+# @example Generated Scopes
 #   Article.title_eq("Ruby on Rails")           # WHERE title = 'Ruby on Rails'
 #   Article.title_i_cont("rails")               # WHERE LOWER(title) LIKE '%rails%'
 #   Article.view_count_gt(100)                  # WHERE view_count > 100
@@ -25,38 +28,40 @@ module BetterModel
     extend ActiveSupport::Concern
 
     included do
-      # Valida che sia incluso solo in modelli ActiveRecord
+      # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
-        raise ArgumentError, "BetterModel::Predicable can only be included in ActiveRecord models"
+        raise BetterModel::Errors::Predicable::ConfigurationError, "BetterModel::Predicable can only be included in ActiveRecord models"
       end
 
-      # Registry dei campi predicable definiti per questa classe
+      # Registry of predicable fields defined for this class
       class_attribute :predicable_fields, default: Set.new
-      # Registry degli scope predicable generati
+      # Registry of generated predicable scopes
       class_attribute :predicable_scopes, default: Set.new
-      # Registry dei predicati complessi custom
+      # Registry of custom complex predicates
       class_attribute :complex_predicates_registry, default: {}.freeze
     end
 
     class_methods do
-      # DSL per definire campi predicable
+      # DSL to define predicable fields.
       #
-      # Genera automaticamente scope di filtro basati sul tipo di colonna:
+      # Automatically generates filter scopes based on column type:
       # - String: _eq, _not_eq, _matches, _start, _end, _cont, _not_cont, _i_cont, _not_i_cont, _in, _not_in, _present(bool), _blank(bool), _null(bool)
       # - Numeric: _eq, _not_eq, _lt, _lteq, _gt, _gteq, _between, _not_between, _in, _not_in, _present(bool)
       # - Boolean: _eq, _not_eq, _present(bool)
       # - Date: _eq, _not_eq, _lt, _lteq, _gt, _gteq, _between, _not_between, _in, _not_in, _within(duration), _blank(bool), _null(bool)
       #
-      # Nota: Tutti i predicati richiedono parametri espliciti. Use _eq(true)/_eq(false) per booleani.
+      # @param field_names [Array<Symbol>] Field names to make predicable
       #
-      # Esempio:
+      # @note All predicates require explicit parameters. Use _eq(true)/_eq(false) for booleans.
+      #
+      # @example
       #   predicates :title, :view_count, :published_at, :featured
       def predicates(*field_names)
         field_names.each do |field_name|
           validate_predicable_field!(field_name)
           register_predicable_field(field_name)
 
-          # Auto-rileva tipo e genera scope appropriati
+          # Auto-detect type and generate appropriate scopes
           column = columns_hash[field_name.to_s]
           next unless column
 
@@ -85,65 +90,86 @@ module BetterModel
         end
       end
 
-      # Registra un predicato complesso custom
+      # Register a custom complex predicate.
       #
-      # Permette di definire filtri complessi che combinano più condizioni
-      # o utilizzano logica custom non coperta dai predicati standard.
+      # Allows defining complex filters that combine multiple conditions
+      # or use custom logic not covered by standard predicates.
       #
-      # Esempio:
+      # @param name [Symbol] Predicate name
+      # @yield Predicate implementation block
+      # @raise [BetterModel::Errors::Predicable::ConfigurationError] If block is not provided
+      #
+      # @example
       #   register_complex_predicate :recent_popular do |days = 7, min_views = 100|
       #     where("published_at >= ? AND view_count >= ?", days.days.ago, min_views)
       #   end
       #
       #   Article.recent_popular(7, 100)
       def register_complex_predicate(name, &block)
-        raise ArgumentError, "Block required for complex predicate" unless block_given?
+        raise BetterModel::Errors::Predicable::ConfigurationError, "Block required for complex predicate" unless block_given?
 
-        # Registra nel registry
+        # Register in registry
         self.complex_predicates_registry = complex_predicates_registry.merge(name.to_sym => block).freeze
 
-        # Definisce lo scope
+        # Define scope
         scope name, block
 
-        # Registra lo scope
+        # Register scope
         register_predicable_scopes(name)
       end
 
-      # Verifica se un campo è stato registrato come predicable
-      def predicable_field?(field_name)
-        predicable_fields.include?(field_name.to_sym)
-      end
+      # Check if a field has been registered as predicable.
+      #
+      # @param field_name [Symbol] Field name to check
+      # @return [Boolean] true if field is predicable
+      def predicable_field?(field_name) = predicable_fields.include?(field_name.to_sym)
 
-      # Verifica se uno scope predicable è stato generato
-      def predicable_scope?(scope_name)
-        predicable_scopes.include?(scope_name.to_sym)
-      end
+      # Check if a predicable scope has been generated.
+      #
+      # @param scope_name [Symbol] Scope name to check
+      # @return [Boolean] true if scope exists
+      def predicable_scope?(scope_name) = predicable_scopes.include?(scope_name.to_sym)
 
-      # Verifica se un predicato complesso è stato registrato
-      def complex_predicate?(name)
-        complex_predicates_registry.key?(name.to_sym)
-      end
+      # Check if a complex predicate has been registered.
+      #
+      # @param name [Symbol] Predicate name to check
+      # @return [Boolean] true if complex predicate exists
+      def complex_predicate?(name) = complex_predicates_registry.key?(name.to_sym)
 
       private
 
-      # Valida che il campo esista nella tabella
+      # Validate that field exists in table.
+      #
+      # @param field_name [Symbol] Field name to validate
+      # @raise [BetterModel::Errors::Predicable::ConfigurationError] If field doesn't exist
+      # @api private
       def validate_predicable_field!(field_name)
         unless column_names.include?(field_name.to_s)
-          raise ArgumentError, "Invalid field name: #{field_name}. Field does not exist in #{table_name}"
+          raise BetterModel::Errors::Predicable::ConfigurationError, "Invalid field name: #{field_name}. Field does not exist in #{table_name}"
         end
       end
 
-      # Registra un campo nel registry predicable_fields
+      # Register a field in predicable_fields registry.
+      #
+      # @param field_name [Symbol] Field name to register
+      # @api private
       def register_predicable_field(field_name)
         self.predicable_fields = (predicable_fields + [ field_name.to_sym ]).to_set.freeze
       end
 
-      # Registra scope nel registry predicable_scopes
+      # Register scopes in predicable_scopes registry.
+      #
+      # @param scope_names [Array<Symbol>] Scope names to register
+      # @api private
       def register_predicable_scopes(*scope_names)
         self.predicable_scopes = (predicable_scopes + scope_names.map(&:to_sym)).to_set.freeze
       end
 
-      # Genera predicati base: _eq, _not_eq, _present
+      # Generate base predicates: _eq, _not_eq, _present.
+      #
+      # @param field_name [Symbol] Field name
+      # @param column_type [Symbol, nil] Column type
+      # @api private
       def define_base_predicates(field_name, column_type = nil)
         table = arel_table
         field = table[field_name]
@@ -167,9 +193,13 @@ module BetterModel
         register_predicable_scopes(*scopes_to_register)
       end
 
-      # Genera predicati per campi stringa (14 scope)
-      # Base predicates (_eq, _not_eq) are defined separately
-      # _present(bool), _blank(bool), _null(bool) handle presence with parameters
+      # Generate predicates for string fields (14 scopes).
+      #
+      # Base predicates (_eq, _not_eq) are defined separately.
+      # _present(bool), _blank(bool), _null(bool) handle presence with parameters.
+      #
+      # @param field_name [Symbol] Field name
+      # @api private
       def define_string_predicates(field_name)
         table = arel_table
         field = table[field_name]
@@ -238,8 +268,12 @@ module BetterModel
         )
       end
 
-      # Genera predicati per campi numerici (11 scope)
-      # Base predicates (_eq, _not_eq, _present(bool)) are defined separately
+      # Generate predicates for numeric fields (11 scopes).
+      #
+      # Base predicates (_eq, _not_eq, _present(bool)) are defined separately.
+      #
+      # @param field_name [Symbol] Field name
+      # @api private
       def define_numeric_predicates(field_name)
         table = arel_table
         field = table[field_name]
@@ -271,19 +305,26 @@ module BetterModel
         )
       end
 
-      # Genera predicati per campi booleani (0 scope)
-      # Base predicates (_eq, _not_eq, _present) are defined separately
-      # Use _eq(true) or _eq(false) for boolean filtering
+      # Generate predicates for boolean fields (0 scopes).
+      #
+      # Base predicates (_eq, _not_eq, _present) are defined separately.
+      # Use _eq(true) or _eq(false) for boolean filtering.
+      #
+      # @param field_name [Symbol] Field name
+      # @api private
       def define_boolean_predicates(field_name)
         # No additional scopes needed for boolean fields
         # Use field_eq(true) or field_eq(false) instead
       end
 
-      # Genera predicati per campi array PostgreSQL (3 scope)
+      # Generate predicates for PostgreSQL array fields (3 scopes).
       #
-      # NOTA: Questo metodo non è coperto da test automatici perché richiede
-      # PostgreSQL. I test vengono eseguiti su SQLite per performance.
-      # Testare manualmente su PostgreSQL con: rails console RAILS_ENV=test
+      # @param field_name [Symbol] Field name
+      # @api private
+      #
+      # @note This method is not covered by automated tests because it requires
+      #   PostgreSQL. Tests run on SQLite for performance.
+      #   Test manually on PostgreSQL with: rails console RAILS_ENV=test
       def define_postgresql_array_predicates(field_name)
         return unless postgresql_adapter?
 
@@ -335,11 +376,14 @@ module BetterModel
         )
       end
 
-      # Genera predicati per campi JSONB PostgreSQL (4 scope)
+      # Generate predicates for PostgreSQL JSONB fields (4 scopes).
       #
-      # NOTA: Questo metodo non è coperto da test automatici perché richiede
-      # PostgreSQL con supporto JSONB. I test vengono eseguiti su SQLite per performance.
-      # Testare manualmente su PostgreSQL con: rails console RAILS_ENV=test
+      # @param field_name [Symbol] Field name
+      # @api private
+      #
+      # @note This method is not covered by automated tests because it requires
+      #   PostgreSQL with JSONB support. Tests run on SQLite for performance.
+      #   Test manually on PostgreSQL with: rails console RAILS_ENV=test
       def define_postgresql_jsonb_predicates(field_name)
         return unless postgresql_adapter?
 
@@ -388,9 +432,13 @@ module BetterModel
         )
       end
 
-      # Genera predicati per campi data/datetime (11 scope)
-      # Base predicates (_eq, _not_eq, _present(bool)) are defined separately
-      # Date convenience shortcuts removed except _within(duration)
+      # Generate predicates for date/datetime fields (11 scopes).
+      #
+      # Base predicates (_eq, _not_eq, _present(bool)) are defined separately.
+      # Date convenience shortcuts removed except _within(duration).
+      #
+      # @param field_name [Symbol] Field name
+      # @api private
       def define_date_predicates(field_name)
         table = arel_table
         field = table[field_name]
@@ -440,10 +488,11 @@ module BetterModel
         )
       end
 
-      # Verifica se il database adapter è PostgreSQL
-      def postgresql_adapter?
-        connection.adapter_name.match?(/PostgreSQL/i)
-      end
+      # Check if database adapter is PostgreSQL.
+      #
+      # @return [Boolean] true if PostgreSQL adapter
+      # @api private
+      def postgresql_adapter? = connection.adapter_name.match?(/PostgreSQL/i)
     end
   end
 end

@@ -13,24 +13,9 @@ module BetterModel
     #     check :title, :content, presence: true
     #     check :email, format: { with: URI::MailTo::EMAIL_REGEXP }
     #
-    #     # Validazioni condizionali
-    #     validate_if :is_published? do
-    #       check :published_at, presence: true
-    #       check :author_id, presence: true
-    #     end
-    #
-    #     # Validazioni condizionali negate
-    #     validate_unless :is_draft? do
-    #       check :reviewer_id, presence: true
-    #     end
-    #
-    #     # Cross-field validations
-    #     validate_order :starts_at, :before, :ends_at
-    #     validate_order :min_price, :lteq, :max_price
-    #
-    #     # Business rules
-    #     validate_business_rule :valid_category
-    #     validate_business_rule :author_has_permission, on: :create
+    #     # Validazioni complesse
+    #     check_complex :valid_pricing
+    #     check_complex :stock_check
     #
     #     # Gruppi di validazioni
     #     validation_group :step1, [:email, :password]
@@ -42,9 +27,7 @@ module BetterModel
 
       def initialize(model_class)
         @model_class = model_class
-        @conditional_validations = []
-        @order_validations = []
-        @business_rules = []
+        @complex_validations = []
         @groups = {}
       end
 
@@ -59,147 +42,35 @@ module BetterModel
       #   check :age, numericality: { greater_than: 0 }
       #
       def check(*fields, **options)
-        # Se siamo dentro un blocco condizionale, aggiungi alla condizione corrente
-        if @current_conditional
-          @current_conditional[:validations] << {
-            fields: fields,
-            options: options
-          }
-        else
-          # Altrimenti applica direttamente alla classe
-          # Questo viene fatto subito, non in apply_validatable_config
-          @model_class.validates(*fields, **options)
-        end
+        @model_class.validates(*fields, **options)
       end
 
-      # Validazioni condizionali (se condizione è vera)
+      # Usa una validazione complessa registrata
       #
-      # @param condition [Symbol, Proc] Condizione da verificare
-      # @yield Blocco con validazioni da applicare se condizione è vera
+      # Le validazioni complesse devono essere registrate prima usando
+      # register_complex_validation nel modello.
       #
-      # @example Con simbolo (metodo)
-      #   validate_if :is_published? do
-      #     check :published_at, presence: true
-      #   end
-      #
-      # @example Con lambda
-      #   validate_if -> { status == "published" } do
-      #     check :published_at, presence: true
-      #   end
-      #
-      def validate_if(condition, &block)
-        raise ArgumentError, "validate_if requires a block" unless block_given?
-
-        conditional = {
-          condition: condition,
-          negate: false,
-          validations: []
-        }
-
-        # Set current conditional per catturare le validate dentro il blocco
-        @current_conditional = conditional
-        instance_eval(&block)
-        @current_conditional = nil
-
-        @conditional_validations << conditional
-      end
-
-      # Validazioni condizionali negate (se condizione è falsa)
-      #
-      # @param condition [Symbol, Proc] Condizione da verificare
-      # @yield Blocco con validazioni da applicare se condizione è falsa
+      # @param name [Symbol] Nome della validazione complessa registrata
       #
       # @example
-      #   validate_unless :is_draft? do
-      #     check :reviewer_id, presence: true
-      #   end
-      #
-      def validate_unless(condition, &block)
-        raise ArgumentError, "validate_unless requires a block" unless block_given?
-
-        conditional = {
-          condition: condition,
-          negate: true,
-          validations: []
-        }
-
-        @current_conditional = conditional
-        instance_eval(&block)
-        @current_conditional = nil
-
-        @conditional_validations << conditional
-      end
-
-      # Validazione di ordine tra campi (cross-field)
-      #
-      # Verifica che un campo sia in una relazione d'ordine rispetto ad un altro.
-      #
-      # @param first_field [Symbol] Primo campo
-      # @param comparator [Symbol] Comparatore (:before, :after, :lteq, :gteq)
-      # @param second_field [Symbol] Secondo campo
-      # @param options [Hash] Opzioni aggiuntive (on, if, unless, message)
-      #
-      # @example Date validation
-      #   validate_order :starts_at, :before, :ends_at
-      #   validate_order :starts_at, :before, :ends_at, message: "must be before end date"
-      #
-      # @example Numeric validation
-      #   validate_order :min_price, :lteq, :max_price
-      #   validate_order :discount, :lteq, :price, on: :create
-      #
-      # Comparatori supportati:
-      # - :before - first < second (date/time)
-      # - :after - first > second (date/time)
-      # - :lteq - first <= second (numeric)
-      # - :gteq - first >= second (numeric)
-      # - :lt - first < second (numeric)
-      # - :gt - first > second (numeric)
-      #
-      def validate_order(first_field, comparator, second_field, **options)
-        valid_comparators = %i[before after lteq gteq lt gt]
-        unless valid_comparators.include?(comparator)
-          raise ArgumentError, "Invalid comparator: #{comparator}. Valid: #{valid_comparators.join(', ')}"
-        end
-
-        @order_validations << {
-          first_field: first_field,
-          comparator: comparator,
-          second_field: second_field,
-          options: options
-        }
-      end
-
-      # Definisce una business rule custom
-      #
-      # Le business rules sono metodi custom che implementano logica di validazione
-      # complessa che non può essere espressa con validatori standard.
-      #
-      # @param rule_name [Symbol] Nome del metodo che implementa la rule
-      # @param options [Hash] Opzioni (on, if, unless)
-      #
-      # @example
-      #   # Nel configurator:
-      #   validate_business_rule :valid_category
-      #   validate_business_rule :author_has_permission, on: :create
-      #
-      #   # Nel modello (implementazione):
-      #   def valid_category
-      #     unless Category.exists?(id: category_id)
-      #       errors.add(:category_id, "must be a valid category")
+      #   # Nel modello (registrazione):
+      #   register_complex_validation :valid_pricing do
+      #     if sale_price.present? && sale_price >= price
+      #       errors.add(:sale_price, "must be less than regular price")
       #     end
       #   end
       #
-      #   def author_has_permission
-      #     unless author&.can_create_articles?
-      #       errors.add(:author_id, "does not have permission")
-      #     end
+      #   # Nel configurator (uso):
+      #   validatable do
+      #     check_complex :valid_pricing
       #   end
       #
-      def validate_business_rule(rule_name, **options)
-        @business_rules << {
-          name: rule_name,
-          options: options
-        }
+      def check_complex(name)
+        unless @model_class.complex_validation?(name)
+          raise ArgumentError, "Unknown complex validation: #{name}. Use register_complex_validation to define it first."
+        end
+
+        @complex_validations << name.to_sym
       end
 
       # Definisce un gruppo di validazioni
@@ -235,9 +106,7 @@ module BetterModel
       # @return [Hash] Configurazione con tutte le validazioni
       def to_h
         {
-          conditional_validations: @conditional_validations,
-          order_validations: @order_validations,
-          business_rules: @business_rules
+          complex_validations: @complex_validations
         }
       end
     end

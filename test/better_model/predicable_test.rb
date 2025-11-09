@@ -1398,5 +1398,73 @@ module BetterModel
         end
       end
     end
+
+    # ========================================
+    # CONFIGURATION ERROR TESTS
+    # ========================================
+
+    test "ConfigurationError class exists" do
+      assert defined?(BetterModel::Errors::Predicable::ConfigurationError)
+    end
+
+    test "ConfigurationError inherits from ArgumentError" do
+      assert BetterModel::Errors::Predicable::ConfigurationError < ArgumentError
+    end
+
+    test "ConfigurationError can be instantiated with message" do
+      error = BetterModel::Errors::Predicable::ConfigurationError.new("test message")
+      assert_equal "test message", error.message
+    end
+
+    test "ConfigurationError can be caught as ArgumentError" do
+      begin
+        raise BetterModel::Errors::Predicable::ConfigurationError, "test"
+      rescue ArgumentError => e
+        assert_instance_of BetterModel::Errors::Predicable::ConfigurationError, e
+      end
+    end
+
+    test "ConfigurationError has correct namespace" do
+      assert_equal "BetterModel::Errors::Predicable::ConfigurationError",
+                   BetterModel::Errors::Predicable::ConfigurationError.name
+    end
+
+    # ========================================
+    # CONFIGURATION ERROR INTEGRATION TESTS
+    # ========================================
+
+    test "raises ConfigurationError when included in non-ActiveRecord class" do
+      error = assert_raises(BetterModel::Errors::Predicable::ConfigurationError) do
+        Class.new do
+          include BetterModel::Predicable
+        end
+      end
+      assert_match(/can only be included in ActiveRecord models/, error.message)
+    end
+
+    test "raises ConfigurationError when field does not exist" do
+      error = assert_raises(BetterModel::Errors::Predicable::ConfigurationError) do
+        Class.new(ApplicationRecord) do
+          self.table_name = "articles"
+          include BetterModel::Predicable
+
+          predicates :nonexistent_field
+        end
+      end
+      assert_match(/Invalid field name/, error.message)
+      assert_match(/does not exist/, error.message)
+    end
+
+    test "raises ConfigurationError when register_complex_predicate has no block" do
+      error = assert_raises(BetterModel::Errors::Predicable::ConfigurationError) do
+        Class.new(ApplicationRecord) do
+          self.table_name = "articles"
+          include BetterModel::Predicable
+
+          register_complex_predicate :test_predicate
+        end
+      end
+      assert_match(/Block required for complex predicate/, error.message)
+    end
   end
 end

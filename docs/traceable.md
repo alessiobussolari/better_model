@@ -688,7 +688,7 @@ class Article < ApplicationRecord
     state :published
 
     transition from: :draft, to: :published do
-      guard :is_complete?
+      check :is_complete?
     end
   end
 

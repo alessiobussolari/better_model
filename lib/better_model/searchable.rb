@@ -1,11 +1,18 @@
 # frozen_string_literal: true
 
-# Searchable - Sistema di ricerca unificato per modelli Rails
+require_relative "errors/searchable/searchable_error"
+require_relative "errors/searchable/invalid_predicate_error"
+require_relative "errors/searchable/invalid_order_error"
+require_relative "errors/searchable/invalid_pagination_error"
+require_relative "errors/searchable/invalid_security_error"
+require_relative "errors/searchable/configuration_error"
+
+# Searchable - Unified search system for Rails models.
 #
-# Questo concern orchestra Predicable e Sortable per fornire un'interfaccia
-# di ricerca completa con filtri, ordinamento e paginazione.
+# This concern orchestrates Predicable and Sortable to provide a complete
+# search interface with filters, sorting, and pagination.
 #
-# Esempio di utilizzo:
+# @example Basic Usage
 #   class Article < ApplicationRecord
 #     include BetterModel
 #
@@ -18,7 +25,7 @@
 #     end
 #   end
 #
-# Utilizzo:
+# @example Search with Filters, Pagination, and Sorting
 #   Article.search(
 #     { title_cont: "Rails", status_eq: "published" },
 #     pagination: { page: 1, per_page: 25 },
@@ -29,17 +36,11 @@ module BetterModel
   module Searchable
     extend ActiveSupport::Concern
 
-    # Error classes
-    class Error < StandardError; end
-    class InvalidPredicateError < Error; end
-    class InvalidOrderError < Error; end
-    class InvalidPaginationError < Error; end
-    class InvalidSecurityError < Error; end
 
     included do
-      # Valida che sia incluso solo in modelli ActiveRecord
+      # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
-        raise ArgumentError, "BetterModel::Searchable can only be included in ActiveRecord models"
+        raise BetterModel::Errors::Searchable::ConfigurationError, "BetterModel::Searchable can only be included in ActiveRecord models"
       end
 
       # Configuration registry
@@ -52,28 +53,35 @@ module BetterModel
     end
 
     class_methods do
-      # Interfaccia principale di ricerca
+      # Main search interface.
       #
-      # @param predicates [Hash] Condizioni di filtro (usa scope Predicable)
-      # @option predicates [Array<Hash>] :or Condizioni OR
-      # @param pagination [Hash] Parametri di paginazione (opzionale)
-      # @option pagination [Integer] :page Numero pagina
-      # @option pagination [Integer] :per_page Risultati per pagina
-      # @param orders [Array<Symbol>] Array di symbol scope sortable (opzionale)
+      # Provides a unified search interface combining predicates (filters),
+      # sorting, and pagination with support for OR conditions and security policies.
       #
-      # @return [ActiveRecord::Relation] Relation concatenabile
+      # @param predicates [Hash] Filter conditions (uses Predicable scopes)
+      # @option predicates [Array<Hash>] :or OR conditions
+      # @param pagination [Hash] Pagination parameters (optional)
+      # @option pagination [Integer] :page Page number
+      # @option pagination [Integer] :per_page Results per page
+      # @param orders [Array<Symbol>] Array of sortable scope symbols (optional)
+      # @param security [Symbol] Security policy name (optional)
+      # @param includes [Array, Symbol] Associations to eager load with LEFT OUTER JOIN
+      # @param preload [Array, Symbol] Associations to preload with separate queries
+      # @param eager_load [Array, Symbol] Associations to eager load (forces LEFT OUTER JOIN)
       #
-      # @example Ricerca base
+      # @return [ActiveRecord::Relation] Chainable relation
+      #
+      # @example Basic search
       #   Article.search({ title_cont: "Rails" })
       #
-      # @example Con paginazione e ordinamento
+      # @example With pagination and sorting
       #   Article.search(
       #     { title_cont: "Rails", status_eq: "published" },
       #     pagination: { page: 1, per_page: 25 },
       #     orders: [:sort_published_at_desc]
       #   )
       #
-      # @example Con OR conditions
+      # @example With OR conditions
       #   Article.search(
       #     {
       #       or: [
@@ -96,7 +104,7 @@ module BetterModel
 
         # If there are remaining unknown options, they might be misplaced predicates
         if options.any?
-          raise ArgumentError, "Unknown keyword arguments: #{options.keys.join(', ')}. " \
+          raise BetterModel::Errors::Searchable::ConfigurationError, "Unknown keyword arguments: #{options.keys.join(', ')}. " \
             "Did you mean to pass predicates as a hash? Use: search({#{options.keys.first}: ...})"
         end
 
@@ -143,7 +151,9 @@ module BetterModel
         scope
       end
 
-      # DSL per configurare searchable
+      # DSL to configure searchable.
+      #
+      # @yield [configurator] Configuration block
       #
       # @example
       #   searchable do
@@ -156,20 +166,21 @@ module BetterModel
         self.searchable_config = configurator.to_h.freeze
       end
 
-      # Verifica se un campo è predicable
-      def searchable_field?(field_name)
-        respond_to?(:predicable_field?) && predicable_field?(field_name)
-      end
-
-      # Ritorna tutti i campi predicable
-      def searchable_fields
-        respond_to?(:predicable_fields) ? predicable_fields : Set.new
-      end
-
-      # Ritorna i predicati disponibili per un campo
+      # Check if a field is searchable (predicable).
       #
-      # @param field_name [Symbol] Nome del campo
-      # @return [Array<Symbol>] Array di predicati disponibili
+      # @param field_name [Symbol] Field name to check
+      # @return [Boolean] true if field is searchable
+      def searchable_field?(field_name) = respond_to?(:predicable_field?) && predicable_field?(field_name)
+
+      # Returns all searchable (predicable) fields.
+      #
+      # @return [Set<Symbol>] Set of searchable field names
+      def searchable_fields = respond_to?(:predicable_fields) ? predicable_fields : Set.new
+
+      # Returns available predicates for a field.
+      #
+      # @param field_name [Symbol] Field name
+      # @return [Array<Symbol>] Array of available predicates
       #
       # @example
       #   Article.searchable_predicates_for(:title)
@@ -183,10 +194,10 @@ module BetterModel
           .map { |scope| scope.to_s.delete_prefix("#{field_name}_").to_sym }
       end
 
-      # Ritorna gli ordinamenti disponibili per un campo
+      # Returns available sorts for a field.
       #
-      # @param field_name [Symbol] Nome del campo
-      # @return [Array<Symbol>] Array di scope sortable disponibili
+      # @param field_name [Symbol] Field name
+      # @return [Array<Symbol>] Array of available sortable scopes
       #
       # @example
       #   Article.searchable_sorts_for(:title)
@@ -201,9 +212,14 @@ module BetterModel
 
       private
 
-      # Sanitizza e normalizza parametri predicates
-      # IMPORTANTE: Non usa più to_unsafe_h per sicurezza. Se passi ActionController::Parameters,
-      # devi chiamare .permit! o .to_h esplicitamente nel controller prima di passarlo qui.
+      # Sanitize and normalize predicate parameters.
+      #
+      # @param predicates [Hash, ActionController::Parameters] Predicates to sanitize
+      # @return [Hash] Sanitized predicates hash
+      # @api private
+      #
+      # @note Does not use to_unsafe_h for security. If passing ActionController::Parameters,
+      #   you must call .permit! or .to_h explicitly in your controller before passing here.
       def sanitize_predicates(predicates)
         return {} if predicates.nil?
 
@@ -211,7 +227,7 @@ module BetterModel
         # Ma richiedi che sia già stato permesso (non bypassa strong parameters)
         if defined?(ActionController::Parameters) && predicates.is_a?(ActionController::Parameters)
           unless predicates.permitted?
-            raise ArgumentError,
+            raise BetterModel::Errors::Searchable::ConfigurationError,
               "ActionController::Parameters must be explicitly permitted before passing to search. " \
               "Use .permit! or .to_h in your controller."
           end
@@ -226,7 +242,7 @@ module BetterModel
         predicates.each do |predicate_scope, value|
           # Validate scope exists
           unless respond_to?(:predicable_scope?) && predicable_scope?(predicate_scope)
-            raise InvalidPredicateError,
+            raise BetterModel::Errors::Searchable::InvalidPredicateError,
               "Invalid predicate scope: #{predicate_scope}. " \
               "Available predicable scopes: #{predicable_scopes.to_a.join(', ')}"
           end
@@ -257,7 +273,7 @@ module BetterModel
           temp_scope = all
           condition_hash.symbolize_keys.each do |predicate_scope, value|
             unless respond_to?(:predicable_scope?) && predicable_scope?(predicate_scope)
-              raise InvalidPredicateError,
+              raise BetterModel::Errors::Searchable::InvalidPredicateError,
                 "Invalid predicate in OR condition: #{predicate_scope}. " \
                 "Available predicable scopes: #{predicable_scopes.to_a.join(', ')}"
             end
@@ -284,7 +300,7 @@ module BetterModel
 
           # Validate scope exists
           unless respond_to?(:sortable_scope?) && sortable_scope?(order_scope)
-            raise InvalidOrderError,
+            raise BetterModel::Errors::Searchable::InvalidOrderError,
               "Invalid order scope: #{order_scope}. " \
               "Available sortable scopes: #{sortable_scopes.to_a.join(', ')}"
           end
@@ -302,13 +318,13 @@ module BetterModel
         per_page = pagination_params[:per_page]&.to_i
 
         # Validate page >= 1 (always, even without per_page)
-        raise InvalidPaginationError, "page must be >= 1" if page < 1
+        raise BetterModel::Errors::Searchable::InvalidPaginationError, "page must be >= 1" if page < 1
 
         # DoS protection: limita il numero massimo di pagina per evitare offset enormi
         # Default 10000, configurabile tramite searchable config
         max_page = searchable_config[:max_page] || 10_000
         if page > max_page
-          raise InvalidPaginationError,
+          raise BetterModel::Errors::Searchable::InvalidPaginationError,
             "page must be <= #{max_page} (DoS protection). " \
             "Configure max_page in searchable block to change this limit."
         end
@@ -317,7 +333,7 @@ module BetterModel
         return scope if per_page.nil?
 
         # Validate per_page >= 1
-        raise InvalidPaginationError, "per_page must be >= 1" if per_page < 1
+        raise BetterModel::Errors::Searchable::InvalidPaginationError, "per_page must be >= 1" if per_page < 1
 
         # Respect max_per_page limit if configured
         if searchable_config[:max_per_page].present?
@@ -355,7 +371,7 @@ module BetterModel
         securities_config = searchable_config[:securities] || {}
 
         unless securities_config.key?(security_name)
-          raise InvalidSecurityError,
+          raise BetterModel::Errors::Searchable::InvalidSecurityError,
             "Unknown security: #{security_name}. " \
             "Available securities: #{securities_config.keys.join(', ')}"
         end
@@ -373,7 +389,7 @@ module BetterModel
         end
 
         if missing_or_blank.any?
-          raise InvalidSecurityError,
+          raise BetterModel::Errors::Searchable::InvalidSecurityError,
             "Security :#{security_name} requires the following predicates with valid values: #{missing_or_blank.join(', ')}. " \
             "These predicates must be present and have non-blank values in the search parameters."
         end
@@ -388,7 +404,7 @@ module BetterModel
         securities_config = searchable_config[:securities] || {}
 
         unless securities_config.key?(security_name)
-          raise InvalidSecurityError,
+          raise BetterModel::Errors::Searchable::InvalidSecurityError,
             "Unknown security: #{security_name}. " \
             "Available securities: #{securities_config.keys.join(', ')}"
         end
@@ -410,7 +426,7 @@ module BetterModel
           end
 
           if missing_or_blank.any?
-            raise InvalidSecurityError,
+            raise BetterModel::Errors::Searchable::InvalidSecurityError,
               "Security :#{security_name} violation in OR condition ##{index + 1}. " \
               "Each OR condition must include the following predicates with valid values: #{missing_or_blank.join(', ')}. " \
               "This prevents bypassing security rules through OR logic."
@@ -425,7 +441,7 @@ module BetterModel
         total_predicates = predicates.size
 
         if total_predicates > max_predicates
-          raise ArgumentError,
+          raise BetterModel::Errors::Searchable::ConfigurationError,
             "Query too complex: #{total_predicates} predicates exceeds maximum of #{max_predicates}. " \
             "Configure max_predicates in searchable block to change this limit."
         end
@@ -437,7 +453,7 @@ module BetterModel
         or_count = Array(or_conditions).size
 
         if or_count > max_or_conditions
-          raise ArgumentError,
+          raise BetterModel::Errors::Searchable::ConfigurationError,
             "Query too complex: #{or_count} OR conditions exceeds maximum of #{max_or_conditions}. " \
             "Configure max_or_conditions in searchable block to change this limit."
         end
@@ -447,18 +463,18 @@ module BetterModel
         total_with_or = total_predicates + or_predicates_count
 
         if total_with_or > max_predicates
-          raise ArgumentError,
+          raise BetterModel::Errors::Searchable::ConfigurationError,
             "Query too complex: #{total_with_or} total predicates (including OR conditions) exceeds maximum of #{max_predicates}. " \
             "Configure max_predicates in searchable block to change this limit."
         end
       end
     end
 
-    # Metodi di istanza
+    # Instance Methods
 
-    # Ritorna metadata di ricerca per questo record
+    # Returns search metadata for this record.
     #
-    # @return [Hash] Hash con informazioni sui campi ricercabili e ordinabili
+    # @return [Hash] Hash with information about searchable and sortable fields
     #
     # @example
     #   article.search_metadata
@@ -538,7 +554,7 @@ module BetterModel
 
       # Valida che i predicati richiesti siano simboli validi
       if predicates_array.empty?
-        raise ArgumentError, "Security :#{name} must have at least one required predicate"
+        raise BetterModel::Errors::Searchable::ConfigurationError, "Security :#{name} must have at least one required predicate"
       end
 
       @config[:securities][name] = predicates_array

@@ -1,0 +1,21 @@
+# frozen_string_literal: true
+
+# Base repository class for the application.
+#
+# Inherits from BetterModel::Repositable::BaseRepository and can be customized with
+# application-wide repository behaviors.
+#
+# @example Add custom methods available to all repositories
+#   class ApplicationRepository < BetterModel::Repositable::BaseRepository
+#     def find_active(id)
+#       search({ id_eq: id, status_eq: "active" }, limit: 1)
+#     end
+#
+#     def paginated_search(filters, page: 1)
+#       search(filters, page: page, per_page: 25)
+#     end
+#   end
+#
+class ApplicationRepository < BetterModel::Repositable::BaseRepository
+  # Add application-wide repository methods here
+end

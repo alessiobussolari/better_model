@@ -1,11 +1,14 @@
 # frozen_string_literal: true
 
-# Statusable - Sistema di stati dichiarativi per modelli Rails
+require_relative "errors/statusable/statusable_error"
+require_relative "errors/statusable/configuration_error"
+
+# Statusable - Declarative status system for Rails models.
 #
-# Questo concern permette di definire stati sui modelli utilizzando un DSL
-# semplice e dichiarativo, simile al pattern Enrichable ma per gli stati.
+# This concern enables defining statuses on models using a simple, declarative DSL
+# similar to the Enrichable pattern but for statuses.
 #
-# Esempio di utilizzo:
+# @example Basic Usage
 #   class Communications::Consult < ApplicationRecord
 #     include BetterModel::Statusable
 #
@@ -17,7 +20,7 @@
 #     is :ready_to_start, -> { scheduled? && scheduled_at <= Time.current }
 #   end
 #
-# Utilizzo:
+# @example Checking Statuses
 #   consult.is?(:pending)           # => true/false
 #   consult.is_pending?             # => true/false
 #   consult.is_active_session?      # => true/false
@@ -29,58 +32,71 @@ module BetterModel
     extend ActiveSupport::Concern
 
     included do
-      # Registry degli stati definiti per questa classe
+      # Registry of statuses defined for this class
       class_attribute :is_definitions
       self.is_definitions = {}
     end
 
     class_methods do
-      # DSL per definire stati
+      # DSL to define statuses.
       #
-      # Parametri:
-      # - status_name: simbolo che rappresenta lo stato (es. :pending, :active)
-      # - condition_proc: lambda o proc che definisce la condizione
-      # - block: blocco alternativo alla condition_proc
+      # Defines a status check that can be evaluated against model instances.
+      # Automatically creates a convenience method is_<status_name>? for each status.
       #
-      # Esempi:
+      # @param status_name [Symbol, String] Status identifier (e.g., :pending, :active)
+      # @param condition_proc [Proc, nil] Lambda or proc that defines the condition
+      # @yield Alternative to condition_proc parameter
+      # @raise [BetterModel::Errors::Statusable::ConfigurationError] If parameters are invalid
+      #
+      # @example With lambda parameter
       #   is :pending, -> { status == 'initialized' }
-      #   is :expired, -> { expires_at.present? && expires_at <= Time.current }
+      #
+      # @example With block
+      #   is :expired do
+      #     expires_at.present? && expires_at <= Time.current
+      #   end
+      #
+      # @example Complex condition
       #   is :ready do
       #     scheduled_at.present? && scheduled_at <= Time.current
       #   end
       def is(status_name, condition_proc = nil, &block)
-        # Valida i parametri prima di convertire
-        raise ArgumentError, "Status name cannot be blank" if status_name.blank?
+        # Validate parameters before converting
+        raise BetterModel::Errors::Statusable::ConfigurationError, "Status name cannot be blank" if status_name.blank?
 
         status_name = status_name.to_sym
         condition = condition_proc || block
-        raise ArgumentError, "Condition proc or block is required" unless condition
-        raise ArgumentError, "Condition must respond to call" unless condition.respond_to?(:call)
+        raise BetterModel::Errors::Statusable::ConfigurationError, "Condition proc or block is required" unless condition
+        raise BetterModel::Errors::Statusable::ConfigurationError, "Condition must respond to call" unless condition.respond_to?(:call)
 
-        # Registra lo stato nel registry
+        # Register status in registry
         self.is_definitions = is_definitions.merge(status_name => condition.freeze).freeze
 
-        # Genera il metodo dinamico is_#{status_name}?
+        # Generate dynamic method is_#{status_name}?
         define_is_method(status_name)
       end
 
-      # Lista di tutti gli stati definiti per questa classe
-      def defined_statuses
-        is_definitions.keys
-      end
+      # List all statuses defined for this class.
+      #
+      # @return [Array<Symbol>] Array of defined status names
+      def defined_statuses = is_definitions.keys
 
-      # Verifica se uno stato è definito
-      def status_defined?(status_name)
-        is_definitions.key?(status_name.to_sym)
-      end
+      # Check if a status is defined.
+      #
+      # @param status_name [Symbol, String] Status name to check
+      # @return [Boolean] true if status is defined
+      def status_defined?(status_name) = is_definitions.key?(status_name.to_sym)
 
       private
 
-      # Genera dinamicamente il metodo is_#{status_name}? per ogni stato definito
+      # Generate dynamic method is_#{status_name}? for each defined status.
+      #
+      # @param status_name [Symbol] Status name
+      # @api private
       def define_is_method(status_name)
         method_name = "is_#{status_name}?"
 
-        # Evita di ridefinire metodi se già esistono
+        # Avoid redefining methods if they already exist
         return if method_defined?(method_name)
 
         define_method(method_name) do
@@ -89,35 +105,33 @@ module BetterModel
       end
     end
 
-    # Metodo generico per verificare se uno stato è attivo
+    # Generic method to check if a status is active.
     #
-    # Parametri:
-    # - status_name: simbolo dello stato da verificare
+    # Evaluates the status condition in the context of the model instance.
+    # Returns false if status is not defined (secure by default).
     #
-    # Ritorna:
-    # - true se lo stato è attivo
-    # - false se lo stato non è attivo o non è definito
+    # @param status_name [Symbol, String] Status name to check
+    # @return [Boolean] true if status is active, false otherwise
     #
-    # Esempio:
-    #   consult.is?(:pending)
+    # @example
+    #   consult.is?(:pending)  # => true
     def is?(status_name)
       status_name = status_name.to_sym
       condition = self.class.is_definitions[status_name]
 
-      # Se lo stato non è definito, ritorna false (secure by default)
+      # If status is not defined, return false (secure by default)
       return false unless condition
 
-      # Valuta la condizione nel contesto dell'istanza del modello
-      # Gli errori si propagano naturalmente - fail fast
+      # Evaluate condition in context of model instance
+      # Errors propagate naturally - fail fast
       instance_exec(&condition)
     end
 
-    # Ritorna tutti gli stati disponibili per questa istanza con i loro valori
+    # Returns all available statuses for this instance with their values.
     #
-    # Ritorna:
-    # - Hash con chiavi simbolo (stati) e valori booleani (attivi/inattivi)
+    # @return [Hash{Symbol => Boolean}] Hash with status names and their active state
     #
-    # Esempio:
+    # @example
     #   consult.statuses
     #   # => { pending: true, active: false, expired: false, scheduled: true }
     def statuses
@@ -126,26 +140,36 @@ module BetterModel
       end
     end
 
-    # Verifica se l'istanza ha almeno uno stato attivo
-    def has_any_status?
-      statuses.values.any?
-    end
+    # Check if instance has at least one active status.
+    #
+    # @return [Boolean] true if any status is active
+    def has_any_status? = statuses.values.any?
 
-    # Verifica se l'istanza ha tutti gli stati specificati attivi
+    # Check if instance has all specified statuses active.
+    #
+    # @param status_names [Array<Symbol>] Status names to check
+    # @return [Boolean] true if all statuses are active
     def has_all_statuses?(status_names)
       Array(status_names).all? { |status_name| is?(status_name) }
     end
 
-    # Filtra una lista di stati restituendo solo quelli attivi
+    # Filter a list of statuses returning only active ones.
+    #
+    # @param status_names [Array<Symbol>] Status names to filter
+    # @return [Array<Symbol>] Active statuses
     def active_statuses(status_names)
       Array(status_names).select { |status_name| is?(status_name) }
     end
 
-    # Override di as_json per includere automaticamente gli stati se richiesto
+    # Override as_json to automatically include statuses if requested.
+    #
+    # @param options [Hash] Options for as_json
+    # @option options [Boolean] :include_statuses Include statuses in JSON output
+    # @return [Hash] JSON representation
     def as_json(options = {})
       result = super
 
-      # Include gli stati se esplicitamente richiesto, converting symbol keys to strings
+      # Include statuses if explicitly requested, converting symbol keys to strings
       result["statuses"] = statuses.transform_keys(&:to_s) if options[:include_statuses]
 
       result

@@ -14,6 +14,7 @@ Welcome to the BetterModel examples directory! This collection provides practica
 8. [Stateable](#08-stateable) - State machine with transitions
 9. [Traceable](#09-traceable) - Audit trail and time travel
 10. [Taggable](#10-taggable) - Tag management with statistics
+11. [Repositable](#11-repositable) - Repository Pattern for data access
 
 ## Module Overview
 
@@ -87,6 +88,13 @@ Welcome to the BetterModel examples directory! This collection provides practica
 
 [View Examples →](11_taggable.md)
 
+### 11. Repositable
+**When to use**: Implement Repository Pattern for clean architecture and testability.
+
+**Example use case**: Separate data access from business logic, complex queries, service-oriented architecture
+
+[View Examples →](14_repositable.md)
+
 ## Advanced Integration Guides
 
 ### Integration Patterns
@@ -140,6 +148,7 @@ Quick solutions to specific problems:
 | **Stateable** | All modules | Central workflow engine |
 | **Traceable** | Stateable, Archivable | Compliance and audit |
 | **Taggable** | Predicable, Searchable | Tag-based filtering |
+| **Repositable** | Searchable, Predicable, Sortable | Clean data access layer |
 
 ## Combining Modules
 
@@ -167,7 +176,7 @@ class Article < ApplicationRecord
     state :published
 
     transition :publish, from: :draft, to: :published do
-      guard { can?(:publish) }  # Uses Permissible
+      check { can?(:publish) }  # Uses Permissible
       before { self.published_at = Time.current }
     end
   end

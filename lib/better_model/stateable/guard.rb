@@ -19,7 +19,7 @@ module BetterModel
       # Valuta il check
       #
       # @return [Boolean] true se il check passa
-      # @raise [CheckFailedError] Se il check fallisce (opzionale, dipende dal contesto)
+      # @raise [BetterModel::Errors::Stateable::CheckFailedError] Se il check fallisce (opzionale, dipende dal contesto)
       #
       def evaluate
         case @guard_config[:type]
@@ -30,7 +30,7 @@ module BetterModel
         when :predicate
           evaluate_predicate
         else
-          raise StateableError, "Unknown check type: #{@guard_config[:type]}"
+          raise BetterModel::Errors::Stateable::StateableError, "Unknown check type: #{@guard_config[:type]}"
         end
       end
 

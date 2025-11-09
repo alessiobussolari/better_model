@@ -47,24 +47,24 @@ class Document < ApplicationRecord
     state :rejected
 
     transition :submit, from: :draft, to: :manager_review do
-      guard { can?(:submit_for_approval) }
+      check { can?(:submit_for_approval) }
       after :notify_managers
     end
 
     transition :manager_approve, from: :manager_review, to: :director_review do
-      guard { can?(:manager_approve) }
+      check { can?(:manager_approve) }
       before { self.manager_id = Current.user.id }
       after :notify_directors
     end
 
     transition :manager_reject, from: :manager_review, to: :rejected do
-      guard { can?(:manager_approve) }
+      check { can?(:manager_approve) }
       before { self.manager_id = Current.user.id }
       after :notify_author_rejected
     end
 
     transition :director_approve, from: :director_review, to: :published do
-      guard { can?(:director_approve) }
+      check { can?(:director_approve) }
       before do
         self.director_id = Current.user.id
         self.published_at = Time.current
@@ -73,7 +73,7 @@ class Document < ApplicationRecord
     end
 
     transition :director_reject, from: :director_review, to: :rejected do
-      guard { can?(:director_approve) }
+      check { can?(:director_approve) }
       before { self.director_id = Current.user.id }
       after :notify_author_rejected
     end
@@ -394,38 +394,31 @@ article.rollback_fields(old_version.id, fields: [:title])
 class Form < ApplicationRecord
   include BetterModel
 
+  # Register complex validation
+  register_complex_validation :either_phone_or_email_required do
+    if phone.blank? && email.blank?
+      errors.add(:base, "Either phone or email must be provided")
+    end
+  end
+
   validatable do
     # Always required
     check :name, presence: true
 
-    # Required when published
-    validate_if -> { status == "published" } do
-      check :description, presence: true, length: { minimum: 50 }
-      check :published_at, presence: true
-    end
+    # Required when published (using Rails if: option)
+    check :description, presence: true, length: { minimum: 50 }, if: -> { status == "published" }
+    check :published_at, presence: true, if: -> { status == "published" }
 
-    # Required for premium tier
-    validate_if -> { tier == "premium" } do
-      check :premium_features, presence: true
-      check :support_email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
-    end
+    # Required for premium tier (using Rails if: option)
+    check :premium_features, presence: true, if: -> { tier == "premium" }
+    check :support_email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }, if: -> { tier == "premium" }
 
-    # Required if condition field is checked
-    validate_if -> { requires_approval? } do
-      check :approver_email, presence: true
-      check :approval_deadline, presence: true
-    end
+    # Required if condition field is checked (using Rails if: option)
+    check :approver_email, presence: true, if: -> { requires_approval? }
+    check :approval_deadline, presence: true, if: -> { requires_approval? }
 
     # Complex conditional: required unless another field is present
-    validate_business_rule :either_phone_or_email_required
-  end
-
-  private
-
-  def either_phone_or_email_required
-    if phone.blank? && email.blank?
-      errors.add(:base, "Either phone or email must be provided")
-    end
+    check_complex :either_phone_or_email_required
   end
 end
 ```
@@ -576,24 +569,18 @@ class Order < ApplicationRecord
     # Draft state: minimal validation
     # (no additional validations needed)
 
-    # Processing state: need payment info
-    validate_if -> { state == "processing" } do
-      check :payment_method, presence: true
-      check :billing_address, presence: true
-    end
+    # Processing state: need payment info (using Rails if: option)
+    check :payment_method, presence: true, if: -> { state == "processing" }
+    check :billing_address, presence: true, if: -> { state == "processing" }
 
-    # Shipping state: need shipping info
-    validate_if -> { state == "shipping" || state == "shipped" } do
-      check :shipping_address, presence: true
-      check :shipping_method, presence: true
-      check :tracking_number, presence: true
-    end
+    # Shipping state: need shipping info (using Rails if: option)
+    check :shipping_address, presence: true, if: -> { state == "shipping" || state == "shipped" }
+    check :shipping_method, presence: true, if: -> { state == "shipping" || state == "shipped" }
+    check :tracking_number, presence: true, if: -> { state == "shipping" || state == "shipped" }
 
-    # Delivered state: need confirmation
-    validate_if -> { state == "delivered" } do
-      check :delivered_at, presence: true
-      check :signature, presence: true
-    end
+    # Delivered state: need confirmation (using Rails if: option)
+    check :delivered_at, presence: true, if: -> { state == "delivered" }
+    check :signature, presence: true, if: -> { state == "delivered" }
   end
 
   stateable do
@@ -604,11 +591,11 @@ class Order < ApplicationRecord
     state :delivered
 
     transition :process, from: :draft, to: :processing do
-      guard { valid? }  # Uses validations for "processing" state
+      check { valid? }  # Uses validations for "processing" state
     end
 
     transition :ship, from: :processing, to: :shipping do
-      guard { valid? }
+      check { valid? }
     end
 
     # etc.

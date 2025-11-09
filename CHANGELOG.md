@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.1] - 2025-11-09
+
+### Fixed
+- **Validatable**: Corrected error class names in documentation
+  - Fixed `BetterModel::ValidatableNotEnabledError` → `BetterModel::Errors::Validatable::NotEnabledError`
+  - Affected methods: `validate_group(group_name)`, `errors_for_group(group_name)`
+
+### Added
+- **Validatable**: Comprehensive error handling documentation
+  - New "Error Handling" section in `docs/validatable.md`
+  - Examples for all error scenarios (NotEnabledError, ConfigurationError, ArgumentError)
+  - Controller error handling patterns with rescue examples
+  - Best practices for testing error scenarios
+  - Error hierarchy diagram
+- **CLAUDE.md**: Complete error handling guide for contributors
+  - Full error hierarchy for all BetterModel modules
+  - Module-specific error handling guidelines
+  - Best practices for error handling and testing
+  - Error metadata usage examples
+  - Debugging tips and integration patterns
+
+### Documentation
+- Aligned Validatable error documentation with Stateable and Searchable patterns
+- Added comprehensive examples of error handling in controllers
+- Added testing examples (Minitest and RSpec) for all error scenarios
+
 ## [2.1.0] - 2025-11-05
 
 ### ⚠️ BREAKING CHANGES
@@ -423,14 +449,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Validatable - Declarative Validation System
 - **Opt-in activation**: Enable with `validatable do...end` block
-- **Basic validations**: Clean DSL for all ActiveModel validation types
-- **Conditional validations**: `validate_if` and `validate_unless` with symbol or lambda conditions
-- **Cross-field validations**: `validate_order` with 6 comparators (before, after, lteq, gteq, lt, gt)
-- **Business rules**: `validate_business_rule` delegates complex logic to custom methods
+- **Basic validations**: Clean DSL with `check` method for all ActiveModel validation types
+- **Conditional validations**: Use Rails `if:`/`unless:` options for conditional logic
+- **Complex validations**: `register_complex_validation` + `check_complex` for cross-field and business rules
 - **Validation groups**: Partial validation for multi-step forms with `validation_group`
 - **Instance methods**: `valid?(group)`, `validate_group(group)`, `errors_for_group(group)`
 - **Seamless integration** with Statusable for status-based conditional validations
 - **Thread-safe** with frozen immutable configuration
+
+**DEPRECATED in v2.0.0** (removed methods - see current API in docs/validatable.md):
+- ~~`validate_if`/`validate_unless`~~ → Use Rails `if:`/`unless:` options
+- ~~`validate_order`~~ → Use `register_complex_validation` for cross-field comparisons
+- ~~`validate_business_rule`~~ → Use `register_complex_validation` + `check_complex`
 
 ### Changed
 

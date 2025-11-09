@@ -374,7 +374,7 @@ stateable do
   state :published
 
   transition :publish, from: :draft, to: :published do
-    guard { is?(:draft) }  # Use status check
+    check { is?(:draft) }  # Use status check
   end
 end
 ```

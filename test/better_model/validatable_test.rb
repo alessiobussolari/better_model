@@ -70,159 +70,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     assert_includes article.errors[:status], "can't be blank"
   end
 
-  # Test 3: Conditional validations with validate_if
-  test "validate_if with symbol condition" do
-    article_class = create_validatable_class(:ValidatableArticle5) do
-      # Define status predicate
-      is :published, -> { status == "published" }
-
-      validatable do
-        validate_if :is_published? do
-          check :published_at, presence: true
-        end
-      end
-    end
-
-    # Draft article (condition false) - should be valid even without published_at
-    article = article_class.new(status: "draft", published_at: nil)
-    assert article.valid?
-
-    # Published article (condition true) - requires published_at
-    article = article_class.new(status: "published", published_at: nil)
-    assert_not article.valid?
-    assert_includes article.errors[:published_at], "can't be blank"
-
-    article.published_at = Time.current
-    assert article.valid?
-  end
-
-  test "validate_if with lambda condition" do
-    article_class = create_validatable_class(:ValidatableArticle6) do
-      validatable do
-        validate_if -> { status == "published" } do
-          check :published_at, presence: true
-        end
-      end
-    end
-
-    article = article_class.new(status: "draft", published_at: nil)
-    assert article.valid?
-
-    article = article_class.new(status: "published", published_at: nil)
-    assert_not article.valid?
-  end
-
-  test "validate_unless negates condition" do
-    article_class = create_validatable_class(:ValidatableArticle7) do
-      is :draft, -> { status == "draft" }
-
-      validatable do
-        validate_unless :is_draft? do
-          check :published_at, presence: true
-        end
-      end
-    end
-
-    # Draft (condition true, negated to false) - validation skipped
-    article = article_class.new(status: "draft", published_at: nil)
-    assert article.valid?
-
-    # Published (condition false, negated to true) - validation applied
-    article = article_class.new(status: "published", published_at: nil)
-    assert_not article.valid?
-    assert_includes article.errors[:published_at], "can't be blank"
-  end
-
-  # Test 4: Order validations (cross-field)
-  test "validate_order with before comparator for dates" do
-    article_class = create_validatable_class(:ValidatableArticle8) do
-      validatable do
-        validate_order :starts_at, :before, :ends_at
-      end
-    end
-
-    # Valid: starts_at before ends_at
-    article = article_class.new(starts_at: 1.day.ago, ends_at: Time.current)
-    assert article.valid?
-
-    # Invalid: starts_at after ends_at
-    article = article_class.new(starts_at: Time.current, ends_at: 1.day.ago)
-    assert_not article.valid?
-    assert_includes article.errors[:starts_at], "must be before ends at"
-  end
-
-  test "validate_order with lteq comparator for numbers" do
-    article_class = create_validatable_class(:ValidatableArticle9) do
-      validatable do
-        validate_order :view_count, :lteq, :max_views
-      end
-    end
-
-    # Valid: view_count <= max_views
-    article = article_class.new(view_count: 50, max_views: 100)
-    assert article.valid?
-
-    article = article_class.new(view_count: 100, max_views: 100)
-    assert article.valid?
-
-    # Invalid: view_count > max_views
-    article = article_class.new(view_count: 150, max_views: 100)
-    assert_not article.valid?
-    assert_includes article.errors[:view_count], "must be less than or equal to max views"
-  end
-
-  test "validate_order skips validation when fields are nil" do
-    article_class = create_validatable_class(:ValidatableArticle10) do
-      validatable do
-        validate_order :starts_at, :before, :ends_at
-      end
-    end
-
-    # Should not error when nil (use presence validation for that)
-    article = article_class.new(starts_at: nil, ends_at: nil)
-    assert article.valid?
-  end
-
-  # Test 5: Business rules
-  test "validate_business_rule calls custom method" do
-    article_class = create_validatable_class(:ValidatableArticle11) do
-      validatable do
-        validate_business_rule :valid_status
-      end
-
-      # Define the business rule method
-      def valid_status
-        valid_statuses = %w[draft published archived]
-        unless valid_statuses.include?(status)
-          errors.add(:status, "must be one of: #{valid_statuses.join(', ')}")
-        end
-      end
-    end
-
-    article = article_class.new(status: "draft")
-    assert article.valid?
-
-    article = article_class.new(status: "invalid")
-    assert_not article.valid?
-    assert_includes article.errors[:status], "must be one of: draft, published, archived"
-  end
-
-  test "validate_business_rule raises error if method not found" do
-    article_class = create_validatable_class(:ValidatableArticle12) do
-      validatable do
-        validate_business_rule :nonexistent_rule
-      end
-    end
-
-    article = article_class.new
-    error = assert_raises(NoMethodError) do
-      article.valid?
-    end
-
-    assert_match(/Business rule method 'nonexistent_rule' not found/, error.message)
-  end
-
-  # Test 6: Validation groups
+  # Test 3: Validation groups
   test "validation_group defines groups" do
     article_class = create_validatable_class(:ValidatableArticle13) do
       validatable do
@@ -271,7 +119,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     # Don't enable validatable
 
     article = article_class.new
-    error = assert_raises(BetterModel::ValidatableNotEnabledError) do
+    error = assert_raises(BetterModel::Errors::Validatable::NotEnabledError) do
       article.validate_group(:step1)
     end
 
@@ -282,69 +130,14 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     article_class = create_validatable_class(:ValidatableArticle16)
 
     article = article_class.new
-    error = assert_raises(BetterModel::ValidatableNotEnabledError) do
+    error = assert_raises(BetterModel::Errors::Validatable::NotEnabledError) do
       article.errors_for_group(:step1)
     end
 
     assert_match(/Validatable is not enabled/, error.message)
   end
 
-  # Test 7: Complex scenario
-  test "complex validation scenario with all features" do
-    article_class = create_validatable_class(:ValidatableArticle17) do
-      is :published, -> { status == "published" }
-      is :scheduled, -> { status == "scheduled" }
-
-      validatable do
-        # Basic validations
-        check :title, presence: true
-        check :status, presence: true
-
-        # Conditional validations
-        validate_if :is_published? do
-          check :published_at, presence: true
-        end
-
-        validate_if :is_scheduled? do
-          check :scheduled_for, presence: true
-        end
-
-        # Cross-field validation
-        validate_order :starts_at, :before, :ends_at
-
-        # Business rule
-        validate_business_rule :valid_view_count
-
-        # Validation groups
-        validation_group :basic, [ :title, :status ]
-        validation_group :publishing, [ :published_at, :scheduled_for ]
-      end
-
-      def valid_view_count
-        if view_count && view_count.negative?
-          errors.add(:view_count, "cannot be negative")
-        end
-      end
-    end
-
-    # Valid published article
-    article = article_class.new(
-      title: "Test",
-      status: "published",
-      published_at: Time.current,
-      starts_at: 1.day.ago,
-      ends_at: Time.current,
-      view_count: 100
-    )
-    assert article.valid?
-
-    # Invalid: negative view count
-    article.view_count = -10
-    assert_not article.valid?
-    assert_includes article.errors[:view_count], "cannot be negative"
-  end
-
-  # Test 8: ActiveRecord integration
+  # Test 5: ActiveRecord integration
   test "validatable raises error when included in non-ActiveRecord class" do
     error = assert_raises(ArgumentError) do
       Class.new do
@@ -574,461 +367,6 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   end
 
   # ========================================
-  # EDGE CASES - CONDITIONAL VALIDATIONS
-  # ========================================
-
-  test "validate_if with multiple separate conditions" do
-    article_class = create_validatable_class(:ValidatableArticle28) do
-      is :published, -> { status == "published" }
-      is :featured, -> { featured == true }
-
-      validatable do
-        # First condition: if published
-        validate_if :is_published? do
-          check :published_at, presence: true
-        end
-
-        # Second condition: if published AND featured (using proc)
-        validate_if -> { status == "published" && featured == true } do
-          check :view_count, numericality: { greater_than: 100 }
-        end
-      end
-    end
-
-    # Draft - no validations
-    article = article_class.new(status: "draft", published_at: nil, featured: true, view_count: 50)
-    assert article.valid?
-
-    # Published but not featured - only published_at required
-    article = article_class.new(status: "published", published_at: Time.current, featured: false, view_count: 50)
-    assert article.valid?
-
-    # Published and featured - both validations required
-    article = article_class.new(status: "published", published_at: Time.current, featured: true, view_count: 50)
-    assert_not article.valid?
-    assert_includes article.errors[:view_count], "must be greater than 100"
-
-    # Valid published + featured
-    article = article_class.new(status: "published", published_at: Time.current, featured: true, view_count: 150)
-    assert article.valid?
-  end
-
-  test "validate_if with proc that raises exception is handled" do
-    article_class = create_validatable_class(:ValidatableArticle29) do
-      validatable do
-        validate_if -> { raise StandardError, "Condition error" } do
-          check :title, presence: true
-        end
-      end
-    end
-
-    article = article_class.new(title: "Test")
-    # Exception in condition should propagate
-    assert_raises(StandardError) do
-      article.valid?
-    end
-  end
-
-  test "validate_if and validate_unless together" do
-    article_class = create_validatable_class(:ValidatableArticle30) do
-      is :published, -> { status == "published" }
-      is :draft, -> { status == "draft" }
-
-      validatable do
-        validate_if :is_published? do
-          check :published_at, presence: true
-        end
-
-        validate_unless :is_draft? do
-          check :view_count, numericality: { greater_than_or_equal_to: 0 }
-        end
-      end
-    end
-
-    # Draft: only validate_if skipped, validate_unless also skipped (not draft = false, so validation runs)
-    # Wait, validate_unless :is_draft? means "unless draft" = "if not draft"
-    # So for draft, validate_unless should be skipped
-    article = article_class.new(status: "draft", published_at: nil, view_count: -10)
-    assert article.valid? # Both validations skipped for draft
-
-    # Published: validate_if runs, validate_unless runs
-    article = article_class.new(status: "published", published_at: nil, view_count: -10)
-    assert_not article.valid?
-    assert_includes article.errors[:published_at], "can't be blank"
-    assert_includes article.errors[:view_count], "must be greater than or equal to 0"
-  end
-
-  test "validate_if with multiple OR conditions using proc" do
-    article_class = create_validatable_class(:ValidatableArticle31) do
-      validatable do
-        validate_if -> { status == "published" || status == "archived" } do
-          check :published_at, presence: true
-        end
-      end
-    end
-
-    # Draft - condition false
-    article = article_class.new(status: "draft", published_at: nil)
-    assert article.valid?
-
-    # Published - condition true
-    article = article_class.new(status: "published", published_at: nil)
-    assert_not article.valid?
-    assert_includes article.errors[:published_at], "can't be blank"
-
-    # Archived - condition true
-    article = article_class.new(status: "archived", published_at: nil)
-    assert_not article.valid?
-    assert_includes article.errors[:published_at], "can't be blank"
-  end
-
-  test "validate_if condition is evaluated at validation time" do
-    article_class = create_validatable_class(:ValidatableArticle32) do
-      attr_accessor :dynamic_flag
-
-      validatable do
-        validate_if -> { dynamic_flag == true } do
-          check :title, presence: true
-        end
-      end
-    end
-
-    # Flag is false - validation skipped
-    article = article_class.new(status: "published", dynamic_flag: false, title: nil)
-    assert article.valid?
-
-    # Flag is true - validation runs
-    article = article_class.new(status: "published", dynamic_flag: true, title: nil)
-    assert_not article.valid?
-    assert_includes article.errors[:title], "can't be blank"
-
-    # Change flag after creation and revalidate
-    article.dynamic_flag = false
-    assert article.valid? # Now validation is skipped
-  end
-
-  test "validate_unless with complex proc condition" do
-    article_class = create_validatable_class(:ValidatableArticle33) do
-      validatable do
-        validate_unless -> { status == "draft" && view_count.to_i < 10 } do
-          check :title, length: { minimum: 10 }
-        end
-      end
-    end
-
-    # Draft with low views - validation skipped
-    article = article_class.new(status: "draft", view_count: 5, title: "Short")
-    assert article.valid?
-
-    # Draft with high views - validation runs
-    article = article_class.new(status: "draft", view_count: 50, title: "Short")
-    assert_not article.valid?
-    assert_includes article.errors[:title], "is too short (minimum is 10 characters)"
-
-    # Published with low views - validation runs
-    article = article_class.new(status: "published", view_count: 5, title: "Short")
-    assert_not article.valid?
-    assert_includes article.errors[:title], "is too short (minimum is 10 characters)"
-  end
-
-  # ========================================
-  # EDGE CASES - ORDER VALIDATIONS
-  # ========================================
-
-  test "validate_order with :after comparator for dates" do
-    article_class = create_validatable_class(:ValidatableArticle34) do
-      validatable do
-        validate_order :ends_at, :after, :starts_at
-      end
-    end
-
-    # Valid: ends_at after starts_at
-    article = article_class.new(starts_at: 1.day.ago, ends_at: Time.current)
-    assert article.valid?
-
-    # Invalid: ends_at before starts_at
-    article = article_class.new(starts_at: Time.current, ends_at: 1.day.ago)
-    assert_not article.valid?
-    assert_includes article.errors[:ends_at], "must be after starts at"
-  end
-
-  test "validate_order with :lt and :gt comparators for numbers" do
-    article_class = create_validatable_class(:ValidatableArticle35) do
-      validatable do
-        validate_order :view_count, :lt, :max_views
-      end
-    end
-
-    # Valid: view_count < max_views
-    article = article_class.new(view_count: 50, max_views: 100)
-    assert article.valid?
-
-    # Invalid: view_count >= max_views
-    article = article_class.new(view_count: 100, max_views: 100)
-    assert_not article.valid?
-    assert_includes article.errors[:view_count], "must be less than max views"
-
-    article = article_class.new(view_count: 150, max_views: 100)
-    assert_not article.valid?
-  end
-
-  test "validate_order with :gteq comparator" do
-    article_class = create_validatable_class(:ValidatableArticle36) do
-      validatable do
-        validate_order :view_count, :gteq, :max_views
-      end
-    end
-
-    # Valid: view_count >= max_views
-    article = article_class.new(view_count: 100, max_views: 100)
-    assert article.valid?
-
-    article = article_class.new(view_count: 150, max_views: 100)
-    assert article.valid?
-
-    # Invalid: view_count < max_views
-    article = article_class.new(view_count: 50, max_views: 100)
-    assert_not article.valid?
-    assert_includes article.errors[:view_count], "must be greater than or equal to max views"
-  end
-
-  test "validate_order provides default error message" do
-    article_class = create_validatable_class(:ValidatableArticle37) do
-      validatable do
-        validate_order :starts_at, :before, :ends_at
-      end
-    end
-
-    article = article_class.new(starts_at: Time.current, ends_at: 1.day.ago)
-    assert_not article.valid?
-    # OrderValidator provides a default message
-    assert_includes article.errors[:starts_at], "must be before ends at"
-
-    # Verify message is humanized
-    assert article.errors[:starts_at].any? { |msg| msg.include?("ends at") }
-  end
-
-  test "validate_order with on: :create context" do
-    article_class = create_validatable_class(:ValidatableArticle38) do
-      validatable do
-        validate_order :starts_at, :before, :ends_at, on: :create
-      end
-    end
-
-    # On create - validation runs
-    article = article_class.new(starts_at: Time.current, ends_at: 1.day.ago)
-    assert_not article.valid?
-    assert_includes article.errors[:starts_at], "must be before ends at"
-
-    # Simulate update (not new record)
-    article = article_class.new(starts_at: Time.current, ends_at: 1.day.ago)
-    article.instance_variable_set(:@new_record, false)
-    # On update - validation skipped
-    assert article.valid?
-  end
-
-  test "validate_order with if/unless conditions" do
-    article_class = create_validatable_class(:ValidatableArticle39) do
-      is :published, -> { status == "published" }
-
-      validatable do
-        validate_order :starts_at, :before, :ends_at, if: :is_published?
-      end
-    end
-
-    # Draft - validation skipped
-    article = article_class.new(status: "draft", starts_at: Time.current, ends_at: 1.day.ago)
-    assert article.valid?
-
-    # Published - validation runs
-    article = article_class.new(status: "published", starts_at: Time.current, ends_at: 1.day.ago)
-    assert_not article.valid?
-    assert_includes article.errors[:starts_at], "must be before ends at"
-  end
-
-  test "validate_order with equal values for lteq/gteq" do
-    article_class = create_validatable_class(:ValidatableArticle40) do
-      validatable do
-        validate_order :view_count, :lteq, :max_views
-      end
-    end
-
-    # Equal values should be valid for lteq
-    article = article_class.new(view_count: 100, max_views: 100)
-    assert article.valid?
-
-    # Less than should be valid
-    article = article_class.new(view_count: 50, max_views: 100)
-    assert article.valid?
-
-    # Greater than should be invalid
-    article = article_class.new(view_count: 150, max_views: 100)
-    assert_not article.valid?
-    assert_includes article.errors[:view_count], "must be less than or equal to max views"
-  end
-
-  test "validate_order with incompatible types handles gracefully" do
-    article_class = create_validatable_class(:ValidatableArticle41) do
-      attr_accessor :text_field, :number_field
-
-      validatable do
-        validate_order :text_field, :lteq, :number_field
-      end
-    end
-
-    # String vs Number - comparison will fail or work depending on Ruby's behavior
-    article = article_class.new(text_field: "hello", number_field: 100)
-
-    # This will either raise an error or return false depending on implementation
-    # We just verify it doesn't crash the app
-    begin
-      result = article.valid?
-      # If it doesn't raise, it should return a boolean
-      assert [ true, false ].include?(result)
-    rescue ArgumentError, TypeError
-      # Some implementations might raise an error for incompatible types
-      # This is acceptable behavior
-      assert true
-    end
-  end
-
-  # ========================================
-  # EDGE CASES - BUSINESS RULES
-  # ========================================
-
-  test "validate_business_rule can modify object during validation" do
-    article_class = create_validatable_class(:ValidatableArticle42) do
-      attr_accessor :auto_generated_field
-
-      validatable do
-        validate_business_rule :generate_field
-      end
-
-      def generate_field
-        self.auto_generated_field = "auto-#{title}" if title.present?
-      end
-    end
-
-    article = article_class.new(title: "Test", auto_generated_field: nil)
-    assert article.valid?
-    # Field was generated during validation
-    assert_equal "auto-Test", article.auto_generated_field
-  end
-
-  test "validate_business_rule with on: :create context" do
-    article_class = create_validatable_class(:ValidatableArticle43) do
-      validatable do
-        validate_business_rule :check_create_only, on: :create
-      end
-
-      def check_create_only
-        errors.add(:base, "Create check failed") if title.nil?
-      end
-    end
-
-    # On create - rule runs
-    article = article_class.new(title: nil)
-    assert_not article.valid?
-    assert_includes article.errors[:base], "Create check failed"
-
-    # Simulate update
-    article = article_class.new(title: nil)
-    article.instance_variable_set(:@new_record, false)
-    assert article.valid? # Rule skipped on update
-  end
-
-  test "validate_business_rule with if condition" do
-    article_class = create_validatable_class(:ValidatableArticle44) do
-      is :published, -> { status == "published" }
-
-      validatable do
-        validate_business_rule :check_published_requirements, if: :is_published?
-      end
-
-      def check_published_requirements
-        errors.add(:published_at, "must be present for published articles") if published_at.nil?
-      end
-    end
-
-    # Draft - rule skipped
-    article = article_class.new(status: "draft", published_at: nil)
-    assert article.valid?
-
-    # Published - rule runs
-    article = article_class.new(status: "published", published_at: nil)
-    assert_not article.valid?
-    assert_includes article.errors[:published_at], "must be present for published articles"
-  end
-
-  test "validate_business_rule that raises exception is propagated" do
-    article_class = create_validatable_class(:ValidatableArticle45) do
-      validatable do
-        validate_business_rule :failing_rule
-      end
-
-      def failing_rule
-        raise StandardError, "Business rule failed"
-      end
-    end
-
-    article = article_class.new
-    assert_raises(StandardError) do
-      article.valid?
-    end
-  end
-
-  test "validate_business_rule can add multiple errors" do
-    article_class = create_validatable_class(:ValidatableArticle46) do
-      validatable do
-        validate_business_rule :complex_validation
-      end
-
-      def complex_validation
-        errors.add(:title, "is too generic") if title == "Test"
-        errors.add(:status, "must be draft or published") unless %w[draft published].include?(status)
-        errors.add(:view_count, "seems suspicious") if view_count && view_count > 10000
-      end
-    end
-
-    article = article_class.new(title: "Test", status: "invalid", view_count: 50000)
-    assert_not article.valid?
-    assert_includes article.errors[:title], "is too generic"
-    assert_includes article.errors[:status], "must be draft or published"
-    assert_includes article.errors[:view_count], "seems suspicious"
-    assert_equal 3, article.errors.count
-  end
-
-  test "validate_business_rule can call other methods" do
-    article_class = create_validatable_class(:ValidatableArticle47) do
-      validatable do
-        validate_business_rule :validate_content_quality
-      end
-
-      def validate_content_quality
-        check_title_length
-        check_content_presence
-      end
-
-      def check_title_length
-        errors.add(:title, "is too short for quality content") if title && title.length < 20
-      end
-
-      def check_content_presence
-        errors.add(:content, "must be present for quality articles") if content.blank?
-      end
-    end
-
-    article = article_class.new(title: "Short", content: nil)
-    assert_not article.valid?
-    assert_includes article.errors[:title], "is too short for quality content"
-    assert_includes article.errors[:content], "must be present for quality articles"
-
-    # Valid article
-    article = article_class.new(title: "This is a long enough title for quality", content: "Good content")
-    assert article.valid?
-  end
-
-  # ========================================
   # EDGE CASES - VALIDATION GROUPS
   # ========================================
 
@@ -1213,29 +551,6 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   # INTEGRATION TESTS
   # ========================================
 
-  test "validatable works with statusable predicates" do
-    article_class = create_validatable_class(:ValidatableArticle56) do
-      # Statusable predicates
-      is :draft, -> { status == "draft" }
-      is :published, -> { status == "published" }
-
-      validatable do
-        validate_if :is_published? do
-          check :published_at, presence: true
-        end
-      end
-    end
-
-    # Draft - validation skipped
-    article = article_class.new(status: "draft", published_at: nil)
-    assert article.valid?
-
-    # Published - validation runs
-    article = article_class.new(status: "published", published_at: nil)
-    assert_not article.valid?
-    assert_includes article.errors[:published_at], "can't be blank"
-  end
-
   test "validatable validates before checking permissions" do
     article_class = create_validatable_class(:ValidatableArticle57) do
       # Simulate Permissible-like behavior
@@ -1374,34 +689,6 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     assert_equal 20, article.errors.count
   end
 
-  test "validatable with many conditional validations performs well" do
-    article_class = create_validatable_class(:ValidatableArticle63) do
-      # Create 10 status predicates
-      10.times do |i|
-        is "status_#{i}".to_sym, -> { status == "status_#{i}" }
-      end
-
-      validatable do
-        # 10 conditional validations
-        10.times do |i|
-          validate_if "is_status_#{i}?".to_sym do
-            check :title, presence: true
-          end
-        end
-      end
-    end
-
-    article = article_class.new(status: "status_5", title: nil)
-
-    start_time = Time.now
-    result = article.valid?
-    elapsed = Time.now - start_time
-
-    # Should complete quickly
-    assert elapsed < 0.1, "Validation took #{elapsed}s for 10 conditionals"
-    assert_not result  # status_5 condition matches, title validation fails
-  end
-
   test "validatable with many validation groups performs well" do
     article_class = create_validatable_class(:ValidatableArticle64) do
       # Create many fields outside validatable block
@@ -1435,53 +722,9 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     assert elapsed < 0.2, "10 group validations took #{elapsed}s"
   end
 
-  test "validatable with complex business rules performs adequately" do
-    article_class = create_validatable_class(:ValidatableArticle65) do
-      validatable do
-        validate_business_rule :complex_validation
-      end
-
-      def complex_validation
-        # Simulate complex business logic
-        100.times do |i|
-          # Some computation
-          i * 2
-        end
-
-        errors.add(:base, "Complex validation failed") if title.nil?
-      end
-    end
-
-    article = article_class.new(title: nil)
-
-    start_time = Time.now
-    article.valid?
-    elapsed = Time.now - start_time
-
-    # Should still complete reasonably fast
-    assert elapsed < 0.1, "Complex validation took #{elapsed}s"
-    assert_includes article.errors[:base], "Complex validation failed"
-  end
-
   # ========================================
   # ERROR HANDLING & MESSAGES TESTS
   # ========================================
-
-  test "order validation provides user-friendly error messages" do
-    article_class = create_validatable_class(:ValidatableArticle66) do
-      validatable do
-        validate_order :starts_at, :before, :ends_at
-        validate_order :view_count, :lteq, :max_views
-      end
-    end
-
-    article = article_class.new(starts_at: Time.current, ends_at: 1.day.ago, view_count: 100, max_views: 50)
-    assert_not article.valid?
-
-    # Messages should be humanized
-    assert article.errors[:starts_at].any? { |msg| msg.include?("ends at") }
-    assert article.errors[:view_count].any? { |msg| msg.include?("max views") }
-  end
 
   test "validation errors include validator metadata" do
     article_class = create_validatable_class(:ValidatableArticle67) do
@@ -1499,25 +742,6 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     assert details.any? { |d| d[:error] == :too_short }
   end
 
-  test "business rule errors can be added to base or specific fields" do
-    article_class = create_validatable_class(:ValidatableArticle68) do
-      validatable do
-        validate_business_rule :check_consistency
-      end
-
-      def check_consistency
-        errors.add(:base, "Article is inconsistent")
-        errors.add(:title, "conflicts with status")
-      end
-    end
-
-    article = article_class.new
-    assert_not article.valid?
-
-    assert_includes article.errors[:base], "Article is inconsistent"
-    assert_includes article.errors[:title], "conflicts with status"
-  end
-
   test "validation full_messages includes field names" do
     article_class = create_validatable_class(:ValidatableArticle69) do
       validatable do
@@ -1532,18 +756,6 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
     full_messages = article.errors.full_messages
     assert full_messages.any? { |msg| msg.include?("Title") }
     assert full_messages.any? { |msg| msg.include?("Status") }
-  end
-
-  test "validate_order with invalid comparator raises ArgumentError" do
-    error = assert_raises(ArgumentError) do
-      create_validatable_class(:ValidatableArticle70) do
-        validatable do
-          validate_order :starts_at, :invalid_comparator, :ends_at
-        end
-      end
-    end
-
-    assert_match(/Invalid comparator/, error.message)
   end
 
   test "validatable error messages are customizable" do
@@ -1564,165 +776,6 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   # ========================================
   # COVERAGE TESTS - Complex Conditions & Edge Cases
   # ========================================
-
-  test "nested validate_if conditions with multiple levels" do
-    article_class = create_validatable_class(:ValidatableArticle72) do
-      attr_accessor :level1, :level2
-
-      is :level1_active, -> { level1 == true }
-      is :level2_active, -> { level2 == true }
-
-      validatable do
-        validate_if :is_level1_active? do
-          check :title, presence: true
-
-          validate_if :is_level2_active? do
-            check :content, presence: true
-          end
-        end
-      end
-    end
-
-    # Level1 false - no validations
-    article = article_class.new(level1: false, level2: false)
-    assert article.valid?
-
-    # Level1 true, Level2 false - only title required
-    article = article_class.new(level1: true, level2: false, title: nil, content: nil)
-    assert_not article.valid?
-    assert article.errors.attribute_names.include?(:title)
-    refute article.errors.attribute_names.include?(:content)
-
-    # Level1 true, Level2 true - both required
-    article = article_class.new(level1: true, level2: true, title: "Title", content: nil)
-    assert_not article.valid?
-    assert article.errors.attribute_names.include?(:content)
-  end
-
-  test "business rule with nil values" do
-    article_class = create_validatable_class(:ValidatableArticle73) do
-      attr_accessor :max_value, :current_value
-
-      validatable do
-        validate_business_rule :check_max_value
-      end
-
-      def check_max_value
-        return if max_value.nil? || current_value.nil?
-
-        if current_value > max_value
-          errors.add(:current_value, "cannot exceed max_value")
-        end
-      end
-    end
-
-    # Both nil - should be valid
-    article = article_class.new(max_value: nil, current_value: nil)
-    assert article.valid?
-
-    # One nil - should be valid
-    article = article_class.new(max_value: 100, current_value: nil)
-    assert article.valid?
-
-    # Both present and valid
-    article = article_class.new(max_value: 100, current_value: 50)
-    assert article.valid?
-
-    # Both present and invalid
-    article = article_class.new(max_value: 100, current_value: 150)
-    assert_not article.valid?
-    assert_includes article.errors[:current_value], "cannot exceed max_value"
-  end
-
-  test "business rule that raises exception" do
-    article_class = create_validatable_class(:ValidatableArticle74) do
-      validatable do
-        validate_business_rule :check_that_raises
-      end
-
-      def check_that_raises
-        raise "Business rule error"
-      end
-    end
-
-    article = article_class.new(title: "Test")
-
-    # Exception should be propagated
-    assert_raises(RuntimeError, /Business rule error/) do
-      article.valid?
-    end
-  end
-
-  test "validate_order with nil values" do
-    article_class = create_validatable_class(:ValidatableArticle75) do
-      attr_accessor :start_date, :end_date
-
-      validatable do
-        validate_order :start_date, :before, :end_date
-      end
-    end
-
-    # Both nil - should be valid
-    article = article_class.new(start_date: nil, end_date: nil)
-    assert article.valid?
-
-    # One nil - should be valid
-    article = article_class.new(start_date: Date.today, end_date: nil)
-    assert article.valid?
-
-    # Both present and valid
-    article = article_class.new(start_date: Date.today, end_date: Date.tomorrow)
-    assert article.valid?
-
-    # Both present and invalid
-    article = article_class.new(start_date: Date.tomorrow, end_date: Date.today)
-    assert_not article.valid?
-  end
-
-  test "validate_order with same values" do
-    article_class = create_validatable_class(:ValidatableArticle76) do
-      attr_accessor :start_date, :end_date
-
-      validatable do
-        validate_order :start_date, :before, :end_date
-      end
-    end
-
-    # Same date should be invalid for :before
-    article = article_class.new(start_date: Date.today, end_date: Date.today)
-    assert_not article.valid?
-    assert article.errors.attribute_names.include?(:start_date)
-  end
-
-  test "complex conditional validation with multiple conditions" do
-    article_class = create_validatable_class(:ValidatableArticle77) do
-      attr_accessor :condition1, :condition2
-
-      validatable do
-        validate_if -> { condition1 && condition2 } do
-          check :title, presence: true, length: { minimum: 5 }
-        end
-
-        validate_unless -> { condition1 || condition2 } do
-          check :content, presence: true
-        end
-      end
-    end
-
-    # Both false - content required
-    article = article_class.new(condition1: false, condition2: false, content: nil)
-    assert_not article.valid?
-    assert article.errors.attribute_names.include?(:content)
-
-    # One true - no validations
-    article = article_class.new(condition1: true, condition2: false, title: nil, content: nil)
-    assert article.valid?
-
-    # Both true - title required and must be >= 5 chars
-    article = article_class.new(condition1: true, condition2: true, title: "Hi")
-    assert_not article.valid?
-    assert article.errors.attribute_names.include?(:title)
-  end
 
   test "validation group with multiple steps" do
     article_class = create_validatable_class(:ValidatableArticle78) do
@@ -1777,130 +830,330 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   end
 
   # ========================================
-  # ORDER VALIDATOR TESTS
+  # COMPLEX VALIDATIONS TESTS
   # ========================================
 
-  test "order validator should work with :lt comparator" do
-    article_class = create_validatable_class(:ValidatableArticle80) do
-      attr_accessor :min_price, :max_price
+  test "register_complex_validation registers validation in registry" do
+    article_class = create_validatable_class(:ValidatableArticle88) do
+      register_complex_validation :valid_pricing do
+        if sale_price.present? && sale_price >= price
+          errors.add(:sale_price, "must be less than regular price")
+        end
+      end
+
+      attr_accessor :price, :sale_price
+    end
+
+    assert article_class.complex_validation?(:valid_pricing)
+    assert article_class.complex_validations_registry.key?(:valid_pricing)
+  end
+
+  test "register_complex_validation requires a block" do
+    assert_raises(ArgumentError, /Block required/) do
+      create_validatable_class(:ValidatableArticle89) do
+        register_complex_validation :test_validation
+      end
+    end
+  end
+
+  test "check_complex applies registered validation" do
+    article_class = create_validatable_class(:ValidatableArticle90) do
+      attr_accessor :price, :sale_price
+
+      register_complex_validation :valid_pricing do
+        if sale_price.present? && sale_price >= price
+          errors.add(:sale_price, "must be less than regular price")
+        end
+      end
 
       validatable do
-        check :min_price, order: { second_field: :max_price, comparator: :lt }
+        check_complex :valid_pricing
       end
     end
 
-    # Valid: min_price < max_price
-    article = article_class.new(min_price: 10, max_price: 20)
+    # Valid: sale_price < price
+    article = article_class.new(price: 100, sale_price: 80)
     assert article.valid?
 
-    # Invalid: min_price >= max_price
-    article = article_class.new(min_price: 20, max_price: 10)
+    # Invalid: sale_price >= price
+    article = article_class.new(price: 100, sale_price: 120)
     assert_not article.valid?
-    assert_includes article.errors[:min_price], "must be less than max price"
-
-    # Invalid: min_price == max_price
-    article = article_class.new(min_price: 15, max_price: 15)
-    assert_not article.valid?
+    assert_includes article.errors[:sale_price], "must be less than regular price"
   end
 
-  test "order validator should work with :gt comparator" do
-    article_class = create_validatable_class(:ValidatableArticle81) do
-      attr_accessor :current_price, :original_price
-
-      validatable do
-        check :current_price, order: { second_field: :original_price, comparator: :gt }
-      end
-    end
-
-    # Valid: current_price > original_price
-    article = article_class.new(current_price: 150, original_price: 100)
-    assert article.valid?
-
-    # Invalid: current_price <= original_price
-    article = article_class.new(current_price: 100, original_price: 150)
-    assert_not article.valid?
-    assert_includes article.errors[:current_price], "must be greater than original price"
-
-    # Invalid: current_price == original_price
-    article = article_class.new(current_price: 100, original_price: 100)
-    assert_not article.valid?
-  end
-
-  test "order validator should handle nil values correctly" do
-    article_class = create_validatable_class(:ValidatableArticle82) do
-      attr_accessor :starts_at, :ends_at
-
-      validatable do
-        check :starts_at, order: { second_field: :ends_at, comparator: :before }
-      end
-    end
-
-    # Both nil - should skip validation (valid)
-    article = article_class.new(starts_at: nil, ends_at: nil)
-    assert article.valid?
-
-    # First nil, second present - should skip validation (valid)
-    article = article_class.new(starts_at: nil, ends_at: Time.current + 1.hour)
-    assert article.valid?
-
-    # First present, second nil - should skip validation (valid)
-    article = article_class.new(starts_at: Time.current, ends_at: nil)
-    assert article.valid?
-
-    # Both present - normal validation
-    starts = Time.current
-    ends = starts + 2.hours
-    article = article_class.new(starts_at: starts, ends_at: ends)
-    assert article.valid?
-  end
-
-  test "order validator should generate correct error messages for all comparators" do
-    # Test :before
-    article_class1 = create_validatable_class(:ValidatableArticle83) do
-      attr_accessor :starts_at, :ends_at
-      validatable { check :starts_at, order: { second_field: :ends_at, comparator: :before } }
-    end
-    article = article_class1.new(starts_at: Time.current + 1.hour, ends_at: Time.current)
-    assert_not article.valid?
-    assert_includes article.errors[:starts_at], "must be before ends at"
-
-    # Test :after
-    article_class2 = create_validatable_class(:ValidatableArticle84) do
-      attr_accessor :ends_at, :starts_at
-      validatable { check :ends_at, order: { second_field: :starts_at, comparator: :after } }
-    end
-    article = article_class2.new(ends_at: Time.current, starts_at: Time.current + 1.hour)
-    assert_not article.valid?
-    assert_includes article.errors[:ends_at], "must be after starts at"
-
-    # Test :lteq
-    article_class3 = create_validatable_class(:ValidatableArticle85) do
-      attr_accessor :min_value, :max_value
-      validatable { check :min_value, order: { second_field: :max_value, comparator: :lteq } }
-    end
-    article = article_class3.new(min_value: 100, max_value: 50)
-    assert_not article.valid?
-    assert_includes article.errors[:min_value], "must be less than or equal to max value"
-
-    # Test :gteq
-    article_class4 = create_validatable_class(:ValidatableArticle86) do
-      attr_accessor :max_value, :min_value
-      validatable { check :max_value, order: { second_field: :min_value, comparator: :gteq } }
-    end
-    article = article_class4.new(max_value: 50, min_value: 100)
-    assert_not article.valid?
-    assert_includes article.errors[:max_value], "must be greater than or equal to min value"
-  end
-
-  test "order validator should raise error for invalid comparator" do
-    assert_raises(ArgumentError, /Invalid comparator/) do
-      create_validatable_class(:ValidatableArticle87) do
-        attr_accessor :field1, :field2
-
+  test "check_complex raises error for unknown validation" do
+    assert_raises(ArgumentError, /Unknown complex validation/) do
+      create_validatable_class(:ValidatableArticle91) do
         validatable do
-          check :field1, order: { second_field: :field2, comparator: :invalid }
+          check_complex :nonexistent_validation
         end
       end
     end
+  end
+
+  test "complex validation with multi-field logic" do
+    article_class = create_validatable_class(:ValidatableArticle92) do
+      attr_accessor :starts_at, :ends_at
+
+      register_complex_validation :valid_dates do
+        if starts_at.present? && ends_at.present? && starts_at >= ends_at
+          errors.add(:ends_at, "must be after start date")
+        end
+      end
+
+      validatable do
+        check_complex :valid_dates
+      end
+    end
+
+    # Valid: starts_at < ends_at
+    article = article_class.new(starts_at: Time.now, ends_at: Time.now + 1.day)
+    assert article.valid?
+
+    # Invalid: starts_at >= ends_at
+    article = article_class.new(starts_at: Time.now, ends_at: Time.now - 1.day)
+    assert_not article.valid?
+    assert_includes article.errors[:ends_at], "must be after start date"
+  end
+
+  test "complex validation can add multiple errors" do
+    article_class = create_validatable_class(:ValidatableArticle93) do
+      attr_accessor :price, :sale_price, :stock
+
+      register_complex_validation :product_consistency do
+        errors.add(:sale_price, "required when on sale") if sale_price.blank? && stock > 0
+        errors.add(:price, "must be positive") if price && price <= 0
+        errors.add(:stock, "cannot be negative") if stock && stock < 0
+      end
+
+      validatable do
+        check_complex :product_consistency
+      end
+    end
+
+    article = article_class.new(price: -10, stock: -5)
+    assert_not article.valid?
+    assert_includes article.errors[:price], "must be positive"
+    assert_includes article.errors[:stock], "cannot be negative"
+  end
+
+  test "multiple complex validations can be registered and used" do
+    article_class = create_validatable_class(:ValidatableArticle94) do
+      attr_accessor :price, :sale_price, :stock, :reserved_stock
+
+      register_complex_validation :valid_pricing do
+        if sale_price.present? && sale_price >= price
+          errors.add(:sale_price, "must be less than regular price")
+        end
+      end
+
+      register_complex_validation :valid_stock do
+        if reserved_stock.present? && reserved_stock > stock
+          errors.add(:reserved_stock, "cannot exceed total stock")
+        end
+      end
+
+      validatable do
+        check_complex :valid_pricing
+        check_complex :valid_stock
+      end
+    end
+
+    # Both validations invalid
+    article = article_class.new(price: 100, sale_price: 120, stock: 10, reserved_stock: 20)
+    assert_not article.valid?
+    assert_includes article.errors[:sale_price], "must be less than regular price"
+    assert_includes article.errors[:reserved_stock], "cannot exceed total stock"
+
+    # Both validations valid
+    article = article_class.new(price: 100, sale_price: 80, stock: 10, reserved_stock: 5)
+    assert article.valid?
+  end
+
+  test "complex validations registry is thread-safe (frozen)" do
+    article_class = create_validatable_class(:ValidatableArticle95) do
+      register_complex_validation :test_validation do
+        errors.add(:base, "test")
+      end
+    end
+
+    registry = article_class.complex_validations_registry
+    assert registry.frozen?, "Registry should be frozen for thread-safety"
+  end
+
+  test "complex validations are inherited by subclasses" do
+    parent_class = create_validatable_class(:ValidatableArticle96) do
+      attr_accessor :price
+
+      register_complex_validation :valid_price do
+        errors.add(:price, "must be positive") if price && price <= 0
+      end
+
+      validatable do
+        check_complex :valid_price
+      end
+    end
+
+    child_class = Class.new(parent_class)
+
+    assert child_class.complex_validation?(:valid_price)
+
+    article = child_class.new(price: -10)
+    assert_not article.valid?
+    assert_includes article.errors[:price], "must be positive"
+  end
+
+  test "complex validation with conditional logic" do
+    article_class = create_validatable_class(:ValidatableArticle97) do
+      attr_accessor :status, :published_at, :price, :sale_price
+
+      is :published, -> { status == "published" }
+
+      register_complex_validation :publication_requirements do
+        if is_published? && published_at.blank?
+          errors.add(:published_at, "required for published articles")
+        end
+      end
+
+      validatable do
+        check_complex :publication_requirements
+      end
+    end
+
+    # Valid: draft without published_at
+    article = article_class.new(status: "draft", published_at: nil)
+    assert article.valid?
+
+    # Invalid: published without published_at
+    article = article_class.new(status: "published", published_at: nil)
+    assert_not article.valid?
+    assert_includes article.errors[:published_at], "required for published articles"
+
+    # Valid: published with published_at
+    article = article_class.new(status: "published", published_at: Time.now)
+    assert article.valid?
+  end
+
+  test "complex validation can access model methods" do
+    article_class = create_validatable_class(:ValidatableArticle98) do
+      attr_accessor :discount_percentage
+
+      register_complex_validation :valid_discount do
+        if discount_percentage && !valid_discount_range?
+          errors.add(:discount_percentage, "must be between 0 and 100")
+        end
+      end
+
+      validatable do
+        check_complex :valid_discount
+      end
+
+      def valid_discount_range?
+        discount_percentage >= 0 && discount_percentage <= 100
+      end
+    end
+
+    # Valid discount
+    article = article_class.new(discount_percentage: 25)
+    assert article.valid?
+
+    # Invalid discount
+    article = article_class.new(discount_percentage: 150)
+    assert_not article.valid?
+    assert_includes article.errors[:discount_percentage], "must be between 0 and 100"
+  end
+
+  test "complex validation with nil handling" do
+    article_class = create_validatable_class(:ValidatableArticle99) do
+      attr_accessor :price, :sale_price
+
+      register_complex_validation :valid_pricing do
+        return if sale_price.nil? # Skip if sale_price is not set
+
+        if sale_price >= price
+          errors.add(:sale_price, "must be less than regular price")
+        end
+      end
+
+      validatable do
+        check_complex :valid_pricing
+      end
+    end
+
+    # Valid: sale_price is nil
+    article = article_class.new(price: 100, sale_price: nil)
+    assert article.valid?
+
+    # Valid: sale_price < price
+    article = article_class.new(price: 100, sale_price: 80)
+    assert article.valid?
+
+    # Invalid: sale_price >= price
+    article = article_class.new(price: 100, sale_price: 120)
+    assert_not article.valid?
+    assert_includes article.errors[:sale_price], "must be less than regular price"
+  end
+
+  test "complex_validation? returns false for unregistered validations" do
+    article_class = create_validatable_class(:ValidatableArticle100) do
+      register_complex_validation :existing do
+        # Empty validation
+      end
+    end
+
+    assert article_class.complex_validation?(:existing)
+    assert_not article_class.complex_validation?(:nonexistent)
+  end
+
+  # ========================================
+  # CONFIGURATION ERROR TESTS
+  # ========================================
+
+  test "ConfigurationError class exists" do
+    assert defined?(BetterModel::Errors::Validatable::ConfigurationError)
+  end
+
+  test "ConfigurationError inherits from ArgumentError" do
+    assert BetterModel::Errors::Validatable::ConfigurationError < ArgumentError
+  end
+
+  test "ConfigurationError can be instantiated with message" do
+    error = BetterModel::Errors::Validatable::ConfigurationError.new("test message")
+    assert_equal "test message", error.message
+  end
+
+  test "ConfigurationError can be caught as ArgumentError" do
+    begin
+      raise BetterModel::Errors::Validatable::ConfigurationError, "test"
+    rescue ArgumentError => e
+      assert_instance_of BetterModel::Errors::Validatable::ConfigurationError, e
+    end
+  end
+
+  test "ConfigurationError has correct namespace" do
+    assert_equal "BetterModel::Errors::Validatable::ConfigurationError",
+                 BetterModel::Errors::Validatable::ConfigurationError.name
+  end
+
+  # ========================================
+  # CONFIGURATION ERROR INTEGRATION TESTS
+  # ========================================
+
+  test "raises ConfigurationError when included in non-ActiveRecord class" do
+    error = assert_raises(BetterModel::Errors::Validatable::ConfigurationError) do
+      Class.new do
+        include BetterModel::Validatable
+      end
+    end
+    assert_match(/can only be included in ActiveRecord models/, error.message)
+  end
+
+  test "raises ConfigurationError when register_complex_validation has no block" do
+    error = assert_raises(BetterModel::Errors::Validatable::ConfigurationError) do
+      create_validatable_class(:ValidatableArticle102) do
+        register_complex_validation :test_validation
+      end
+    end
+    assert_match(/Block required for complex validation/, error.message)
   end
 end

@@ -1002,14 +1002,14 @@ class Document < ApplicationRecord
 
     # Transitions with tag requirements
     transition :submit_for_review, from: :draft, to: :review do
-      guard { tags.include?("categorized") && tags.size >= 2 }
+      check { tags.include?("categorized") && tags.size >= 2 }
     end
 
     transition :approve, from: :review, to: :approved
     transition :reject, from: :review, to: :draft
 
     transition :publish, from: :approved, to: :published do
-      guard { tags.include?("ready-to-publish") }
+      check { tags.include?("ready-to-publish") }
     end
 
     transition :archive, from: [:approved, :published], to: :archived

@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "errors/taggable/taggable_error"
+require_relative "errors/taggable/configuration_error"
+
 # Taggable - Sistema di gestione tag dichiarativo per modelli Rails
 #
 # Questo concern permette di gestire tag multipli sui modelli utilizzando array PostgreSQL
@@ -93,7 +96,7 @@ module BetterModel
     included do
       # Valida che sia incluso solo in modelli ActiveRecord
       unless ancestors.include?(ActiveRecord::Base)
-        raise ArgumentError, "BetterModel::Taggable can only be included in ActiveRecord models"
+        raise BetterModel::Errors::Taggable::ConfigurationError, "BetterModel::Taggable can only be included in ActiveRecord models"
       end
 
       # Configurazione Taggable per questa classe
@@ -116,7 +119,7 @@ module BetterModel
       def taggable(&block)
         # Previeni configurazione multipla
         if taggable_config.present?
-          raise ArgumentError, "Taggable already configured for #{name}"
+          raise BetterModel::Errors::Taggable::ConfigurationError, "Taggable already configured for #{name}"
         end
 
         # Crea configurazione
@@ -126,7 +129,7 @@ module BetterModel
         # Valida che il campo esista
         tag_field_name = config.tag_field.to_s
         unless column_names.include?(tag_field_name)
-          raise ArgumentError, "Tag field #{config.tag_field} does not exist in #{table_name}"
+          raise BetterModel::Errors::Taggable::ConfigurationError, "Tag field #{config.tag_field} does not exist in #{table_name}"
         end
 
         # Salva configurazione (frozen per thread-safety)
@@ -437,9 +440,7 @@ module BetterModel
     private
 
     # Verifica se Taggable è abilitato per questa classe
-    def taggable_enabled?
-      self.class.taggable_config.present?
-    end
+    def taggable_enabled? = self.class.taggable_config.present?
 
     # Normalizza un tag secondo la configurazione
     def normalize_tag(tag)

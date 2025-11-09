@@ -1,11 +1,14 @@
 # frozen_string_literal: true
 
-# Permissible - Sistema di permessi dichiarativi per modelli Rails
+require_relative "errors/permissible/permissible_error"
+require_relative "errors/permissible/configuration_error"
+
+# Permissible - Declarative permissions system for Rails models.
 #
-# Questo concern permette di definire permessi/capacità sui modelli utilizzando un DSL
-# semplice e dichiarativo, simile al pattern Statusable ma per le operazioni.
+# This concern enables defining permissions/capabilities on models using a simple,
+# declarative DSL, similar to the Statusable pattern but for operations.
 #
-# Esempio di utilizzo:
+# @example Basic Usage
 #   class Article < ApplicationRecord
 #     include BetterModel::Permissible
 #
@@ -15,7 +18,7 @@
 #     permit :archive, -> { is?(:published) && created_at < 1.year.ago }
 #   end
 #
-# Utilizzo:
+# @example Checking Permissions
 #   article.permit?(:delete)           # => true/false
 #   article.permit_delete?             # => true/false
 #   article.permit_edit?               # => true/false
@@ -26,58 +29,77 @@ module BetterModel
     extend ActiveSupport::Concern
 
     included do
-      # Registry dei permessi definiti per questa classe
+      # Registry of permissions defined for this class
       class_attribute :permit_definitions
       self.permit_definitions = {}
     end
 
     class_methods do
-      # DSL per definire permessi
+      # DSL to define permissions.
       #
-      # Parametri:
-      # - permission_name: simbolo che rappresenta il permesso (es. :delete, :edit)
-      # - condition_proc: lambda o proc che definisce la condizione
-      # - block: blocco alternativo alla condition_proc
+      # Defines a permission check that can be evaluated against model instances.
+      # Automatically creates a convenience method permit_<permission_name>? for each permission.
       #
-      # Esempi:
+      # @param permission_name [Symbol, String] Permission identifier (e.g., :delete, :edit)
+      # @param condition_proc [Proc, nil] Lambda or proc that defines the condition
+      # @yield Alternative to condition_proc parameter
+      # @raise [BetterModel::Errors::Permissible::ConfigurationError] If parameters are invalid
+      #
+      # @example With lambda parameter
       #   permit :delete, -> { status != "published" }
-      #   permit :edit, -> { is?(:draft) }
+      #
+      # @example With block
+      #   permit :edit do
+      #     is?(:draft)
+      #   end
+      #
+      # @example Complex condition
       #   permit :publish do
       #     is?(:draft) && valid?(:publication)
       #   end
       def permit(permission_name, condition_proc = nil, &block)
-        # Valida i parametri prima di convertire
-        raise ArgumentError, "Permission name cannot be blank" if permission_name.blank?
+        # Validate parameters before converting
+        raise BetterModel::Errors::Permissible::ConfigurationError, "Permission name cannot be blank" if permission_name.blank?
 
         permission_name = permission_name.to_sym
         condition = condition_proc || block
-        raise ArgumentError, "Condition proc or block is required" unless condition
-        raise ArgumentError, "Condition must respond to call" unless condition.respond_to?(:call)
+        raise BetterModel::Errors::Permissible::ConfigurationError, "Condition proc or block is required" unless condition
+        raise BetterModel::Errors::Permissible::ConfigurationError, "Condition must respond to call" unless condition.respond_to?(:call)
 
-        # Registra il permesso nel registry
+        # Register permission in registry
         self.permit_definitions = permit_definitions.merge(permission_name => condition.freeze).freeze
 
-        # Genera il metodo dinamico permit_#{permission_name}?
+        # Generate dynamic method permit_#{permission_name}?
         define_permit_method(permission_name)
       end
 
-      # Lista di tutti i permessi definiti per questa classe
-      def defined_permissions
-        permit_definitions.keys
-      end
+      # List all permissions defined for this class.
+      #
+      # @return [Array<Symbol>] Array of defined permission names
+      #
+      # @example
+      #   Article.defined_permissions  # => [:delete, :edit, :publish]
+      def defined_permissions = permit_definitions.keys
 
-      # Verifica se un permesso è definito
-      def permission_defined?(permission_name)
-        permit_definitions.key?(permission_name.to_sym)
-      end
+      # Check if a permission is defined.
+      #
+      # @param permission_name [Symbol, String] Permission name to check
+      # @return [Boolean] true if permission is defined
+      #
+      # @example
+      #   Article.permission_defined?(:delete)  # => true
+      def permission_defined?(permission_name) = permit_definitions.key?(permission_name.to_sym)
 
       private
 
-      # Genera dinamicamente il metodo permit_#{permission_name}? per ogni permesso definito
+      # Generate dynamic method permit_#{permission_name}? for each defined permission.
+      #
+      # @param permission_name [Symbol] Permission name
+      # @api private
       def define_permit_method(permission_name)
         method_name = "permit_#{permission_name}?"
 
-        # Evita di ridefinire metodi se già esistono
+        # Avoid redefining methods if they already exist
         return if method_defined?(method_name)
 
         define_method(method_name) do
@@ -86,35 +108,33 @@ module BetterModel
       end
     end
 
-    # Metodo generico per verificare se un permesso è garantito
+    # Generic method to check if a permission is granted.
     #
-    # Parametri:
-    # - permission_name: simbolo del permesso da verificare
+    # Evaluates the permission condition in the context of the model instance.
+    # Returns false if permission is not defined (secure by default).
     #
-    # Ritorna:
-    # - true se il permesso è garantito
-    # - false se il permesso non è garantito o non è definito
+    # @param permission_name [Symbol, String] Permission name to check
+    # @return [Boolean] true if permission is granted, false otherwise
     #
-    # Esempio:
-    #   article.permit?(:delete)
+    # @example
+    #   article.permit?(:delete)  # => true
     def permit?(permission_name)
       permission_name = permission_name.to_sym
       condition = self.class.permit_definitions[permission_name]
 
-      # Se il permesso non è definito, ritorna false (secure by default)
+      # If permission is not defined, return false (secure by default)
       return false unless condition
 
-      # Valuta la condizione nel contesto dell'istanza del modello
-      # Gli errori si propagano naturalmente - fail fast
+      # Evaluate condition in context of model instance
+      # Errors propagate naturally - fail fast
       instance_exec(&condition)
     end
 
-    # Ritorna tutti i permessi disponibili per questa istanza con i loro valori
+    # Returns all available permissions for this instance with their values.
     #
-    # Ritorna:
-    # - Hash con chiavi simbolo (permessi) e valori booleani (garantiti/negati)
+    # @return [Hash{Symbol => Boolean}] Hash with permission names and their granted status
     #
-    # Esempio:
+    # @example
     #   article.permissions
     #   # => { delete: true, edit: false, publish: false, archive: false }
     def permissions
@@ -123,26 +143,49 @@ module BetterModel
       end
     end
 
-    # Verifica se l'istanza ha almeno un permesso garantito
-    def has_any_permission?
-      permissions.values.any?
-    end
+    # Check if instance has at least one granted permission.
+    #
+    # @return [Boolean] true if any permission is granted
+    #
+    # @example
+    #   article.has_any_permission?  # => true
+    def has_any_permission? = permissions.values.any?
 
-    # Verifica se l'istanza ha tutti i permessi specificati garantiti
+    # Check if instance has all specified permissions granted.
+    #
+    # @param permission_names [Array<Symbol>] Permission names to check
+    # @return [Boolean] true if all permissions are granted
+    #
+    # @example
+    #   article.has_all_permissions?([:edit, :publish])  # => false
     def has_all_permissions?(permission_names)
       Array(permission_names).all? { |permission_name| permit?(permission_name) }
     end
 
-    # Filtra una lista di permessi restituendo solo quelli garantiti
+    # Filter a list of permissions returning only granted ones.
+    #
+    # @param permission_names [Array<Symbol>] Permission names to filter
+    # @return [Array<Symbol>] Granted permissions
+    #
+    # @example
+    #   article.granted_permissions([:edit, :delete, :publish])  # => [:edit]
     def granted_permissions(permission_names)
       Array(permission_names).select { |permission_name| permit?(permission_name) }
     end
 
-    # Override di as_json per includere automaticamente i permessi se richiesto
+    # Override as_json to automatically include permissions if requested.
+    #
+    # @param options [Hash] Options for as_json
+    # @option options [Boolean] :include_permissions Include permissions in JSON output
+    # @return [Hash] JSON representation
+    #
+    # @example
+    #   article.as_json(include_permissions: true)
+    #   # => { ..., "permissions" => { "delete" => true, "edit" => false } }
     def as_json(options = {})
       result = super
 
-      # Include i permessi se esplicitamente richiesto, converting symbol keys to strings
+      # Include permissions if explicitly requested, converting symbol keys to strings
       result["permissions"] = permissions.transform_keys(&:to_s) if options[:include_permissions]
 
       result
