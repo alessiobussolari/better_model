@@ -75,7 +75,9 @@ module BetterModel
     included do
       # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
-        raise BetterModel::Errors::Archivable::ConfigurationError, "BetterModel::Archivable can only be included in ActiveRecord models"
+        raise BetterModel::Errors::Archivable::ConfigurationError.new(
+          reason: "BetterModel::Archivable can only be included in ActiveRecord models"
+        )
       end
 
       # Archivable configuration (opt-in)
@@ -103,9 +105,11 @@ module BetterModel
       def archivable(&block)
         # Validate that archived_at exists
         unless column_names.include?("archived_at")
-          raise BetterModel::Errors::Archivable::ConfigurationError,
-            "Archivable requires an 'archived_at' datetime column. " \
-            "Add it with: rails g migration AddArchivedAtTo#{table_name.classify.pluralize} archived_at:datetime"
+          raise BetterModel::Errors::Archivable::ConfigurationError.new(
+            reason: "Archivable requires an 'archived_at' datetime column. " \
+                    "Add it with: rails g migration AddArchivedAtTo#{table_name.classify.pluralize} archived_at:datetime",
+            model_class: self
+          )
         end
 
         # Enable archivable
@@ -142,7 +146,13 @@ module BetterModel
       # @example
       #   Article.archived_only
       def archived_only
-        raise BetterModel::Errors::Archivable::NotEnabledError unless archivable_enabled?
+        unless archivable_enabled?
+          raise BetterModel::Errors::Archivable::NotEnabledError.new(
+            module_name: "Archivable",
+            method_called: "archived_only",
+            model_class: self
+          )
+        end
         unscoped.archived
       end
 
@@ -156,7 +166,13 @@ module BetterModel
       # @example
       #   Article.archived_today
       def archived_today
-        raise BetterModel::Errors::Archivable::NotEnabledError unless archivable_enabled?
+        unless archivable_enabled?
+          raise BetterModel::Errors::Archivable::NotEnabledError.new(
+            module_name: "Archivable",
+            method_called: "archived_today",
+            model_class: self
+          )
+        end
         archived_at_today
       end
 
@@ -170,7 +186,13 @@ module BetterModel
       # @example
       #   Article.archived_this_week
       def archived_this_week
-        raise BetterModel::Errors::Archivable::NotEnabledError unless archivable_enabled?
+        unless archivable_enabled?
+          raise BetterModel::Errors::Archivable::NotEnabledError.new(
+            module_name: "Archivable",
+            method_called: "archived_this_week",
+            model_class: self
+          )
+        end
         archived_at_this_week
       end
 
@@ -188,7 +210,13 @@ module BetterModel
       # @example Find records archived in the last month
       #   Article.archived_recently(1.month)
       def archived_recently(duration = 7.days)
-        raise BetterModel::Errors::Archivable::NotEnabledError unless archivable_enabled?
+        unless archivable_enabled?
+          raise BetterModel::Errors::Archivable::NotEnabledError.new(
+            module_name: "Archivable",
+            method_called: "archived_recently",
+            model_class: self
+          )
+        end
         archived_at_within(duration)
       end
 
@@ -227,8 +255,21 @@ module BetterModel
     # @example Archive with both user and reason
     #   article.archive!(by: current_user, reason: "Compliance violation")
     def archive!(by: nil, reason: nil)
-      raise BetterModel::Errors::Archivable::NotEnabledError unless self.class.archivable_enabled?
-      raise BetterModel::Errors::Archivable::AlreadyArchivedError, "Record is already archived" if archived?
+      unless self.class.archivable_enabled?
+        raise BetterModel::Errors::Archivable::NotEnabledError.new(
+          module_name: "Archivable",
+          method_called: "archive!",
+          model_class: self.class
+        )
+      end
+
+      if archived?
+        raise BetterModel::Errors::Archivable::AlreadyArchivedError.new(
+          archived_at: archived_at,
+          model_class: self.class,
+          model_id: id
+        )
+      end
 
       self.archived_at = Time.current
 
@@ -255,8 +296,21 @@ module BetterModel
     # @example
     #   article.restore!
     def restore!
-      raise BetterModel::Errors::Archivable::NotEnabledError unless self.class.archivable_enabled?
-      raise BetterModel::Errors::Archivable::NotArchivedError, "Record is not archived" unless archived?
+      unless self.class.archivable_enabled?
+        raise BetterModel::Errors::Archivable::NotEnabledError.new(
+          module_name: "Archivable",
+          method_called: "restore!",
+          model_class: self.class
+        )
+      end
+
+      unless archived?
+        raise BetterModel::Errors::Archivable::NotArchivedError.new(
+          method_called: "restore!",
+          model_class: self.class,
+          model_id: id
+        )
+      end
 
       self.archived_at = nil
       self.archived_by_id = nil if respond_to?(:archived_by_id=)

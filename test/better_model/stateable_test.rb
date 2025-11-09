@@ -850,13 +850,13 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
   end
 
   test "ConfigurationError can be instantiated with message" do
-    error = BetterModel::Errors::Stateable::ConfigurationError.new("test message")
+    error = BetterModel::Errors::Stateable::ConfigurationError.new(reason: "test message")
     assert_equal "test message", error.message
   end
 
   test "ConfigurationError can be caught as ArgumentError" do
     begin
-      raise BetterModel::Errors::Stateable::ConfigurationError, "test"
+      raise BetterModel::Errors::Stateable::ConfigurationError.new(reason: "test")
     rescue ArgumentError => e
       assert_instance_of BetterModel::Errors::Stateable::ConfigurationError, e
     end

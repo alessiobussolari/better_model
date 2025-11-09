@@ -5,16 +5,23 @@ require_relative "../errors/stateable/validation_failed_error"
 
 module BetterModel
   module Stateable
-    # Transition executor per Stateable
+    # Transition executor for Stateable.
     #
-    # Gestisce l'esecuzione di una transizione di stato, includendo:
-    # - Valutazione checks
-    # - Esecuzione validazioni
-    # - Esecuzione callbacks (before_transition/after_transition/around)
-    # - Aggiornamento stato nel database
-    # - Creazione record StateTransition per storico
+    # Handles the execution of a state transition, including:
+    # - Check evaluation
+    # - Validation execution
+    # - Callback execution (before_transition/after_transition/around)
+    # - State update in database
+    # - StateTransition record creation for history
     #
+    # @api private
     class Transition
+      # Initialize a new Transition.
+      #
+      # @param instance [Object] Model instance
+      # @param event [Symbol] Transition event name
+      # @param config [Hash] Transition configuration
+      # @param metadata [Hash] Additional metadata for transition
       def initialize(instance, event, config, metadata = {})
         @instance = instance
         @event = event
@@ -24,23 +31,25 @@ module BetterModel
         @to_state = config[:to]
       end
 
-      # Esegue la transizione
+      # Execute the transition.
       #
-      # @raise [BetterModel::Errors::Stateable::CheckFailedError] Se un check fallisce
-      # @raise [BetterModel::Errors::Stateable::ValidationFailedError] Se una validazione fallisce
-      # @raise [ActiveRecord::RecordInvalid] Se il save! fallisce
-      # @return [Boolean] true se la transizione ha successo
+      # @raise [BetterModel::Errors::Stateable::CheckFailedError] If a check fails
+      # @raise [BetterModel::Errors::Stateable::ValidationFailedError] If a validation fails
+      # @raise [ActiveRecord::RecordInvalid] If save! fails
+      # @return [Boolean] true if transition succeeds
       #
+      # @example
+      #   transition.execute!  # => true
       def execute!
-        # 1. Valuta checks
+        # 1. Evaluate checks
         evaluate_checks!
 
-        # 2. Esegui validazioni
+        # 2. Execute validations
         execute_validations!
 
         # 3. Wrap in transaction
         @instance.class.transaction do
-          # 4. Esegui callbacks around (se presenti)
+          # 4. Execute around callbacks (if present)
           if @config[:around_callbacks].any?
             execute_around_callbacks do
               perform_transition!
@@ -55,25 +64,37 @@ module BetterModel
 
       private
 
-      # Valuta tutti i checks
+      # Evaluate all checks.
+      #
+      # @raise [BetterModel::Errors::Stateable::CheckFailedError] If any check fails
+      # @api private
       def evaluate_checks!
-        checks = @config[:guards] || []  # Manteniamo :guards per compatibilità interna
+        checks = @config[:guards] || []  # Keep :guards for internal compatibility
 
         checks.each do |check_config|
           check = Guard.new(@instance, check_config)  # Guard class handles the logic
 
           unless check.evaluate
-            raise BetterModel::Errors::Stateable::CheckFailedError.new(@event, check.description)
+            raise BetterModel::Errors::Stateable::CheckFailedError.new(
+              event: @event.to_s,
+              check_description: check.description,
+              check_type: check_config[:type]&.to_s,
+              current_state: @from_state.to_s,
+              model_class: @instance.class
+            )
           end
         end
       end
 
-      # Esegue tutte le validazioni
+      # Execute all validations.
+      #
+      # @raise [BetterModel::Errors::Stateable::ValidationFailedError] If validations fail
+      # @api private
       def execute_validations!
         validations = @config[:validations] || []
         return if validations.empty?
 
-        # Clear existing errors per questa transizione
+        # Clear existing errors for this transition
         @instance.errors.clear
 
         validations.each do |validation_block|
@@ -81,11 +102,20 @@ module BetterModel
         end
 
         if @instance.errors.any?
-          raise BetterModel::Errors::Stateable::ValidationFailedError.new(@event, @instance.errors)
+          raise BetterModel::Errors::Stateable::ValidationFailedError.new(
+            event: @event.to_s,
+            errors_object: @instance.errors,
+            current_state: @from_state.to_s,
+            target_state: @to_state.to_s,
+            model_class: @instance.class
+          )
         end
       end
 
-      # Esegue i callback around
+      # Execute around callbacks.
+      #
+      # @yield Block to wrap with around callbacks
+      # @api private
       def execute_around_callbacks(&block)
         around_callbacks = @config[:around_callbacks] || []
 
@@ -102,25 +132,30 @@ module BetterModel
         chain.call
       end
 
-      # Esegue la transizione effettiva
+      # Perform the actual transition.
+      #
+      # @api private
       def perform_transition!
-        # 1. Esegui before_transition callbacks
+        # 1. Execute before_transition callbacks
         execute_callbacks(@config[:before_callbacks] || [])
 
-        # 2. Aggiorna stato
+        # 2. Update state
         @instance.state = @to_state.to_s
 
-        # 3. Salva il record (valida il modello)
+        # 3. Save record (validates model)
         @instance.save!
 
-        # 4. Crea record StateTransition
+        # 4. Create StateTransition record
         create_state_transition_record
 
-        # 5. Esegui after_transition callbacks
+        # 5. Execute after_transition callbacks
         execute_callbacks(@config[:after_callbacks] || [])
       end
 
-      # Esegue una lista di callbacks
+      # Execute a list of callbacks.
+      #
+      # @param callbacks [Array<Hash>] Callback configurations
+      # @api private
       def execute_callbacks(callbacks)
         callbacks.each do |callback_config|
           case callback_config[:type]
@@ -132,7 +167,9 @@ module BetterModel
         end
       end
 
-      # Crea il record StateTransition per lo storico
+      # Create StateTransition record for history.
+      #
+      # @api private
       def create_state_transition_record
         @instance.state_transitions.create!(
           event: @event.to_s,

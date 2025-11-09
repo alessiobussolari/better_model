@@ -2,39 +2,45 @@
 
 module BetterModel
   module Validatable
-    # Configurator per il DSL di Validatable
+    # Configurator for Validatable DSL.
     #
-    # Questo configurator permette di definire validazioni in modo dichiarativo
-    # all'interno del blocco `validatable do...end`.
+    # This configurator enables defining validations declaratively
+    # within the `validatable do...end` block.
     #
-    # Esempio:
+    # @example
     #   validatable do
-    #     # Validazioni base
+    #     # Basic validations
     #     check :title, :content, presence: true
     #     check :email, format: { with: URI::MailTo::EMAIL_REGEXP }
     #
-    #     # Validazioni complesse
+    #     # Complex validations
     #     check_complex :valid_pricing
     #     check_complex :stock_check
     #
-    #     # Gruppi di validazioni
+    #     # Validation groups
     #     validation_group :step1, [:email, :password]
     #     validation_group :step2, [:first_name, :last_name]
     #   end
     #
+    # @api private
     class Configurator
       attr_reader :groups
 
+      # Initialize a new Configurator.
+      #
+      # @param model_class [Class] Model class being configured
       def initialize(model_class)
         @model_class = model_class
         @complex_validations = []
         @groups = {}
       end
 
-      # Definisce validazioni standard sui campi
+      # Define standard validations on fields.
       #
-      # @param fields [Array<Symbol>] Nomi dei campi
-      # @param options [Hash] Opzioni di validazione (presence, format, etc.)
+      # Delegates to ActiveRecord's validates method.
+      #
+      # @param fields [Array<Symbol>] Field names
+      # @param options [Hash] Validation options (presence, format, etc.)
       #
       # @example
       #   check :title, :content, presence: true
@@ -45,22 +51,23 @@ module BetterModel
         @model_class.validates(*fields, **options)
       end
 
-      # Usa una validazione complessa registrata
+      # Use a registered complex validation.
       #
-      # Le validazioni complesse devono essere registrate prima usando
-      # register_complex_validation nel modello.
+      # Complex validations must be registered first using
+      # register_complex_validation in the model.
       #
-      # @param name [Symbol] Nome della validazione complessa registrata
+      # @param name [Symbol] Name of registered complex validation
+      # @raise [ArgumentError] If validation is not registered
       #
       # @example
-      #   # Nel modello (registrazione):
+      #   # In model (registration):
       #   register_complex_validation :valid_pricing do
       #     if sale_price.present? && sale_price >= price
       #       errors.add(:sale_price, "must be less than regular price")
       #     end
       #   end
       #
-      #   # Nel configurator (uso):
+      #   # In configurator (usage):
       #   validatable do
       #     check_complex :valid_pricing
       #   end
@@ -73,21 +80,22 @@ module BetterModel
         @complex_validations << name.to_sym
       end
 
-      # Definisce un gruppo di validazioni
+      # Define a validation group.
       #
-      # I gruppi permettono di validare solo un sottoinsieme di campi,
-      # utile per form multi-step o validazioni parziali.
+      # Groups allow validating only a subset of fields,
+      # useful for multi-step forms or partial validations.
       #
-      # @param group_name [Symbol] Nome del gruppo
-      # @param fields [Array<Symbol>] Campi inclusi nel gruppo
+      # @param group_name [Symbol] Group name
+      # @param fields [Array<Symbol>] Fields included in group
+      # @raise [ArgumentError] If group name is invalid, fields not array, or group already defined
       #
       # @example
       #   validation_group :step1, [:email, :password]
       #   validation_group :step2, [:first_name, :last_name]
       #   validation_group :step3, [:address, :city, :zip_code]
       #
-      #   # Utilizzo:
-      #   user.valid?(:step1)  # Valida solo email e password
+      # @example Usage
+      #   user.valid?(:step1)  # Validate only email and password
       #   user.errors_for_group(:step1)
       #
       def validation_group(group_name, fields)
@@ -101,9 +109,9 @@ module BetterModel
         }
       end
 
-      # Restituisce la configurazione completa
+      # Return complete configuration.
       #
-      # @return [Hash] Configurazione con tutte le validazioni
+      # @return [Hash] Configuration with all validations
       def to_h
         {
           complex_validations: @complex_validations

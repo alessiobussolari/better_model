@@ -7,6 +7,157 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2025-11-09
+
+### ⚠️ BREAKING CHANGES
+
+#### Error Classes - Sentry-Compatible Data Structures
+
+**All error classes now require named parameters instead of simple string messages:**
+
+All BetterModel errors have been completely refactored to include rich contextual data compatible with Sentry's error enrichment API. This is a **breaking change** that affects all error handling code.
+
+**Before (v2.x):**
+```ruby
+raise BetterModel::Errors::Searchable::InvalidPredicateError, "Invalid predicate: #{predicate}"
+raise BetterModel::Errors::Stateable::ConfigurationError, "Unknown transition"
+raise BetterModel::Errors::Validatable::NotEnabledError
+```
+
+**After (v3.0):**
+```ruby
+raise BetterModel::Errors::Searchable::InvalidPredicateError.new(
+  predicate_scope: :title_xxx,
+  value: "Rails",
+  available_predicates: [:title_eq, :title_cont],
+  model_class: Article
+)
+
+raise BetterModel::Errors::Stateable::ConfigurationError.new(
+  reason: "Unknown transition",
+  model_class: Article
+)
+
+raise BetterModel::Errors::Validatable::NotEnabledError.new(
+  module_name: "Validatable",
+  method_called: "validate_group",
+  model_class: Article
+)
+```
+
+**Error Classes Affected (28 total):**
+- **ConfigurationError** (10 modules) - Now requires `reason:`, accepts `model_class:`, `expected:`, `provided:`
+- **NotEnabledError** (4 modules) - Now requires `module_name:`, accepts `method_called:`, `model_class:`
+- **InvalidTransitionError** - Now requires `event:`, `from_state:`, `to_state:`, accepts `model_class:`
+- **CheckFailedError** - Now requires `event:`, accepts `check_description:`, `check_type:`, `current_state:`, `model_class:`
+- **ValidationFailedError** - Now requires `event:`, `errors_object:`, accepts `current_state:`, `target_state:`, `model_class:`
+- **InvalidStateError** - Now requires `state:`, accepts `available_states:`, `model_class:`
+- **InvalidPredicateError** - Now requires `predicate_scope:`, accepts `value:`, `available_predicates:`, `model_class:`
+- **InvalidOrderError** - Now requires `order_scope:`, accepts `available_sorts:`, `model_class:`
+- **InvalidPaginationError** - Now requires `parameter_name:`, accepts `value:`, `valid_range:`, `reason:`
+- **InvalidSecurityError** - Now requires `policy_name:`, accepts `violations:`, `requested_value:`, `model_class:`
+- **AlreadyArchivedError** - Now requires `archived_at:`, accepts `model_class:`, `model_id:`
+- **NotArchivedError** - Now requires `method_called:`, accepts `model_class:`, `model_id:`
+
+### Added
+
+#### Sentry-Compatible Error Enrichment
+
+All errors now include three Sentry-compatible data structures:
+
+**`tags`** - Filterable metadata for grouping and searching:
+```ruby
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
+  e.tags # => {error_category: 'invalid_predicate', module: 'searchable', predicate: 'title_xxx'}
+end
+```
+
+**`context`** - High-level structured metadata:
+```ruby
+rescue BetterModel::Errors::Stateable::InvalidTransitionError => e
+  e.context # => {model_class: 'Article'}
+end
+```
+
+**`extra`** - Detailed debug data with all error-specific parameters:
+```ruby
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
+  e.extra # => {predicate_scope: :title_xxx, value: 'Rails', available_predicates: [...]}
+end
+```
+
+**Direct Sentry Integration:**
+```ruby
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
+  # Access domain-specific attributes
+  logger.error("Invalid predicate: #{e.predicate_scope}")
+
+  # Sentry integration (when configured)
+  Sentry.capture_exception(e) do |scope|
+    scope.set_context("error_details", e.context)
+    scope.set_tags(e.tags)
+    scope.set_extras(e.extra)
+  end
+
+  # API error responses with rich data
+  render json: {
+    error: e.message,
+    details: e.extra,
+    available_options: e.available_predicates
+  }, status: :bad_request
+end
+```
+
+**New Infrastructure:**
+- Added `BetterModel::Errors::Concerns::SentryCompatible` module for shared error enrichment helpers
+- All error base classes now include `context`, `tags`, `extra` attributes
+- All errors expose domain-specific attributes for programmatic access (e.g., `predicate_scope`, `event`, `state`, etc.)
+
+### Migration Guide
+
+**Update all rescue clauses that rescue BetterModel errors:**
+
+1. **If you only rescue and re-raise** - No changes needed, errors propagate correctly
+2. **If you inspect error messages** - Update to use new attributes or message format
+3. **If you instantiate errors** - Update to use named parameters (rare, usually only in tests)
+
+**Example migrations:**
+
+```ruby
+# BEFORE
+begin
+  article.search(params)
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
+  logger.error("Search error: #{e.message}")
+  render json: {error: e.message}, status: :bad_request
+end
+
+# AFTER (Option 1: Use message - still works)
+begin
+  article.search(params)
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
+  logger.error("Search error: #{e.message}")  # Still works
+  render json: {error: e.message}, status: :bad_request
+end
+
+# AFTER (Option 2: Use rich data - recommended)
+begin
+  article.search(params)
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
+  logger.error("Invalid predicate #{e.predicate_scope}: #{e.value}")
+  render json: {
+    error: e.message,
+    predicate: e.predicate_scope,
+    available: e.available_predicates
+  }, status: :bad_request
+end
+```
+
+### Changed
+- **Version**: Bumped to 3.0.0 for breaking changes in error API
+- **All error classes**: Complete refactoring with Sentry-compatible data structures
+- **Error messages**: Enhanced with more contextual information
+
 ## [2.1.1] - 2025-11-09
 
 ### Fixed

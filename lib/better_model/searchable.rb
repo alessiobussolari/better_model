@@ -40,7 +40,12 @@ module BetterModel
     included do
       # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
-        raise BetterModel::Errors::Searchable::ConfigurationError, "BetterModel::Searchable can only be included in ActiveRecord models"
+        raise BetterModel::Errors::Searchable::ConfigurationError.new(
+          reason: "BetterModel::Searchable can only be included in ActiveRecord models",
+          model_class: self,
+          expected: "ActiveRecord::Base descendant",
+          provided: ancestors.first.to_s
+        )
       end
 
       # Configuration registry
@@ -104,8 +109,11 @@ module BetterModel
 
         # If there are remaining unknown options, they might be misplaced predicates
         if options.any?
-          raise BetterModel::Errors::Searchable::ConfigurationError, "Unknown keyword arguments: #{options.keys.join(', ')}. " \
-            "Did you mean to pass predicates as a hash? Use: search({#{options.keys.first}: ...})"
+          raise BetterModel::Errors::Searchable::ConfigurationError.new(
+            reason: "Unknown keyword arguments: #{options.keys.join(', ')}. Did you mean to pass predicates as a hash? Use: search({#{options.keys.first}: ...})",
+            model_class: self,
+            provided: options.keys.to_s
+          )
         end
 
         # Sanitize predicates
@@ -227,9 +235,12 @@ module BetterModel
         # Ma richiedi che sia già stato permesso (non bypassa strong parameters)
         if defined?(ActionController::Parameters) && predicates.is_a?(ActionController::Parameters)
           unless predicates.permitted?
-            raise BetterModel::Errors::Searchable::ConfigurationError,
-              "ActionController::Parameters must be explicitly permitted before passing to search. " \
-              "Use .permit! or .to_h in your controller."
+            raise BetterModel::Errors::Searchable::ConfigurationError.new(
+              reason: "ActionController::Parameters must be explicitly permitted before passing to search. Use .permit! or .to_h in your controller.",
+              model_class: self,
+              expected: "permitted ActionController::Parameters",
+              provided: "unpermitted ActionController::Parameters"
+            )
           end
           predicates = predicates.to_h
         end
@@ -242,9 +253,12 @@ module BetterModel
         predicates.each do |predicate_scope, value|
           # Validate scope exists
           unless respond_to?(:predicable_scope?) && predicable_scope?(predicate_scope)
-            raise BetterModel::Errors::Searchable::InvalidPredicateError,
-              "Invalid predicate scope: #{predicate_scope}. " \
-              "Available predicable scopes: #{predicable_scopes.to_a.join(', ')}"
+            raise BetterModel::Errors::Searchable::InvalidPredicateError.new(
+              predicate_scope: predicate_scope,
+              value: value,
+              available_predicates: predicable_scopes.to_a,
+              model_class: self
+            )
           end
 
           # Skip nil/blank values (but not false)
@@ -273,9 +287,12 @@ module BetterModel
           temp_scope = all
           condition_hash.symbolize_keys.each do |predicate_scope, value|
             unless respond_to?(:predicable_scope?) && predicable_scope?(predicate_scope)
-              raise BetterModel::Errors::Searchable::InvalidPredicateError,
-                "Invalid predicate in OR condition: #{predicate_scope}. " \
-                "Available predicable scopes: #{predicable_scopes.to_a.join(', ')}"
+              raise BetterModel::Errors::Searchable::InvalidPredicateError.new(
+                predicate_scope: predicate_scope,
+                value: value,
+                available_predicates: predicable_scopes.to_a,
+                model_class: self
+              )
             end
 
             temp_scope = if value == true || value == "true"
@@ -300,9 +317,11 @@ module BetterModel
 
           # Validate scope exists
           unless respond_to?(:sortable_scope?) && sortable_scope?(order_scope)
-            raise BetterModel::Errors::Searchable::InvalidOrderError,
-              "Invalid order scope: #{order_scope}. " \
-              "Available sortable scopes: #{sortable_scopes.to_a.join(', ')}"
+            raise BetterModel::Errors::Searchable::InvalidOrderError.new(
+              order_scope: order_scope,
+              available_sorts: sortable_scopes.to_a,
+              model_class: self
+            )
           end
 
           # Apply scope
@@ -318,22 +337,39 @@ module BetterModel
         per_page = pagination_params[:per_page]&.to_i
 
         # Validate page >= 1 (always, even without per_page)
-        raise BetterModel::Errors::Searchable::InvalidPaginationError, "page must be >= 1" if page < 1
+        if page < 1
+          raise BetterModel::Errors::Searchable::InvalidPaginationError.new(
+            parameter_name: "page",
+            value: page,
+            valid_range: { min: 1 },
+            reason: "page must be >= 1"
+          )
+        end
 
         # DoS protection: limita il numero massimo di pagina per evitare offset enormi
         # Default 10000, configurabile tramite searchable config
         max_page = searchable_config[:max_page] || 10_000
         if page > max_page
-          raise BetterModel::Errors::Searchable::InvalidPaginationError,
-            "page must be <= #{max_page} (DoS protection). " \
-            "Configure max_page in searchable block to change this limit."
+          raise BetterModel::Errors::Searchable::InvalidPaginationError.new(
+            parameter_name: "page",
+            value: page,
+            valid_range: { max: max_page },
+            reason: "page must be <= #{max_page} (DoS protection). Configure max_page in searchable block to change this limit."
+          )
         end
 
         # If per_page is not provided, return scope without LIMIT
         return scope if per_page.nil?
 
         # Validate per_page >= 1
-        raise BetterModel::Errors::Searchable::InvalidPaginationError, "per_page must be >= 1" if per_page < 1
+        if per_page < 1
+          raise BetterModel::Errors::Searchable::InvalidPaginationError.new(
+            parameter_name: "per_page",
+            value: per_page,
+            valid_range: { min: 1 },
+            reason: "per_page must be >= 1"
+          )
+        end
 
         # Respect max_per_page limit if configured
         if searchable_config[:max_per_page].present?
@@ -371,9 +407,12 @@ module BetterModel
         securities_config = searchable_config[:securities] || {}
 
         unless securities_config.key?(security_name)
-          raise BetterModel::Errors::Searchable::InvalidSecurityError,
-            "Unknown security: #{security_name}. " \
-            "Available securities: #{securities_config.keys.join(', ')}"
+          raise BetterModel::Errors::Searchable::InvalidSecurityError.new(
+            policy_name: security_name.to_s,
+            requested_value: security_name.to_s,
+            violations: ["Unknown security policy: #{security_name}. Available securities: #{securities_config.keys.join(', ')}"],
+            model_class: self
+          )
         end
 
         # Ottieni i predicati obbligatori per questa security
@@ -389,9 +428,12 @@ module BetterModel
         end
 
         if missing_or_blank.any?
-          raise BetterModel::Errors::Searchable::InvalidSecurityError,
-            "Security :#{security_name} requires the following predicates with valid values: #{missing_or_blank.join(', ')}. " \
-            "These predicates must be present and have non-blank values in the search parameters."
+          raise BetterModel::Errors::Searchable::InvalidSecurityError.new(
+            policy_name: security_name.to_s,
+            violations: missing_or_blank.map(&:to_s),
+            requested_value: predicates.to_s,
+            model_class: self
+          )
         end
       end
 
@@ -404,9 +446,12 @@ module BetterModel
         securities_config = searchable_config[:securities] || {}
 
         unless securities_config.key?(security_name)
-          raise BetterModel::Errors::Searchable::InvalidSecurityError,
-            "Unknown security: #{security_name}. " \
-            "Available securities: #{securities_config.keys.join(', ')}"
+          raise BetterModel::Errors::Searchable::InvalidSecurityError.new(
+            policy_name: security_name.to_s,
+            requested_value: security_name.to_s,
+            violations: ["Unknown security policy: #{security_name}. Available securities: #{securities_config.keys.join(', ')}"],
+            model_class: self
+          )
         end
 
         # Ottieni i predicati obbligatori per questa security
@@ -426,10 +471,12 @@ module BetterModel
           end
 
           if missing_or_blank.any?
-            raise BetterModel::Errors::Searchable::InvalidSecurityError,
-              "Security :#{security_name} violation in OR condition ##{index + 1}. " \
-              "Each OR condition must include the following predicates with valid values: #{missing_or_blank.join(', ')}. " \
-              "This prevents bypassing security rules through OR logic."
+            raise BetterModel::Errors::Searchable::InvalidSecurityError.new(
+              policy_name: "#{security_name} (OR condition ##{index + 1})",
+              violations: missing_or_blank.map(&:to_s),
+              requested_value: condition_hash.to_s,
+              model_class: self
+            )
           end
         end
       end
@@ -441,9 +488,12 @@ module BetterModel
         total_predicates = predicates.size
 
         if total_predicates > max_predicates
-          raise BetterModel::Errors::Searchable::ConfigurationError,
-            "Query too complex: #{total_predicates} predicates exceeds maximum of #{max_predicates}. " \
-            "Configure max_predicates in searchable block to change this limit."
+          raise BetterModel::Errors::Searchable::ConfigurationError.new(
+            reason: "Query too complex: #{total_predicates} predicates exceeds maximum of #{max_predicates}. Configure max_predicates in searchable block to change this limit.",
+            model_class: self,
+            expected: "max #{max_predicates} predicates",
+            provided: "#{total_predicates} predicates"
+          )
         end
 
         # Limita il numero di condizioni OR (default 50, configurabile)
@@ -453,9 +503,12 @@ module BetterModel
         or_count = Array(or_conditions).size
 
         if or_count > max_or_conditions
-          raise BetterModel::Errors::Searchable::ConfigurationError,
-            "Query too complex: #{or_count} OR conditions exceeds maximum of #{max_or_conditions}. " \
-            "Configure max_or_conditions in searchable block to change this limit."
+          raise BetterModel::Errors::Searchable::ConfigurationError.new(
+            reason: "Query too complex: #{or_count} OR conditions exceeds maximum of #{max_or_conditions}. Configure max_or_conditions in searchable block to change this limit.",
+            model_class: self,
+            expected: "max #{max_or_conditions} OR conditions",
+            provided: "#{or_count} OR conditions"
+          )
         end
 
         # Conta anche i predicati dentro ogni condizione OR
@@ -463,9 +516,12 @@ module BetterModel
         total_with_or = total_predicates + or_predicates_count
 
         if total_with_or > max_predicates
-          raise BetterModel::Errors::Searchable::ConfigurationError,
-            "Query too complex: #{total_with_or} total predicates (including OR conditions) exceeds maximum of #{max_predicates}. " \
-            "Configure max_predicates in searchable block to change this limit."
+          raise BetterModel::Errors::Searchable::ConfigurationError.new(
+            reason: "Query too complex: #{total_with_or} total predicates (including OR conditions) exceeds maximum of #{max_predicates}. Configure max_predicates in searchable block to change this limit.",
+            model_class: self,
+            expected: "max #{max_predicates} total predicates",
+            provided: "#{total_with_or} total predicates"
+          )
         end
       end
     end
@@ -548,13 +604,29 @@ module BetterModel
       @config[:max_or_conditions] = count.to_i
     end
 
-    def security(name, predicates_array)
+    def security(name, predicates_array = nil)
       name = name.to_sym
+
+      # Check if predicates_array is provided
+      if predicates_array.nil?
+        raise BetterModel::Errors::Searchable::ConfigurationError.new(
+          reason: "Security :#{name} requires predicates to be specified",
+          model_class: @model_class,
+          expected: "predicates_array argument",
+          provided: "nil"
+        )
+      end
+
       predicates_array = Array(predicates_array).map(&:to_sym)
 
       # Valida che i predicati richiesti siano simboli validi
       if predicates_array.empty?
-        raise BetterModel::Errors::Searchable::ConfigurationError, "Security :#{name} must have at least one required predicate"
+        raise BetterModel::Errors::Searchable::ConfigurationError.new(
+          reason: "Security :#{name} must have at least one required predicate",
+          model_class: @model_class,
+          expected: "at least one predicate",
+          provided: "empty array"
+        )
       end
 
       @config[:securities][name] = predicates_array

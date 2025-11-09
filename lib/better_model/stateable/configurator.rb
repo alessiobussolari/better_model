@@ -2,19 +2,19 @@
 
 module BetterModel
   module Stateable
-    # Configurator per il DSL di Stateable
+    # Configurator for Stateable DSL.
     #
-    # Questo configurator permette di definire state machines in modo dichiarativo
-    # all'interno del blocco `stateable do...end`.
+    # This configurator enables defining state machines declaratively
+    # within the `stateable do...end` block.
     #
-    # Esempio:
+    # @example
     #   stateable do
-    #     # Definisci stati
+    #     # Define states
     #     state :pending, initial: true
     #     state :confirmed
     #     state :paid
     #
-    #     # Definisci transizioni
+    #     # Define transitions
     #     transition :confirm, from: :pending, to: :confirmed do
     #       check { items.any? }
     #       check :customer_valid?
@@ -27,9 +27,13 @@ module BetterModel
     #     end
     #   end
     #
+    # @api private
     class Configurator
       attr_reader :states, :transitions, :initial_state, :table_name
 
+      # Initialize a new Configurator.
+      #
+      # @param model_class [Class] Model class being configured
       def initialize(model_class)
         @model_class = model_class
         @states = []
@@ -39,16 +43,19 @@ module BetterModel
         @current_transition = nil
       end
 
-      # Definisce uno stato
+      # Define a state.
       #
-      # @param name [Symbol] Nome dello stato
-      # @param initial [Boolean] Se questo è lo stato iniziale
+      # @param name [Symbol] State name
+      # @param initial [Boolean] Whether this is the initial state
+      # @raise [ArgumentError] If state name is invalid or already defined
       #
       # @example
       #   state :draft, initial: true
       #   state :published
       #   state :archived
       #
+      # @example With initial state
+      #   state :pending, initial: true
       def state(name, initial: false)
         raise ArgumentError, "State name must be a symbol" unless name.is_a?(Symbol)
         raise ArgumentError, "State #{name} already defined" if @states.include?(name)
@@ -61,17 +68,18 @@ module BetterModel
         end
       end
 
-      # Definisce una transizione
+      # Define a transition.
       #
-      # @param event [Symbol] Nome dell'evento/transizione
-      # @param from [Symbol, Array<Symbol>] Stato/i di partenza
-      # @param to [Symbol] Stato di arrivo
-      # @yield Blocco per configurare guards, validations, callbacks
+      # @param event [Symbol] Event/transition name
+      # @param from [Symbol, Array<Symbol>] Source state(s)
+      # @param to [Symbol] Destination state
+      # @yield Block to configure guards, validations, callbacks
+      # @raise [ArgumentError] If event is invalid, already defined, or states don't exist
       #
-      # @example Transizione semplice
+      # @example Simple transition
       #   transition :publish, from: :draft, to: :published
       #
-      # @example Con checks e callbacks
+      # @example With checks and callbacks
       #   transition :confirm, from: :pending, to: :confirmed do
       #     check { valid? }
       #     check :ready_to_confirm?
@@ -79,17 +87,17 @@ module BetterModel
       #     after_transition { send_email }
       #   end
       #
-      # @example Da multipli stati
+      # @example From multiple states
       #   transition :cancel, from: [:pending, :confirmed, :paid], to: :cancelled
       #
       def transition(event, from:, to:, &block)
         raise ArgumentError, "Event name must be a symbol" unless event.is_a?(Symbol)
         raise ArgumentError, "Transition #{event} already defined" if @transitions.key?(event)
 
-        # Normalizza from in array
+        # Normalize from to array
         from_states = Array(from)
 
-        # Verifica che gli stati esistano
+        # Verify states exist
         from_states.each do |state_name|
           unless @states.include?(state_name)
             raise ArgumentError, "Unknown state in from: #{state_name}. Define it with 'state :#{state_name}' first."
@@ -100,7 +108,7 @@ module BetterModel
           raise ArgumentError, "Unknown state in to: #{to}. Define it with 'state :#{to}' first."
         end
 
-        # Inizializza configurazione transizione
+        # Initialize transition configuration
         @transitions[event] = {
           from: from_states,
           to: to,
@@ -111,7 +119,7 @@ module BetterModel
           around_callbacks: []
         }
 
-        # Se c'è un blocco, configuralo
+        # If block provided, configure it
         if block_given?
           @current_transition = @transitions[event]
           instance_eval(&block)
@@ -119,28 +127,30 @@ module BetterModel
         end
       end
 
-      # Definisce un check per la transizione corrente
+      # Define a check for the current transition.
       #
-      # I checks sono precondizioni che devono essere vere per permettere la transizione.
+      # Checks are preconditions that must be true to allow the transition.
       #
       # @overload check(&block)
-      #   Check con lambda/proc
-      #   @yield Blocco da valutare nel contesto dell'istanza
+      #   Check with lambda/proc
+      #   @yield Block to evaluate in instance context
       #   @example
       #     check { items.any? && customer.present? }
       #
       # @overload check(method_name)
-      #   Check con metodo
-      #   @param method_name [Symbol] Nome del metodo da chiamare
+      #   Check with method
+      #   @param method_name [Symbol] Method name to call
       #   @example
       #     check :customer_valid?
       #
       # @overload check(if: predicate)
-      #   Check con Statusable predicate
-      #   @param if [Symbol] Nome del predicate (integrazione Statusable)
+      #   Check with Statusable predicate
+      #   @param if [Symbol] Predicate name (Statusable integration)
       #   @example
       #     check if: :is_ready_for_publishing?
       #
+      # @raise [StateableError] If called outside transition block
+      # @raise [ArgumentError] If no check provided
       def check(method_name = nil, if: nil, &block)
         raise StateableError, "check can only be called inside a transition block" unless @current_transition
 
@@ -155,12 +165,14 @@ module BetterModel
         end
       end
 
-      # Definisce una validazione per la transizione corrente
+      # Define a validation for the current transition.
       #
-      # Le validazioni sono eseguite dopo i guards e prima dei callbacks.
-      # Devono aggiungere errori all'oggetto errors se la validazione fallisce.
+      # Validations are executed after guards and before callbacks.
+      # They must add errors to the errors object if validation fails.
       #
-      # @yield Blocco da valutare nel contesto dell'istanza
+      # @yield Block to evaluate in instance context
+      # @raise [StateableError] If called outside transition block
+      # @raise [ArgumentError] If no block provided
       #
       # @example
       #   validate do
@@ -175,22 +187,24 @@ module BetterModel
         @current_transition[:validations] << block
       end
 
-      # Definisce un callback before_transition per la transizione corrente
+      # Define a before_transition callback for the current transition.
       #
-      # I before_transition callbacks sono eseguiti prima della transizione di stato.
+      # Before_transition callbacks are executed before the state transition.
       #
       # @overload before_transition(&block)
-      #   Before_transition callback con lambda/proc
-      #   @yield Blocco da eseguire
+      #   Before_transition callback with lambda/proc
+      #   @yield Block to execute
       #   @example
       #     before_transition { calculate_total }
       #
       # @overload before_transition(method_name)
-      #   Before_transition callback con metodo
-      #   @param method_name [Symbol] Nome del metodo da chiamare
+      #   Before_transition callback with method
+      #   @param method_name [Symbol] Method name to call
       #   @example
       #     before_transition :calculate_total
       #
+      # @raise [StateableError] If called outside transition block
+      # @raise [ArgumentError] If no callback provided
       def before_transition(method_name = nil, &block)
         raise StateableError, "before_transition can only be called inside a transition block" unless @current_transition
 
@@ -203,22 +217,24 @@ module BetterModel
         end
       end
 
-      # Definisce un callback after_transition per la transizione corrente
+      # Define an after_transition callback for the current transition.
       #
-      # Gli after_transition callbacks sono eseguiti dopo la transizione di stato.
+      # After_transition callbacks are executed after the state transition.
       #
       # @overload after_transition(&block)
-      #   After_transition callback con lambda/proc
-      #   @yield Blocco da eseguire
+      #   After_transition callback with lambda/proc
+      #   @yield Block to execute
       #   @example
       #     after_transition { send_notification }
       #
       # @overload after_transition(method_name)
-      #   After_transition callback con metodo
-      #   @param method_name [Symbol] Nome del metodo da chiamare
+      #   After_transition callback with method
+      #   @param method_name [Symbol] Method name to call
       #   @example
       #     after_transition :send_notification
       #
+      # @raise [StateableError] If called outside transition block
+      # @raise [ArgumentError] If no callback provided
       def after_transition(method_name = nil, &block)
         raise StateableError, "after_transition can only be called inside a transition block" unless @current_transition
 
@@ -231,12 +247,14 @@ module BetterModel
         end
       end
 
-      # Definisce un callback around per la transizione corrente
+      # Define an around callback for the current transition.
       #
-      # Gli around callbacks wrappano la transizione di stato.
-      # Il blocco riceve un altro blocco che deve chiamare per eseguire la transizione.
+      # Around callbacks wrap the state transition.
+      # The block receives another block that must be called to execute the transition.
       #
-      # @yield Blocco da eseguire, riceve un blocco da chiamare
+      # @yield Block to execute, receives a block to call
+      # @raise [StateableError] If called outside transition block
+      # @raise [ArgumentError] If no block provided
       #
       # @example
       #   around do |transition|
@@ -252,9 +270,9 @@ module BetterModel
         @current_transition[:around_callbacks] << block
       end
 
-      # Specifica il nome della tabella per state transitions
+      # Specify the table name for state transitions.
       #
-      # @param name [String, Symbol] Nome della tabella
+      # @param name [String, Symbol] Table name
       #
       # @example Default (state_transitions)
       #   stateable do
@@ -283,9 +301,9 @@ module BetterModel
         @table_name = name.to_s
       end
 
-      # Restituisce la configurazione completa
+      # Return complete configuration.
       #
-      # @return [Hash] Configurazione con stati e transizioni
+      # @return [Hash] Configuration with states and transitions
       #
       def to_h
         {

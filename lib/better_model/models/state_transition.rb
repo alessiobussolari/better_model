@@ -2,12 +2,12 @@
 
 module BetterModel
   module Models
-    # StateTransition - Base ActiveRecord model for state transition history
+    # StateTransition - Base ActiveRecord model for state transition history.
     #
-    # Questo è un modello abstract. Le classi concrete vengono generate dinamicamente
-    # per ogni tabella (state_transitions, order_transitions, etc.).
+    # This is an abstract model. Concrete classes are generated dynamically
+    # for each table (state_transitions, order_transitions, etc.).
     #
-    # Schema della tabella:
+    # @note Table Schema
     #   t.string :transitionable_type, null: false
     #   t.integer :transitionable_id, null: false
     #   t.string :event, null: false
@@ -16,11 +16,11 @@ module BetterModel
     #   t.json :metadata
     #   t.datetime :created_at, null: false
     #
-    # Utilizzo:
-    #   # Tutte le transizioni di un modello
+    # @example Usage
+    #   # All transitions for a model
     #   order.state_transitions
     #
-    #   # Query globali (tramite classi dinamiche)
+    # @example Global queries (via dynamic classes)
     #   BetterModel::Models::StateTransitions.for_model(Order)
     #   BetterModel::Models::OrderTransitions.by_event(:confirm)
     #
@@ -36,72 +36,86 @@ module BetterModel
 
       # Scopes
 
-      # Scope per modello specifico
+      # Scope for specific model.
       #
-      # @param model_class [Class] Classe del modello
+      # @param model_class [Class] Model class
       # @return [ActiveRecord::Relation]
       #
+      # @example
+      #   StateTransition.for_model(Order)
       scope :for_model, ->(model_class) {
         where(transitionable_type: model_class.name)
       }
 
-      # Scope per evento specifico
+      # Scope for specific event.
       #
-      # @param event [Symbol, String] Nome dell'evento
+      # @param event [Symbol, String] Event name
       # @return [ActiveRecord::Relation]
       #
+      # @example
+      #   StateTransition.by_event(:confirm)
       scope :by_event, ->(event) {
         where(event: event.to_s)
       }
 
-      # Scope per stato di partenza
+      # Scope for source state.
       #
-      # @param state [Symbol, String] Stato di partenza
+      # @param state [Symbol, String] Source state
       # @return [ActiveRecord::Relation]
       #
+      # @example
+      #   StateTransition.from_state(:pending)
       scope :from_state, ->(state) {
         where(from_state: state.to_s)
       }
 
-      # Scope per stato di arrivo
+      # Scope for destination state.
       #
-      # @param state [Symbol, String] Stato di arrivo
+      # @param state [Symbol, String] Destination state
       # @return [ActiveRecord::Relation]
       #
+      # @example
+      #   StateTransition.to_state(:confirmed)
       scope :to_state, ->(state) {
         where(to_state: state.to_s)
       }
 
-      # Scope per transizioni recenti
+      # Scope for recent transitions.
       #
-      # @param duration [ActiveSupport::Duration] Durata (es. 7.days)
+      # @param duration [ActiveSupport::Duration] Time duration (e.g., 7.days)
       # @return [ActiveRecord::Relation]
       #
+      # @example
+      #   StateTransition.recent(7.days)
       scope :recent, ->(duration = 7.days) {
         where("created_at >= ?", duration.ago)
       }
 
-      # Scope per transizioni in un periodo
+      # Scope for transitions in a time period.
       #
-      # @param start_time [Time, Date] Inizio periodo
-      # @param end_time [Time, Date] Fine periodo
+      # @param start_time [Time, Date] Period start
+      # @param end_time [Time, Date] Period end
       # @return [ActiveRecord::Relation]
       #
+      # @example
+      #   StateTransition.between(1.week.ago, Time.current)
       scope :between, ->(start_time, end_time) {
         where(created_at: start_time..end_time)
       }
 
-      # Metodi di istanza
+      # Instance Methods
 
-      # Formatted description della transizione
+      # Formatted description of the transition.
       #
-      # @return [String]
+      # @return [String] Human-readable transition description
       #
+      # @example
+      #   transition.description  # => "Order#123: pending -> confirmed (confirm)"
       def description
         "#{transitionable_type}##{transitionable_id}: #{from_state} -> #{to_state} (#{event})"
       end
 
-      # Alias per retrocompatibilità
+      # Alias for backward compatibility
       alias_method :to_s, :description
     end
   end

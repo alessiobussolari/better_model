@@ -3,12 +3,12 @@
 require_relative "errors/taggable/taggable_error"
 require_relative "errors/taggable/configuration_error"
 
-# Taggable - Sistema di gestione tag dichiarativo per modelli Rails
+# Taggable - Declarative tag management system for Rails models.
 #
-# Questo concern permette di gestire tag multipli sui modelli utilizzando array PostgreSQL
-# con normalizzazione, validazione e statistiche. La ricerca è delegata a Predicable.
+# This concern enables managing multiple tags on models using PostgreSQL arrays
+# with normalization, validation, and statistics. Search is delegated to Predicable.
 #
-# Esempio di utilizzo:
+# @example Basic Usage
 #   class Article < ApplicationRecord
 #     include BetterModel
 #
@@ -19,18 +19,18 @@ require_relative "errors/taggable/configuration_error"
 #     end
 #   end
 #
-# Utilizzo:
-#   article.tag_with("ruby", "rails")           # Aggiungi tag
-#   article.untag("rails")                      # Rimuovi tag
-#   article.tag_list = "ruby, rails, tutorial"  # Da stringa CSV
+# @example Managing Tags
+#   article.tag_with("ruby", "rails")           # Add tags
+#   article.untag("rails")                      # Remove tags
+#   article.tag_list = "ruby, rails, tutorial"  # From CSV string
 #   article.tagged_with?("ruby")                # => true
 #
-# Ricerca (delegata a Predicable):
+# @example Searching (Delegated to Predicable)
 #   Article.tags_contains("ruby")               # Predicable
 #   Article.tags_overlaps(["ruby", "python"])   # Predicable
 #   Article.search(tags_contains: "ruby")       # Searchable + Predicable
 #
-# Statistiche:
+# @example Statistics
 #   Article.tag_counts                          # => {"ruby" => 45, "rails" => 38}
 #   Article.popular_tags(limit: 10)             # => [["ruby", 45], ["rails", 38], ...]
 #
@@ -38,7 +38,11 @@ module BetterModel
   module Taggable
     extend ActiveSupport::Concern
 
-    # Configurazione Taggable
+    # Taggable Configuration.
+    #
+    # Internal configuration class for the Taggable DSL.
+    #
+    # @api private
     class Configuration
       attr_reader :validates_minimum, :validates_maximum, :allowed_tags, :forbidden_tags
 
@@ -94,19 +98,24 @@ module BetterModel
     end
 
     included do
-      # Valida che sia incluso solo in modelli ActiveRecord
+      # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
-        raise BetterModel::Errors::Taggable::ConfigurationError, "BetterModel::Taggable can only be included in ActiveRecord models"
+        raise BetterModel::Errors::Taggable::ConfigurationError.new(
+          reason: "BetterModel::Taggable can only be included in ActiveRecord models"
+        )
       end
 
-      # Configurazione Taggable per questa classe
+      # Taggable configuration for this class
       class_attribute :taggable_config, default: nil
     end
 
     class_methods do
-      # DSL per configurare Taggable
+      # DSL to configure Taggable.
       #
-      # Esempio:
+      # @yield [config] Configuration block
+      # @raise [BetterModel::Errors::Taggable::ConfigurationError] If already configured or field doesn't exist
+      #
+      # @example
       #   taggable do
       #     tag_field :tags
       #     normalize true
@@ -117,39 +126,49 @@ module BetterModel
       #     validates_tags minimum: 1, maximum: 10, allowed_tags: ["ruby", "rails"]
       #   end
       def taggable(&block)
-        # Previeni configurazione multipla
+        # Prevent multiple configuration
         if taggable_config.present?
-          raise BetterModel::Errors::Taggable::ConfigurationError, "Taggable already configured for #{name}"
+          raise BetterModel::Errors::Taggable::ConfigurationError.new(
+            reason: "Taggable already configured for #{name}",
+            model_class: self
+          )
         end
 
-        # Crea configurazione
+        # Create configuration
         config = Configuration.new
         config.instance_eval(&block) if block_given?
 
-        # Valida che il campo esista
+        # Validate that field exists
         tag_field_name = config.tag_field.to_s
         unless column_names.include?(tag_field_name)
-          raise BetterModel::Errors::Taggable::ConfigurationError, "Tag field #{config.tag_field} does not exist in #{table_name}"
+          raise BetterModel::Errors::Taggable::ConfigurationError.new(
+            reason: "Tag field #{config.tag_field} does not exist in #{table_name}",
+            model_class: self,
+            expected: "valid column name from #{table_name}",
+            provided: config.tag_field
+          )
         end
 
-        # Salva configurazione (frozen per thread-safety)
+        # Save configuration (frozen for thread-safety)
         self.taggable_config = config.freeze
 
-        # Auto-registra predicates per ricerca (delegato a Predicable)
+        # Auto-register predicates for search (delegated to Predicable)
         predicates config.tag_field if respond_to?(:predicates)
 
-        # Registra validazioni se configurate
+        # Register validations if configured
         setup_validations(config) if config.validates_minimum || config.validates_maximum ||
                                      config.allowed_tags || config.forbidden_tags
       end
 
       # ============================================================================
-      # CLASS METHODS - Statistiche
+      # CLASS METHODS - Statistics
       # ============================================================================
 
-      # Restituisce un hash con il conteggio di ciascun tag
+      # Returns a hash with the count of each tag.
       #
-      # Esempio:
+      # @return [Hash{String => Integer}] Tag counts
+      #
+      # @example
       #   Article.tag_counts  # => {"ruby" => 45, "rails" => 38, "tutorial" => 12}
       def tag_counts
         return {} unless taggable_config
@@ -166,9 +185,12 @@ module BetterModel
         counts
       end
 
-      # Restituisce i tag più popolari con il loro conteggio
+      # Returns the most popular tags with their counts.
       #
-      # Esempio:
+      # @param limit [Integer] Maximum number of tags to return
+      # @return [Array<Array(String, Integer)>] Tag-count pairs sorted by count
+      #
+      # @example
       #   Article.popular_tags(limit: 10)
       #   # => [["ruby", 45], ["rails", 38], ["tutorial", 12]]
       def popular_tags(limit: 10)
@@ -179,9 +201,13 @@ module BetterModel
           .first(limit)
       end
 
-      # Restituisce i tag che appaiono insieme al tag specificato
+      # Returns tags that appear together with the specified tag.
       #
-      # Esempio:
+      # @param tag [String] Tag to find related tags for
+      # @param limit [Integer] Maximum number of related tags to return
+      # @return [Array<String>] Related tags sorted by frequency
+      #
+      # @example
       #   Article.related_tags("ruby", limit: 10)
       #   # => ["rails", "gem", "activerecord"]
       def related_tags(tag, limit: 10)
@@ -190,25 +216,25 @@ module BetterModel
         field = taggable_config.tag_field
         related_counts = Hash.new(0)
 
-        # Normalizza il tag query
+        # Normalize query tag
         config = taggable_config
         normalized_tag = tag.to_s
         normalized_tag = normalized_tag.strip if config.strip
         normalized_tag = normalized_tag.downcase if config.normalize
 
-        # Trova record che contengono il tag
+        # Find records containing the tag
         find_each do |record|
           tags = record.public_send(field) || []
           next unless tags.include?(normalized_tag)
 
-          # Conta gli altri tag che appaiono insieme
+          # Count other tags that appear together
           tags.each do |other_tag|
             next if other_tag == normalized_tag
             related_counts[other_tag] += 1
           end
         end
 
-        # Restituisci ordinati per frequenza
+        # Return sorted by frequency
         related_counts
           .sort_by { |_tag, count| -count }
           .first(limit)
@@ -217,11 +243,14 @@ module BetterModel
 
       private
 
-      # Setup delle validazioni ActiveRecord
+      # Setup ActiveRecord validations.
+      #
+      # @param config [Configuration] Taggable configuration
+      # @api private
       def setup_validations(config)
         field = config.tag_field
 
-        # Validazione minimum
+        # Minimum validation
         if config.validates_minimum
           min = config.validates_minimum
           validate do
@@ -232,7 +261,7 @@ module BetterModel
           end
         end
 
-        # Validazione maximum
+        # Maximum validation
         if config.validates_maximum
           max = config.validates_maximum
           validate do
@@ -243,7 +272,7 @@ module BetterModel
           end
         end
 
-        # Validazione whitelist
+        # Whitelist validation
         if config.allowed_tags
           allowed = config.allowed_tags
           validate do
@@ -255,7 +284,7 @@ module BetterModel
           end
         end
 
-        # Validazione blacklist
+        # Blacklist validation
         if config.forbidden_tags
           forbidden = config.forbidden_tags
           validate do
@@ -270,12 +299,15 @@ module BetterModel
     end
 
     # ============================================================================
-    # INSTANCE METHODS - Gestione Tag
+    # INSTANCE METHODS - Tag Management
     # ============================================================================
 
-    # Aggiunge uno o più tag al record
+    # Add one or more tags to the record.
     #
-    # Esempio:
+    # @param new_tags [Array<String>] Tags to add
+    # @return [void]
+    #
+    # @example
     #   article.tag_with("ruby")
     #   article.tag_with("ruby", "rails", "tutorial")
     def tag_with(*new_tags)
@@ -284,21 +316,24 @@ module BetterModel
       config = self.class.taggable_config
       field = config.tag_field
 
-      # Inizializza array se nil
+      # Initialize array if nil
       current_tags = public_send(field) || []
 
-      # Normalizza e aggiungi tag (evita duplicati con |)
+      # Normalize and add tags (avoid duplicates with |)
       normalized_tags = new_tags.flatten.map { |tag| normalize_tag(tag) }.compact
       updated_tags = (current_tags | normalized_tags)
 
-      # Aggiorna il campo
+      # Update field
       public_send("#{field}=", updated_tags)
       save if persisted?
     end
 
-    # Rimuove uno o più tag dal record
+    # Remove one or more tags from the record.
     #
-    # Esempio:
+    # @param tags_to_remove [Array<String>] Tags to remove
+    # @return [void]
+    #
+    # @example
     #   article.untag("tutorial")
     #   article.untag("ruby", "rails")
     def untag(*tags_to_remove)
@@ -307,23 +342,26 @@ module BetterModel
       config = self.class.taggable_config
       field = config.tag_field
 
-      # Ottieni tag attuali
+      # Get current tags
       current_tags = public_send(field) || []
 
-      # Normalizza tag da rimuovere
+      # Normalize tags to remove
       normalized_tags = tags_to_remove.flatten.map { |tag| normalize_tag(tag) }.compact
 
-      # Rimuovi tag
+      # Remove tags
       updated_tags = current_tags - normalized_tags
 
-      # Aggiorna il campo
+      # Update field
       public_send("#{field}=", updated_tags)
       save if persisted?
     end
 
-    # Sostituisce tutti i tag esistenti con nuovi tag
+    # Replace all existing tags with new tags.
     #
-    # Esempio:
+    # @param new_tags [Array<String>] New tags to set
+    # @return [void]
+    #
+    # @example
     #   article.retag("python", "django")
     def retag(*new_tags)
       return unless taggable_enabled?
@@ -331,17 +369,20 @@ module BetterModel
       config = self.class.taggable_config
       field = config.tag_field
 
-      # Normalizza nuovi tag
+      # Normalize new tags
       normalized_tags = new_tags.flatten.map { |tag| normalize_tag(tag) }.compact.uniq
 
-      # Sostituisci tutti i tag
+      # Replace all tags
       public_send("#{field}=", normalized_tags)
       save if persisted?
     end
 
-    # Verifica se il record ha un determinato tag
+    # Check if record has a specific tag.
     #
-    # Esempio:
+    # @param tag [String] Tag to check
+    # @return [Boolean] true if record has the tag
+    #
+    # @example
     #   article.tagged_with?("ruby")  # => true/false
     def tagged_with?(tag)
       return false unless taggable_enabled?
@@ -359,9 +400,11 @@ module BetterModel
     # TAG LIST (CSV Interface)
     # ============================================================================
 
-    # Restituisce i tag come stringa separata da delimitatore
+    # Returns tags as a delimited string.
     #
-    # Esempio:
+    # @return [String] Tags joined by delimiter
+    #
+    # @example
     #   article.tag_list  # => "ruby, rails, tutorial"
     def tag_list
       return "" unless taggable_enabled?
@@ -372,14 +415,17 @@ module BetterModel
 
       current_tags = public_send(field) || []
 
-      # Aggiungi spazio dopo virgola per leggibilità (solo se delimiter è virgola)
+      # Add space after comma for readability (only if delimiter is comma)
       separator = delimiter == "," ? "#{delimiter} " : delimiter
       current_tags.join(separator)
     end
 
-    # Imposta i tag da una stringa separata da delimitatore
+    # Set tags from a delimited string.
     #
-    # Esempio:
+    # @param tag_string [String] Delimited tag string
+    # @return [void]
+    #
+    # @example
     #   article.tag_list = "ruby, rails, tutorial"
     def tag_list=(tag_string)
       return unless taggable_enabled?
@@ -404,25 +450,26 @@ module BetterModel
     # JSON SERIALIZATION
     # ============================================================================
 
-    # Override as_json per includere informazioni tag
+    # Override as_json to include tag information.
     #
-    # Opzioni:
-    #   include_tag_list: true    # Includi tag_list come string
-    #   include_tag_stats: true   # Includi statistiche tag
+    # @param options [Hash] Options for as_json
+    # @option options [Boolean] :include_tag_list Include tag_list as string
+    # @option options [Boolean] :include_tag_stats Include tag statistics
+    # @return [Hash] JSON representation
     #
-    # Esempio:
+    # @example
     #   article.as_json(include_tag_list: true, include_tag_stats: true)
     def as_json(options = {})
       json = super(options)
 
       return json unless taggable_enabled?
 
-      # Aggiungi tag_list se richiesto
+      # Add tag_list if requested
       if options[:include_tag_list]
         json["tag_list"] = tag_list
       end
 
-      # Aggiungi statistiche tag se richiesto
+      # Add tag statistics if requested
       if options[:include_tag_stats]
         config = self.class.taggable_config
         field = config.tag_field
@@ -439,10 +486,17 @@ module BetterModel
 
     private
 
-    # Verifica se Taggable è abilitato per questa classe
+    # Check if Taggable is enabled for this class.
+    #
+    # @return [Boolean] true if enabled
+    # @api private
     def taggable_enabled? = self.class.taggable_config.present?
 
-    # Normalizza un tag secondo la configurazione
+    # Normalize a tag according to configuration.
+    #
+    # @param tag [String] Tag to normalize
+    # @return [String, nil] Normalized tag or nil if invalid
+    # @api private
     def normalize_tag(tag)
       return nil if tag.blank?
 

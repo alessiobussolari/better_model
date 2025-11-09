@@ -4,54 +4,54 @@ require_relative "errors/traceable/traceable_error"
 require_relative "errors/traceable/not_enabled_error"
 require_relative "errors/traceable/configuration_error"
 
-# Traceable - Change tracking con audit trail per modelli Rails
+# Traceable - Change tracking with audit trail for Rails models.
 #
-# Questo concern permette di tracciare automaticamente i cambiamenti ai record,
-# mantenendo uno storico completo con timestamp, autore e motivazione.
+# This concern enables automatic tracking of record changes,
+# maintaining a complete history with timestamps, author, and reasoning.
 #
-# SETUP RAPIDO:
-#   # Opzione 1: Generator automatico (raccomandato)
+# @example Quick Setup - Option 1: Automatic Generator (Recommended)
 #   rails g better_model:traceable Article --with-reason
 #   rails db:migrate
 #
-#   # Opzione 2: La migration better_model_versions è già nel gem
+# @example Quick Setup - Option 2: Using Included Migration
+#   # The better_model_versions migration is already in the gem
 #   rails db:migrate
 #
-# APPROCCIO OPT-IN: Il tracking non è attivo automaticamente. Devi chiamare
-# esplicitamente `traceable do...end` nel tuo modello per attivarlo.
+# @note OPT-IN APPROACH
+#   Tracking is not enabled automatically. You must explicitly call
+#   `traceable do...end` in your model to activate it.
 #
-# REQUISITI DATABASE:
-#   - better_model_versions table (inclusa nel gem)
+# @note DATABASE REQUIREMENTS
+#   - better_model_versions table (included in gem)
 #
-# Esempio di utilizzo:
+# @example Basic Model Setup
 #   class Article < ApplicationRecord
 #     include BetterModel
 #
-#     # Attiva traceable (opt-in)
+#     # Enable traceable (opt-in)
 #     traceable do
-#       track :status, :title, :published_at  # Campi da tracciare
+#       track :status, :title, :published_at  # Fields to track
 #     end
 #   end
 #
-# Utilizzo:
-#   # Tracking automatico
+# @example Automatic Tracking
 #   article.update!(status: "published", updated_by_id: user.id, updated_reason: "Approved")
 #
-#   # Query versioni
-#   article.versions                           # Tutte le versioni
-#   article.changes_for(:status)               # Cambiamenti per un campo
-#   article.audit_trail                        # Storico formattato
+# @example Querying Versions
+#   article.versions                           # All versions
+#   article.changes_for(:status)               # Changes for a field
+#   article.audit_trail                        # Formatted history
 #
-#   # Time-travel
-#   article.as_of(3.days.ago)                  # Stato a una data specifica
+# @example Time-Travel
+#   article.as_of(3.days.ago)                  # State at specific date
 #
-#   # Rollback
-#   article.rollback_to(version)               # Ripristina a versione precedente
+# @example Rollback
+#   article.rollback_to(version)               # Restore to previous version
 #
-#   # Scopes per query su cambiamenti
-#   Article.changed_by(user.id)                # Modifiche di un utente
-#   Article.changed_between(start, end)        # Modifiche in un periodo
-#   Article.status_changed_from("draft").to("published")  # Transizioni specifiche
+# @example Query Scopes for Changes
+#   Article.changed_by(user.id)                # Changes by user
+#   Article.changed_between(start, end)        # Changes in period
+#   Article.status_changed_from("draft").to("published")  # Specific transitions
 #
 module BetterModel
   module Traceable
@@ -63,7 +63,9 @@ module BetterModel
     included do
       # Validazione ActiveRecord
       unless ancestors.include?(ActiveRecord::Base)
-        raise BetterModel::Errors::Traceable::ConfigurationError, "BetterModel::Traceable can only be included in ActiveRecord models"
+        raise BetterModel::Errors::Traceable::ConfigurationError.new(
+          reason: "BetterModel::Traceable can only be included in ActiveRecord models"
+        )
       end
 
       # Configurazione traceable (opt-in)
@@ -133,7 +135,13 @@ module BetterModel
       # @param user_id [Integer] User ID
       # @return [ActiveRecord::Relation]
       def changed_by(user_id)
-        raise BetterModel::Errors::Traceable::NotEnabledError unless traceable_enabled?
+        unless traceable_enabled?
+          raise BetterModel::Errors::Traceable::NotEnabledError.new(
+            module_name: "Traceable",
+            method_called: "changed_by",
+            model_class: self
+          )
+        end
 
         joins(:versions).where(traceable_table_name => { updated_by_id: user_id }).distinct
       end
@@ -144,7 +152,13 @@ module BetterModel
       # @param end_time [Time, Date] End time
       # @return [ActiveRecord::Relation]
       def changed_between(start_time, end_time)
-        raise BetterModel::Errors::Traceable::NotEnabledError unless traceable_enabled?
+        unless traceable_enabled?
+          raise BetterModel::Errors::Traceable::NotEnabledError.new(
+            module_name: "Traceable",
+            method_called: "changed_between",
+            model_class: self
+          )
+        end
 
         joins(:versions).where(traceable_table_name => { created_at: start_time..end_time }).distinct
       end
@@ -154,7 +168,13 @@ module BetterModel
       # @param field [Symbol] Field name
       # @return [ChangeQuery]
       def field_changed(field)
-        raise BetterModel::Errors::Traceable::NotEnabledError unless traceable_enabled?
+        unless traceable_enabled?
+          raise BetterModel::Errors::Traceable::NotEnabledError.new(
+            module_name: "Traceable",
+            method_called: "field_changed",
+            model_class: self
+          )
+        end
 
         ChangeQuery.new(self, field)
       end
@@ -222,7 +242,13 @@ module BetterModel
     # @param field [Symbol] Field name
     # @return [Array<Hash>] Array of changes with :before, :after, :at, :by
     def changes_for(field)
-      raise BetterModel::Errors::Traceable::NotEnabledError unless self.class.traceable_enabled?
+      unless self.class.traceable_enabled?
+        raise BetterModel::Errors::Traceable::NotEnabledError.new(
+          module_name: "Traceable",
+          method_called: "changes_for",
+          model_class: self.class
+        )
+      end
 
       versions.select { |v| v.changed?(field) }.map do |version|
         change = version.change_for(field)
@@ -240,7 +266,13 @@ module BetterModel
     #
     # @return [Array<Hash>] Full audit trail
     def audit_trail
-      raise BetterModel::Errors::Traceable::NotEnabledError unless self.class.traceable_enabled?
+      unless self.class.traceable_enabled?
+        raise BetterModel::Errors::Traceable::NotEnabledError.new(
+          module_name: "Traceable",
+          method_called: "audit_trail",
+          model_class: self.class
+        )
+      end
 
       versions.map do |version|
         {
@@ -258,7 +290,13 @@ module BetterModel
     # @param timestamp [Time, Date] Point in time
     # @return [self] Reconstructed object (not saved)
     def as_of(timestamp)
-      raise BetterModel::Errors::Traceable::NotEnabledError unless self.class.traceable_enabled?
+      unless self.class.traceable_enabled?
+        raise BetterModel::Errors::Traceable::NotEnabledError.new(
+          module_name: "Traceable",
+          method_called: "as_of",
+          model_class: self.class
+        )
+      end
 
       # Get all versions up to timestamp, ordered from oldest to newest
       relevant_versions = versions.where("created_at <= ?", timestamp).order(created_at: :asc)
@@ -287,7 +325,13 @@ module BetterModel
     # @param updated_reason [String] Reason for rollback
     # @return [self]
     def rollback_to(version, updated_by_id: nil, updated_reason: nil, allow_sensitive: false)
-      raise BetterModel::Errors::Traceable::NotEnabledError unless self.class.traceable_enabled?
+      unless self.class.traceable_enabled?
+        raise BetterModel::Errors::Traceable::NotEnabledError.new(
+          module_name: "Traceable",
+          method_called: "rollback_to",
+          model_class: self.class
+        )
+      end
 
       version = versions.find(version) if version.is_a?(Integer)
 

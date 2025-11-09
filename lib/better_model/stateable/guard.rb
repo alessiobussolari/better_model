@@ -2,25 +2,32 @@
 
 module BetterModel
   module Stateable
-    # Check evaluator per Stateable (internal class name remains Guard for compatibility)
+    # Check evaluator for Stateable transitions.
     #
-    # Valuta le check conditions per determinare se una transizione è permessa.
-    # Supporta tre tipi di checks:
-    # - Block: lambda/proc valutato nel contesto dell'istanza
-    # - Method: metodo chiamato sull'istanza
-    # - Predicate: integrazione con Statusable (is_ready?, etc.)
+    # Evaluates check conditions to determine if a transition is allowed.
+    # Supports three types of checks:
+    # - Block: lambda/proc evaluated in instance context
+    # - Method: method called on instance
+    # - Predicate: integration with Statusable (is_ready?, etc.)
     #
+    # @api private
     class Guard
+      # Initialize a new Guard.
+      #
+      # @param instance [Object] Model instance
+      # @param guard_config [Hash] Guard configuration hash
       def initialize(instance, guard_config)
         @instance = instance
         @guard_config = guard_config
       end
 
-      # Valuta il check
+      # Evaluate the check.
       #
-      # @return [Boolean] true se il check passa
-      # @raise [BetterModel::Errors::Stateable::CheckFailedError] Se il check fallisce (opzionale, dipende dal contesto)
+      # @return [Boolean] true if check passes
+      # @raise [BetterModel::Errors::Stateable::CheckFailedError] If check fails (optional, context-dependent)
       #
+      # @example
+      #   guard.evaluate  # => true
       def evaluate
         case @guard_config[:type]
         when :block
@@ -34,10 +41,12 @@ module BetterModel
         end
       end
 
-      # Descrizione del check per messaggi di errore
+      # Description of check for error messages.
       #
-      # @return [String] Descrizione human-readable
+      # @return [String] Human-readable description
       #
+      # @example
+      #   guard.description  # => "method check: customer_valid?"
       def description
         case @guard_config[:type]
         when :block
@@ -53,13 +62,20 @@ module BetterModel
 
       private
 
-      # Valuta un check block
+      # Evaluate a block check.
+      #
+      # @return [Boolean] Result of block evaluation
+      # @api private
       def evaluate_block
         block = @guard_config[:block]
         @instance.instance_exec(&block)
       end
 
-      # Valuta un check method
+      # Evaluate a method check.
+      #
+      # @return [Boolean] Result of method call
+      # @raise [NoMethodError] If method not found
+      # @api private
       def evaluate_method
         method_name = @guard_config[:method]
 
@@ -71,7 +87,11 @@ module BetterModel
         @instance.send(method_name)
       end
 
-      # Valuta un check predicate (integrazione Statusable)
+      # Evaluate a predicate check (Statusable integration).
+      #
+      # @return [Boolean] Result of predicate call
+      # @raise [NoMethodError] If predicate not found
+      # @api private
       def evaluate_predicate
         predicate_name = @guard_config[:predicate]
 

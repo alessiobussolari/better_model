@@ -4,58 +4,61 @@ require_relative "errors/validatable/validatable_error"
 require_relative "errors/validatable/not_enabled_error"
 require_relative "errors/validatable/configuration_error"
 
-# Validatable - Sistema di validazioni dichiarativo per modelli Rails
+# Validatable - Declarative validation system for Rails models.
 #
-# Questo concern permette di definire validazioni in modo dichiarativo e leggibile,
-# con supporto per validazioni condizionali, gruppi, cross-field e business rules.
+# This concern enables defining validations declaratively and readably,
+# with support for conditional validations, groups, cross-field, and business rules.
 #
-# APPROCCIO OPT-IN: Le validazioni dichiarative non sono attive automaticamente.
-# Devi chiamare esplicitamente `validatable do...end` nel tuo modello.
+# @note OPT-IN APPROACH
+#   Declarative validations are not enabled automatically.
+#   You must explicitly call `validatable do...end` in your model.
 #
-# Esempio di utilizzo:
+# @example Basic Usage
 #   class Article < ApplicationRecord
 #     include BetterModel
 #
-#     # Status (già esistente in Statusable)
+#     # Status (from Statusable)
 #     is :draft, -> { status == "draft" }
 #     is :published, -> { status == "published" }
 #
-#     # Registra validazioni complesse
+#     # Register complex validations
 #     register_complex_validation :valid_date_range do
 #       return if starts_at.blank? || ends_at.blank?
 #       errors.add(:starts_at, "must be before end date") if starts_at >= ends_at
 #     end
 #
-#     # Attiva validatable (opt-in)
+#     # Enable validatable (opt-in)
 #     validatable do
-#       # Validazioni base
+#       # Basic validations
 #       check :title, :content, presence: true
 #
-#       # Validazioni condizionali (usando Rails options)
+#       # Conditional validations (using Rails options)
 #       check :published_at, presence: true, if: -> { status == "published" }
 #       check :author_id, presence: true, if: :is_published?
 #
-#       # Validazioni complesse per cross-field e business logic
+#       # Complex validations for cross-field and business logic
 #       check_complex :valid_date_range
 #
-#       # Gruppi di validazioni
+#       # Validation groups
 #       validation_group :step1, [:email, :password]
 #       validation_group :step2, [:first_name, :last_name]
 #     end
 #   end
 #
-# Utilizzo:
-#   article.valid?           # Tutte le validazioni
-#   article.valid?(:step1)   # Solo gruppo step1
+# @example Validation Usage
+#   article.valid?           # All validations
+#   article.valid?(:step1)   # Only step1 group
 #
 module BetterModel
   module Validatable
     extend ActiveSupport::Concern
 
     included do
-      # Validazione ActiveRecord
+      # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
-        raise BetterModel::Errors::Validatable::ConfigurationError, "BetterModel::Validatable can only be included in ActiveRecord models"
+        raise BetterModel::Errors::Validatable::ConfigurationError.new(
+          reason: "BetterModel::Validatable can only be included in ActiveRecord models"
+        )
       end
 
       # Configurazione validatable (opt-in)
@@ -129,7 +132,12 @@ module BetterModel
       #   end
       #
       def register_complex_validation(name, &block)
-        raise BetterModel::Errors::Validatable::ConfigurationError, "Block required for complex validation" unless block_given?
+        unless block_given?
+          raise BetterModel::Errors::Validatable::ConfigurationError.new(
+            reason: "Block required for complex validation",
+            model_class: self
+          )
+        end
 
         # Registra nel registry
         self.complex_validations_registry = complex_validations_registry.merge(name.to_sym => block).freeze
@@ -186,7 +194,13 @@ module BetterModel
     # @param group_name [Symbol] Nome del gruppo
     # @return [Boolean]
     def validate_group(group_name)
-      raise BetterModel::Errors::Validatable::NotEnabledError unless self.class.validatable_enabled?
+      unless self.class.validatable_enabled?
+        raise BetterModel::Errors::Validatable::NotEnabledError.new(
+          module_name: "Validatable",
+          method_called: "validate_group",
+          model_class: self.class
+        )
+      end
 
       group = self.class.validatable_groups[group_name]
       return false unless group
@@ -207,7 +221,13 @@ module BetterModel
     # @param group_name [Symbol] Nome del gruppo
     # @return [ActiveModel::Errors]
     def errors_for_group(group_name)
-      raise BetterModel::Errors::Validatable::NotEnabledError unless self.class.validatable_enabled?
+      unless self.class.validatable_enabled?
+        raise BetterModel::Errors::Validatable::NotEnabledError.new(
+          module_name: "Validatable",
+          method_called: "errors_for_group",
+          model_class: self.class
+        )
+      end
 
       group = self.class.validatable_groups[group_name]
       return errors unless group

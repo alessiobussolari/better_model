@@ -379,24 +379,35 @@ end
 
 ### Error Metadata
 
-Many BetterModel errors provide additional metadata for debugging and error handling:
+Many BetterModel errors provide additional metadata for debugging and error handling. Starting with v3.0, errors use named parameters and include Sentry-compatible attributes:
 
 ```ruby
+# v3.0+ format with named parameters
 rescue BetterModel::Errors::Stateable::InvalidTransitionError => e
+  # Direct attributes
   puts "Event: #{e.event}"           # => :publish
   puts "From: #{e.from_state}"       # => "draft"
   puts "To: #{e.to_state}"           # => "published"
 
+  # Sentry-compatible attributes
+  puts "Tags: #{e.tags}"             # => {error_category: "transition", module: "stateable", ...}
+  puts "Context: #{e.context}"       # => {model_class: "Article"}
+  puts "Extra: #{e.extra}"           # => {event: :publish, from_state: :draft, to_state: :published}
+
 rescue BetterModel::Errors::Stateable::CheckFailedError => e
-  puts "Failed checks: #{e.failed_checks}"  # => ["valid?", "can_publish?"]
+  puts "Check description: #{e.check_description}"  # => "Article must be complete"
+  puts "Check type: #{e.check_type}"                # => "predicate"
+  puts "Tags: #{e.tags}"                            # => {error_category: "check_failed", ...}
 
 rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
-  puts "Invalid predicate: #{e.predicate}"          # => "unknown_scope"
-  puts "Available: #{e.available_predicates.join(', ')}"
+  puts "Invalid predicate: #{e.predicate_scope}"               # => :title_xxx
+  puts "Available: #{e.available_predicates.join(', ')}"       # => "title_eq, title_cont"
+  puts "Tags: #{e.tags}"                                       # => {error_category: "invalid_predicate", ...}
 
 rescue BetterModel::Errors::Searchable::InvalidSecurityError => e
-  puts "Security name: #{e.security_name}"           # => :status_required
-  puts "Required: #{e.required_predicates.join(', ')}"  # => ["status_eq"]
+  puts "Policy name: #{e.policy_name}"              # => "max_page"
+  puts "Violations: #{e.violations.join('; ')}"     # => "page exceeds maximum allowed"
+  puts "Tags: #{e.tags}"                            # => {error_category: "security", ...}
 ```
 
 ### Debugging Tips
@@ -427,16 +438,373 @@ rescue BetterModel::Errors::Searchable::InvalidSecurityError => e
    end
    ```
 
-3. **Add error context to exception tracking:**
+3. **Add error context to exception tracking (v3.0+):**
    ```ruby
    rescue BetterModel::Errors::BetterModelError => e
-     # Send to error tracking service with context
-     Sentry.capture_exception(e, extra: {
-       error_class: e.class.name,
-       model: @model.class.name,
-       model_id: @model.id,
-       metadata: e.respond_to?(:metadata) ? e.metadata : {}
-     })
+     # v3.0+ uses built-in Sentry-compatible attributes
+     Sentry.capture_exception(e) do |scope|
+       scope.set_context("error_details", e.context)
+       scope.set_tags(e.tags)
+       scope.set_extras(e.extra)
+
+       # Add application-specific context
+       scope.set_context("model_info", {
+         id: @model.id,
+         created_at: @model.created_at,
+         updated_at: @model.updated_at
+       })
+     end
+   end
+   ```
+
+### Sentry Integration (v3.0+)
+
+Starting with version 3.0, all BetterModel errors include Sentry-compatible data structures for rich error reporting and monitoring. Each error provides three types of structured metadata:
+
+#### Error Data Structure
+
+All errors include three attributes for comprehensive error tracking:
+
+1. **tags**: Filterable metadata for grouping and searching errors in Sentry
+   - Always includes `error_category` (e.g., "invalid_predicate", "transition", "not_enabled")
+   - Always includes `module` (e.g., "searchable", "stateable", "validatable")
+   - May include error-specific tags (e.g., `predicate`, `event`, `from_state`)
+
+2. **context**: High-level structured metadata about the error context
+   - Typically includes `model_class` (e.g., "Article", "User")
+   - May include module-specific context (e.g., `current_state`, `module_name`)
+
+3. **extra**: Detailed debug data with all error-specific parameters
+   - Contains all parameters passed to the error constructor
+   - Useful for debugging and understanding the exact error conditions
+
+#### Creating Errors with v3.0 Format
+
+All errors now use named parameters for clarity and consistency:
+
+```ruby
+# Searchable errors
+raise BetterModel::Errors::Searchable::InvalidPredicateError.new(
+  predicate_scope: :title_xxx,
+  value: "Rails",
+  available_predicates: [:title_eq, :title_cont, :title_start],
+  model_class: Article
+)
+
+# Stateable errors
+raise BetterModel::Errors::Stateable::InvalidTransitionError.new(
+  event: :publish,
+  from_state: :draft,
+  to_state: :published,
+  model_class: Article
+)
+
+# Validatable errors
+raise BetterModel::Errors::Validatable::NotEnabledError.new(
+  module_name: "Validatable",
+  method_called: "validate_group",
+  model_class: Article
+)
+```
+
+#### Accessing Error Attributes
+
+All error attributes are accessible through reader methods:
+
+```ruby
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
+  # Direct attribute access
+  e.predicate_scope         # => :title_xxx
+  e.value                   # => "Rails"
+  e.available_predicates    # => [:title_eq, :title_cont, :title_start]
+  e.model_class             # => Article
+
+  # Sentry-compatible data
+  e.tags
+  # => {
+  #   error_category: "invalid_predicate",
+  #   module: "searchable",
+  #   predicate: "title_xxx"
+  # }
+
+  e.context
+  # => {
+  #   model_class: "Article"
+  # }
+
+  e.extra
+  # => {
+  #   predicate_scope: :title_xxx,
+  #   value: "Rails",
+  #   available_predicates: [:title_eq, :title_cont, :title_start]
+  # }
+end
+```
+
+#### Direct Sentry Integration
+
+BetterModel errors are designed to work seamlessly with Sentry's error tracking:
+
+```ruby
+# Basic Sentry integration
+rescue BetterModel::Errors::BetterModelError => e
+  Sentry.capture_exception(e) do |scope|
+    scope.set_context("error_details", e.context)
+    scope.set_tags(e.tags)
+    scope.set_extras(e.extra)
+  end
+end
+
+# Advanced: Add custom context
+rescue BetterModel::Errors::Stateable::InvalidTransitionError => e
+  Sentry.capture_exception(e) do |scope|
+    # BetterModel error data
+    scope.set_context("error_details", e.context)
+    scope.set_tags(e.tags)
+    scope.set_extras(e.extra)
+
+    # Additional application context
+    scope.set_context("user", {
+      id: current_user.id,
+      role: current_user.role
+    })
+    scope.set_tags({
+      controller: controller_name,
+      action: action_name
+    })
+  end
+
+  # Re-raise or handle appropriately
+  flash[:error] = "Invalid action attempted"
+  redirect_to root_path
+end
+```
+
+#### Structured Logging
+
+Use error attributes for comprehensive structured logging:
+
+```ruby
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
+  Rails.logger.error({
+    message: e.message,
+    error_class: e.class.name,
+    error_category: e.tags[:error_category],
+    module: e.tags[:module],
+    model: e.context[:model_class],
+    details: e.extra,
+    backtrace: e.backtrace.first(10)
+  }.to_json)
+end
+
+# Output:
+# {
+#   "message": "Invalid predicate scope: :title_xxx. Available predicable scopes: title_eq, title_cont",
+#   "error_class": "BetterModel::Errors::Searchable::InvalidPredicateError",
+#   "error_category": "invalid_predicate",
+#   "module": "searchable",
+#   "model": "Article",
+#   "details": {
+#     "predicate_scope": "title_xxx",
+#     "value": "Rails",
+#     "available_predicates": ["title_eq", "title_cont", "title_start"]
+#   },
+#   "backtrace": [...]
+# }
+```
+
+#### Building API Error Responses
+
+Create rich API error responses using error attributes:
+
+```ruby
+# In a Rails controller
+rescue_from BetterModel::Errors::BetterModelError do |e|
+  render json: {
+    error: {
+      type: e.class.name.demodulize.underscore,
+      message: e.message,
+      category: e.tags[:error_category],
+      module: e.tags[:module],
+      context: e.context,
+      details: e.extra
+    }
+  }, status: :unprocessable_entity
+end
+
+# Response for InvalidPredicateError:
+# {
+#   "error": {
+#     "type": "invalid_predicate_error",
+#     "message": "Invalid predicate scope: :title_xxx. Available predicable scopes: title_eq, title_cont",
+#     "category": "invalid_predicate",
+#     "module": "searchable",
+#     "context": {
+#       "model_class": "Article"
+#     },
+#     "details": {
+#       "predicate_scope": "title_xxx",
+#       "value": "Rails",
+#       "available_predicates": ["title_eq", "title_cont", "title_start"]
+#     }
+#   }
+# }
+```
+
+#### Error Enrichment Examples by Module
+
+**Searchable Module:**
+
+```ruby
+# InvalidPredicateError
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
+  e.tags          # => {error_category: "invalid_predicate", module: "searchable", predicate: "title_xxx"}
+  e.context       # => {model_class: "Article"}
+  e.extra         # => {predicate_scope: :title_xxx, value: "Rails", available_predicates: [...]}
+
+# InvalidSecurityError
+rescue BetterModel::Errors::Searchable::InvalidSecurityError => e
+  e.tags          # => {error_category: "security", module: "searchable", policy: "max_page"}
+  e.context       # => {model_class: "Article"}
+  e.extra         # => {policy_name: "max_page", violations: [...], requested_value: 10000}
+```
+
+**Stateable Module:**
+
+```ruby
+# InvalidTransitionError
+rescue BetterModel::Errors::Stateable::InvalidTransitionError => e
+  e.tags          # => {error_category: "transition", module: "stateable", event: "publish", from_state: "draft", to_state: "published"}
+  e.context       # => {model_class: "Article"}
+  e.extra         # => {event: :publish, from_state: :draft, to_state: :published}
+
+# CheckFailedError
+rescue BetterModel::Errors::Stateable::CheckFailedError => e
+  e.tags          # => {error_category: "check_failed", module: "stateable", event: "publish", check_type: "predicate"}
+  e.context       # => {model_class: "Article", current_state: :draft}
+  e.extra         # => {event: :publish, check_description: "Article must be complete", check_type: "predicate", current_state: :draft}
+```
+
+**Validatable Module:**
+
+```ruby
+# NotEnabledError
+rescue BetterModel::Errors::Validatable::NotEnabledError => e
+  e.tags          # => {error_category: "not_enabled", module: "validatable"}
+  e.context       # => {model_class: "Article", module_name: "Validatable"}
+  e.extra         # => {method_called: "validate_group"}
+```
+
+#### Best Practices for Error Enrichment
+
+1. **Always capture to Sentry in production:**
+   ```ruby
+   rescue BetterModel::Errors::BetterModelError => e
+     Sentry.capture_exception(e) do |scope|
+       scope.set_context("error_details", e.context)
+       scope.set_tags(e.tags)
+       scope.set_extras(e.extra)
+     end
+
+     # Handle error appropriately
+     render_error_response(e)
+   end
+   ```
+
+2. **Use tags for filtering in Sentry:**
+   - Filter by module: `module:searchable`
+   - Filter by category: `error_category:invalid_predicate`
+   - Filter by specific attributes: `event:publish`, `from_state:draft`
+
+3. **Use context for high-level grouping:**
+   - Group errors by model: `context.model_class:Article`
+   - Understand error context at a glance
+
+4. **Use extra for debugging:**
+   - Access detailed parameters that led to the error
+   - Reproduce issues locally with exact conditions
+
+5. **Combine with application context:**
+   ```ruby
+   rescue BetterModel::Errors::BetterModelError => e
+     Sentry.capture_exception(e) do |scope|
+       # BetterModel context
+       scope.set_context("error_details", e.context)
+       scope.set_tags(e.tags)
+       scope.set_extras(e.extra)
+
+       # Application context
+       scope.set_user(id: current_user.id, email: current_user.email)
+       scope.set_tags(
+         request_id: request.uuid,
+         endpoint: "#{controller_name}##{action_name}"
+       )
+       scope.set_context("request", {
+         url: request.url,
+         method: request.method,
+         params: request.params.except(:password)
+       })
+     end
+   end
+   ```
+
+6. **Create reusable error handlers:**
+   ```ruby
+   # app/controllers/concerns/better_model_error_handler.rb
+   module BetterModelErrorHandler
+     extend ActiveSupport::Concern
+
+     included do
+       rescue_from BetterModel::Errors::BetterModelError, with: :handle_better_model_error
+     end
+
+     private
+
+     def handle_better_model_error(error)
+       # Log to Sentry with enriched context
+       Sentry.capture_exception(error) do |scope|
+         scope.set_context("error_details", error.context)
+         scope.set_tags(error.tags)
+         scope.set_extras(error.extra)
+         scope.set_user(id: current_user&.id)
+         scope.set_tags(controller: controller_name, action: action_name)
+       end
+
+       # Return appropriate response
+       respond_to do |format|
+         format.html do
+           flash[:error] = user_friendly_message(error)
+           redirect_back(fallback_location: root_path)
+         end
+         format.json do
+           render json: api_error_response(error), status: :unprocessable_entity
+         end
+       end
+     end
+
+     def user_friendly_message(error)
+       case error
+       when BetterModel::Errors::Stateable::InvalidTransitionError
+         "This action is not available in the current state"
+       when BetterModel::Errors::Searchable::InvalidPredicateError
+         "Invalid search parameters provided"
+       when BetterModel::Errors::Validatable::NotEnabledError
+         "Configuration error - please contact support"
+       else
+         "An error occurred while processing your request"
+       end
+     end
+
+     def api_error_response(error)
+       {
+         error: {
+           type: error.class.name.demodulize.underscore,
+           message: error.message,
+           category: error.tags[:error_category],
+           details: error.extra
+         }
+       }
+     end
    end
    ```
 
@@ -446,6 +814,10 @@ rescue BetterModel::Errors::Searchable::InvalidSecurityError => e
 - Configuration errors inherit from `ArgumentError` for backward compatibility
 - Each module has a base error class (e.g., `ValidatableError`, `StateableError`)
 - Many errors provide metadata for debugging (e.g., `e.event`, `e.failed_checks`)
+- **v3.0+:** All errors include Sentry-compatible `tags`, `context`, and `extra` attributes
+- **v3.0+:** All errors use named parameters for consistency and clarity
 - Always test error scenarios in your test suite
 - Use specific error classes for precise error handling
 - Provide user-friendly messages while logging technical details
+- Integrate with Sentry for production error monitoring
+- Use structured error data for logging and API responses

@@ -421,7 +421,8 @@ module BetterModel
         Article.search({ status_eq: "published" }, security: :nonexistent)
       end
 
-      assert_match(/Unknown security: nonexistent/, error.message)
+      assert_match(/Security policy violation: nonexistent/, error.message)
+      assert_match(/Unknown security policy/, error.message)
       assert_match(/Available securities:/, error.message)
     end
 
@@ -475,8 +476,8 @@ module BetterModel
         Article.search({ status_eq: nil }, security: :status_required)
       end
 
-      assert_match(/requires the following predicates with valid values: status_eq/, error.message)
-      assert_match(/must be present and have non-blank values/, error.message)
+      assert_match(/Security policy violation: status_required/, error.message)
+      assert_match(/status_eq/, error.message)
     end
 
     test "security rejects empty string predicate value" do
@@ -484,7 +485,8 @@ module BetterModel
         Article.search({ status_eq: "" }, security: :status_required)
       end
 
-      assert_match(/requires the following predicates with valid values: status_eq/, error.message)
+      assert_match(/Security policy violation: status_required/, error.message)
+      assert_match(/status_eq/, error.message)
     end
 
     test "security rejects empty array predicate value" do
@@ -492,7 +494,8 @@ module BetterModel
         Article.search({ status_eq: [] }, security: :status_required)
       end
 
-      assert_match(/requires the following predicates with valid values: status_eq/, error.message)
+      assert_match(/Security policy violation: status_required/, error.message)
+      assert_match(/status_eq/, error.message)
     end
 
     test "security accepts false as valid predicate value" do
@@ -1459,13 +1462,13 @@ module BetterModel
     end
 
     test "ConfigurationError can be instantiated with message" do
-      error = BetterModel::Errors::Searchable::ConfigurationError.new("test message")
+      error = BetterModel::Errors::Searchable::ConfigurationError.new(reason: "test message")
       assert_equal "test message", error.message
     end
 
     test "ConfigurationError can be caught as ArgumentError" do
       begin
-        raise BetterModel::Errors::Searchable::ConfigurationError, "test"
+        raise BetterModel::Errors::Searchable::ConfigurationError.new(reason: "test")
       rescue ArgumentError => e
         assert_instance_of BetterModel::Errors::Searchable::ConfigurationError, e
       end
@@ -1516,7 +1519,122 @@ module BetterModel
         # The error is raised during searchable block evaluation
         test_class
       end
-      assert_match(/must have at least one required predicate/, error.message)
+      assert_match(/requires predicates to be specified/, error.message)
+    end
+  end
+
+  # ======================
+  # Sentry Integration Tests (v3.0+)
+  # ======================
+
+  class SentryCompatibleTest < ActiveSupport::TestCase
+    test "InvalidPredicateError includes sentry-compatible tags" do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidPredicateError) do
+        Article.search({ title_xxx: "Rails" })
+      end
+
+      assert_equal "invalid_predicate", error.tags[:error_category]
+      assert_equal "searchable", error.tags[:module]
+      assert error.tags[:predicate].present?
+      assert_equal "title_xxx", error.tags[:predicate]
+    end
+
+    test "InvalidPredicateError includes sentry-compatible context" do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidPredicateError) do
+        Article.search({ title_xxx: "Rails" })
+      end
+
+      assert_equal "Article", error.context[:model_class]
+    end
+
+    test "InvalidPredicateError includes sentry-compatible extra data" do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidPredicateError) do
+        Article.search({ title_xxx: "Rails" })
+      end
+
+      assert error.extra[:predicate_scope].present?
+      assert_equal :title_xxx, error.extra[:predicate_scope]
+      assert error.extra[:value].present?
+      assert_equal "Rails", error.extra[:value]
+      assert error.extra[:available_predicates].present?
+      assert error.extra[:available_predicates].is_a?(Array)
+    end
+
+    test "InvalidPredicateError provides attribute readers" do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidPredicateError) do
+        Article.search({ title_xxx: "Rails" })
+      end
+
+      assert_equal :title_xxx, error.predicate_scope
+      assert_equal "Rails", error.value
+      assert error.available_predicates.is_a?(Array)
+      assert error.model_class == Article
+    end
+
+    test "InvalidSecurityError includes sentry-compatible tags, context, and extra" do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidSecurityError) do
+        Article.search({ status_eq: "published" }, security: :nonexistent)
+      end
+
+      # Tags
+      assert_equal "security", error.tags[:error_category]
+      assert_equal "searchable", error.tags[:module]
+      assert error.tags[:policy].present?
+
+      # Context
+      assert_equal "Article", error.context[:model_class]
+
+      # Extra
+      assert error.extra[:policy_name].present?
+      assert error.extra[:violations].present?
+      assert error.extra[:violations].is_a?(Array)
+    end
+
+    test "InvalidSecurityError provides attribute readers" do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidSecurityError) do
+        Article.search({ status_eq: nil }, security: :status_required)
+      end
+
+      assert_equal "status_required", error.policy_name
+      assert error.violations.is_a?(Array)
+      assert error.model_class == Article
+    end
+
+    test "InvalidOrderError includes sentry-compatible data" do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidOrderError) do
+        Article.search({}, order: :unknown_sort)
+      end
+
+      assert_equal "invalid_order", error.tags[:error_category]
+      assert_equal "searchable", error.tags[:module]
+      assert_equal "Article", error.context[:model_class]
+      assert error.extra[:order_scope].present?
+      assert error.extra[:available_sorts].is_a?(Array)
+    end
+
+    test "InvalidPaginationError includes sentry-compatible data" do
+      error = assert_raises(BetterModel::Errors::Searchable::InvalidPaginationError) do
+        Article.search({}, page: -1)
+      end
+
+      assert_equal "pagination", error.tags[:error_category]
+      assert_equal "searchable", error.tags[:module]
+      assert_equal "page", error.tags[:parameter]
+      assert error.extra[:parameter_name].present?
+      assert error.extra[:value].present?
+    end
+
+    test "ConfigurationError includes sentry-compatible tags and context" do
+      error = assert_raises(BetterModel::Errors::Searchable::ConfigurationError) do
+        # Try to include Searchable in a non-ActiveRecord class
+        Class.new do
+          include BetterModel::Searchable
+        end
+      end
+
+      assert_equal "configuration", error.tags[:error_category]
+      assert_equal "searchable", error.tags[:module]
+      assert error.extra[:reason].present?
     end
   end
 end
