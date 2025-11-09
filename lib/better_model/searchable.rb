@@ -296,7 +296,7 @@ module BetterModel
             end
 
             temp_scope = if value == true || value == "true"
-              temp_scope.public_send(predicate_scope)
+              temp_scope.public_send(predicate_scope, true)
             elsif value.is_a?(Array)
               # Splat array values for predicates like _between that expect multiple args
               temp_scope.public_send(predicate_scope, *value)

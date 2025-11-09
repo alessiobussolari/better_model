@@ -39,7 +39,7 @@
 			{
 				or: [
 					    { view_count_gt: 100 },
-					    { featured_true: true }
+					    { featured_eq: true }
 				    ],
 				status_eq: "published"
 			},
