@@ -1505,20 +1505,18 @@ module BetterModel
     end
 
     test "raises ConfigurationError for security config without required predicates" do
-      test_class = Class.new(ApplicationRecord) do
-        self.table_name = "articles"
-        include BetterModel::Searchable
+      # This should raise an error during configuration
+      error = assert_raises(BetterModel::Errors::Searchable::ConfigurationError) do
+        Class.new(ApplicationRecord) do
+          self.table_name = "articles"
+          include BetterModel::Searchable
 
-        searchable do
-          security :test_security
+          searchable do
+            security :test_security
+          end
         end
       end
 
-      # This should raise an error during configuration
-      error = assert_raises(BetterModel::Errors::Searchable::ConfigurationError) do
-        # The error is raised during searchable block evaluation
-        test_class
-      end
       assert_match(/requires predicates to be specified/, error.message)
     end
   end
@@ -1602,7 +1600,7 @@ module BetterModel
 
     test "InvalidOrderError includes sentry-compatible data" do
       error = assert_raises(BetterModel::Errors::Searchable::InvalidOrderError) do
-        Article.search({}, order: :unknown_sort)
+        Article.search({}, orders: [:unknown_sort])
       end
 
       assert_equal "invalid_order", error.tags[:error_category]
@@ -1614,7 +1612,7 @@ module BetterModel
 
     test "InvalidPaginationError includes sentry-compatible data" do
       error = assert_raises(BetterModel::Errors::Searchable::InvalidPaginationError) do
-        Article.search({}, page: -1)
+        Article.search({}, pagination: { page: -1 })
       end
 
       assert_equal "pagination", error.tags[:error_category]

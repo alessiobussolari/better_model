@@ -52,7 +52,7 @@ test("search combines OR with AND") do
   result = Article.search({
                             or: [
                               { view_count_gt: 100 },
-                              { featured_true: true }
+                              { featured_eq: true }
                             ],
                             status_eq: "published"
                           })
@@ -109,7 +109,7 @@ test("search raises error for missing required predicate") do
   begin
     Article.search({ title_cont: "Test" }, security: :status_required)
     false
-  rescue BetterModel::Searchable::InvalidSecurityError
+  rescue BetterModel::Errors::Searchable::InvalidSecurityError
     true
   end
 end

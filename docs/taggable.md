@@ -798,6 +798,45 @@ end
 - **Create too many unique tags** - Consider controlled vocabularies
 - **Ignore performance** - Index tags columns and cache statistics
 
+### Error Handling
+
+Taggable raises ConfigurationError for invalid configuration with full Sentry-compatible error data:
+
+```ruby
+# Missing tag field configuration
+begin
+  taggable do
+    # tag_field not specified
+  end
+rescue BetterModel::Errors::Taggable::ConfigurationError => e
+  # Error attributes
+  e.reason        # => "Tag field must be specified"
+  e.model_class   # => Article
+  e.expected      # => "Symbol representing tag column"
+  e.provided      # => nil
+
+  # Sentry-compatible data
+  e.tags     # => {error_category: 'configuration', module: 'taggable'}
+  e.context  # => {model_class: 'Article'}
+  e.extra    # => {reason: 'Tag field must be specified', expected: 'Symbol representing tag column', provided: nil}
+
+  # Error message
+  e.message  # => "Tag field must be specified (expected: \"Symbol representing tag column\")"
+end
+```
+
+**Integration with Sentry:**
+
+```ruby
+rescue_from BetterModel::Errors::Taggable::ConfigurationError do |error|
+  Sentry.capture_exception(error, {
+    tags: error.tags,
+    contexts: { taggable: error.context },
+    extra: error.extra
+  })
+end
+```
+
 ---
 
 **Next Steps:**

@@ -441,7 +441,7 @@ Article.search(
   { title_cont: "Rails" },
   security: :status_required
 )
-# ❌ Raises: BetterModel::Searchable::InvalidSecurityError
+# ❌ Raises: BetterModel::Errors::Searchable::InvalidSecurityError
 #    Security :status_required requires: status_eq
 
 # Invalid: required predicate has nil value
@@ -674,7 +674,7 @@ class DocumentsController < ApplicationController
       pagination: pagination_params,
       security: :tenant_required
     )
-  rescue BetterModel::Searchable::InvalidSecurityError => e
+  rescue BetterModel::Errors::Searchable::InvalidSecurityError => e
     render json: { error: e.message }, status: :forbidden
   end
 
@@ -707,11 +707,11 @@ class Api::V1::ArticlesController < Api::BaseController
         total_count: @articles.total_count
       }
     }
-  rescue BetterModel::Searchable::InvalidPredicateError => e
+  rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
     render json: { error: "Invalid filter", details: e.message }, status: :bad_request
-  rescue BetterModel::Searchable::InvalidOrderError => e
+  rescue BetterModel::Errors::Searchable::InvalidOrderError => e
     render json: { error: "Invalid sort", details: e.message }, status: :bad_request
-  rescue BetterModel::Searchable::InvalidPaginationError => e
+  rescue BetterModel::Errors::Searchable::InvalidPaginationError => e
     render json: { error: "Invalid pagination", details: e.message }, status: :bad_request
   end
 
@@ -840,14 +840,14 @@ Raised when using a non-existent predicate scope:
 
 ```ruby
 Article.search({ nonexistent_predicate: "value" })
-# Raises: BetterModel::Searchable::InvalidPredicateError
+# Raises: BetterModel::Errors::Searchable::InvalidPredicateError
 #   Invalid predicate scope: nonexistent_predicate
 #   Available predicable scopes: title_eq, title_cont, status_eq, ...
 
 # Handling:
 begin
   Article.search(params)
-rescue BetterModel::Searchable::InvalidPredicateError => e
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
   render json: { error: "Invalid filter: #{e.message}" }, status: :bad_request
 end
 ```
@@ -858,14 +858,14 @@ Raised when using a non-existent sort scope:
 
 ```ruby
 Article.search({}, orders: [:nonexistent_sort])
-# Raises: BetterModel::Searchable::InvalidOrderError
+# Raises: BetterModel::Errors::Searchable::InvalidOrderError
 #   Invalid order scope: nonexistent_sort
 #   Available sortable scopes: sort_title_asc, sort_view_count_desc, ...
 
 # Handling:
 begin
   Article.search({}, orders: params[:orders])
-rescue BetterModel::Searchable::InvalidOrderError => e
+rescue BetterModel::Errors::Searchable::InvalidOrderError => e
   render json: { error: "Invalid sort: #{e.message}" }, status: :bad_request
 end
 ```
@@ -877,18 +877,18 @@ Raised for invalid pagination parameters:
 ```ruby
 # page must be >= 1
 Article.search({}, pagination: { page: 0 })
-# Raises: BetterModel::Searchable::InvalidPaginationError
+# Raises: BetterModel::Errors::Searchable::InvalidPaginationError
 #   page must be >= 1
 
 # per_page must be >= 1
 Article.search({}, pagination: { page: 1, per_page: 0 })
-# Raises: BetterModel::Searchable::InvalidPaginationError
+# Raises: BetterModel::Errors::Searchable::InvalidPaginationError
 #   per_page must be >= 1
 
 # Handling:
 begin
   Article.search({}, pagination: { page: params[:page], per_page: params[:per_page] })
-rescue BetterModel::Searchable::InvalidPaginationError => e
+rescue BetterModel::Errors::Searchable::InvalidPaginationError => e
   render json: { error: "Invalid pagination: #{e.message}" }, status: :bad_request
 end
 ```
@@ -900,20 +900,20 @@ Raised for security violations:
 ```ruby
 # Unknown security name
 Article.search({}, security: :nonexistent)
-# Raises: BetterModel::Searchable::InvalidSecurityError
+# Raises: BetterModel::Errors::Searchable::InvalidSecurityError
 #   Unknown security: nonexistent
 #   Available securities: status_required, tenant_scope
 
 # Missing required predicate
 Article.search({ title_cont: "Test" }, security: :status_required)
-# Raises: BetterModel::Searchable::InvalidSecurityError
+# Raises: BetterModel::Errors::Searchable::InvalidSecurityError
 #   Security :status_required requires: status_eq
 #   These predicates must be present and have non-blank values.
 
 # Handling:
 begin
   Article.search(params, security: :status_required)
-rescue BetterModel::Searchable::InvalidSecurityError => e
+rescue BetterModel::Errors::Searchable::InvalidSecurityError => e
   render json: { error: "Security violation: #{e.message}" }, status: :forbidden
 end
 ```
@@ -929,16 +929,16 @@ def search_articles
     orders: order_params,
     security: :tenant_required
   )
-rescue BetterModel::Searchable::InvalidPredicateError => e
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
   flash[:error] = "Invalid search filter"
   Article.search({})  # Fallback to empty search
-rescue BetterModel::Searchable::InvalidOrderError => e
+rescue BetterModel::Errors::Searchable::InvalidOrderError => e
   # Retry without orders
   Article.search(search_params, pagination: pagination_params)
-rescue BetterModel::Searchable::InvalidPaginationError => e
+rescue BetterModel::Errors::Searchable::InvalidPaginationError => e
   # Retry with default pagination
   Article.search(search_params, pagination: { page: 1, per_page: 25 })
-rescue BetterModel::Searchable::InvalidSecurityError => e
+rescue BetterModel::Errors::Searchable::InvalidSecurityError => e
   render json: { error: "Unauthorized" }, status: :forbidden
 end
 ```
@@ -1281,10 +1281,10 @@ class DocumentsController < ApplicationController
 
     @folders = current_tenant.folders
     @users = current_tenant.users
-  rescue BetterModel::Searchable::InvalidSecurityError => e
+  rescue BetterModel::Errors::Searchable::InvalidSecurityError => e
     flash[:error] = "Unauthorized access"
     redirect_to root_path
-  rescue BetterModel::Searchable::InvalidPredicateError => e
+  rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
     flash[:error] = "Invalid search parameters"
     @documents = Document.search(
       { tenant_id_eq: current_tenant.id },
@@ -2078,9 +2078,9 @@ Provide user-friendly error messages:
 # ✅ Good: Specific error handling
 begin
   Article.search(params)
-rescue BetterModel::Searchable::InvalidPredicateError => e
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
   render json: { error: "Invalid filter" }, status: :bad_request
-rescue BetterModel::Searchable::InvalidSecurityError => e
+rescue BetterModel::Errors::Searchable::InvalidSecurityError => e
   render json: { error: "Unauthorized" }, status: :forbidden
 end
 

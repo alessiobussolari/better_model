@@ -338,3 +338,40 @@ Sortable registries are thread-safe:
 - **Registry lookups** - O(1) with Set data structure
 - **Memory footprint** - ~100 bytes per model for registries
 
+### Error Handling
+
+Sortable raises ConfigurationError for invalid configuration with full Sentry-compatible error data:
+
+```ruby
+# Invalid field type
+begin
+  sort :nonexistent_field
+rescue BetterModel::Errors::Sortable::ConfigurationError => e
+  # Error attributes
+  e.reason        # => "Field does not exist in model"
+  e.model_class   # => Article
+  e.expected      # => "Valid column name"
+  e.provided      # => :nonexistent_field
+
+  # Sentry-compatible data
+  e.tags     # => {error_category: 'configuration', module: 'sortable'}
+  e.context  # => {model_class: 'Article'}
+  e.extra    # => {reason: 'Field does not exist in model', expected: 'Valid column name', provided: :nonexistent_field}
+
+  # Error message
+  e.message  # => "Field does not exist in model (expected: \"Valid column name\") (provided: :nonexistent_field)"
+end
+```
+
+**Integration with Sentry:**
+
+```ruby
+rescue_from BetterModel::Errors::Sortable::ConfigurationError do |error|
+  Sentry.capture_exception(error, {
+    tags: error.tags,
+    contexts: { sortable: error.context },
+    extra: error.extra
+  })
+end
+```
+

@@ -23,6 +23,10 @@ Each file demonstrates a complete, working implementation of a specific feature:
 10. **10_taggable.md** - Flexible tag management with normalization, validation, statistics, and array storage
 11. **11_repositable.md** - Repository Pattern for clean architecture, testability, and data access abstraction
 
+### System Features
+
+12. **12_errors.md** - Comprehensive error handling with Sentry integration, structured error data, and production-ready patterns
+
 ## Quick Start
 
 ```ruby

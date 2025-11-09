@@ -1025,47 +1025,134 @@ end
 
 ## Error Handling
 
-Stateable raises specific errors for different failure scenarios:
+Stateable raises specific errors with v3.0.0 Sentry-compatible format. All errors provide attribute access, Sentry-compatible data structures, and detailed context.
 
+### InvalidTransitionError
+
+Raised when attempting an invalid state transition.
+
+**Required parameters:** `event:`, `from_state:`, `to_state:`, **Optional:** `model_class:`
+
+**Example:**
 ```ruby
-# NotEnabledError - Stateable not enabled
-begin
-  order.confirm!
-rescue BetterModel::Stateable::NotEnabledError => e
-  # Stateable is not enabled. Add 'stateable do...end' to your model.
-end
-
-# InvalidTransitionError - Invalid state transition
 begin
   order.ship!  # But order is still "pending"
-rescue BetterModel::InvalidTransitionError => e
-  e.message
-  # => "Cannot transition from 'pending' to 'shipped' via 'ship'"
-  e.event       # => :ship
-  e.from_state  # => "pending"
-  e.to_state    # => "shipped"
-end
+rescue BetterModel::Errors::Stateable::InvalidTransitionError => e
+  # Attribute access
+  e.event        # => :ship
+  e.from_state   # => "pending"
+  e.to_state     # => "shipped"
+  e.model_class  # => Order
 
-# CheckFailedError - Check condition not met
-begin
-  order.pay!  # But payment_method is nil
-rescue BetterModel::CheckFailedError => e
-  e.message
-  # => "Check failed for transition 'pay': method check: payment_method_present?"
-  e.event        # => :pay
-  e.check_description  # => "method check: payment_method_present?"
-end
+  # Sentry-compatible data
+  e.tags         # => {error_category: 'invalid_transition', module: 'stateable', event: 'ship', from_state: 'pending', to_state: 'shipped'}
+  e.context      # => {model_class: 'Order', event: :ship}
+  e.extra        # => {from_state: 'pending', to_state: 'shipped'}
 
-# ValidationFailedError - Validation failed
-begin
-  order.confirm!  # But items array is empty
-rescue BetterModel::ValidationFailedError => e
-  e.message
-  # => "Validation failed for transition 'confirm': Must have at least one item"
-  e.event   # => :confirm
-  e.errors  # => ActiveModel::Errors object
+  # Sentry integration
+  Sentry.capture_exception(e) do |scope|
+    scope.set_context("error_details", e.context)
+    scope.set_tags(e.tags)
+    scope.set_extras(e.extra)
+  end
 end
 ```
+
+**Methods that raise:** `<event>!` (transition methods)
+
+### CheckFailedError
+
+Raised when a transition check condition is not met.
+
+**Required parameters:** `event:`, `check_description:`, **Optional:** `model_class:`
+
+**Example:**
+```ruby
+begin
+  order.pay!  # But payment_method is nil
+rescue BetterModel::Errors::Stateable::CheckFailedError => e
+  # Attribute access
+  e.event               # => :pay
+  e.check_description   # => "method check: payment_method_present?"
+  e.model_class         # => Order
+
+  # Sentry-compatible data
+  e.tags                # => {error_category: 'check_failed', module: 'stateable', event: 'pay'}
+  e.context             # => {model_class: 'Order', event: :pay}
+  e.extra               # => {check_description: 'method check: payment_method_present?'}
+
+  # Sentry integration
+  Sentry.capture_exception(e) do |scope|
+    scope.set_context("error_details", e.context)
+    scope.set_tags(e.tags)
+    scope.set_extras(e.extra)
+  end
+end
+```
+
+**Methods that raise:** `<event>!` (transition methods with checks)
+
+### ValidationFailedError
+
+Raised when a transition validation fails.
+
+**Required parameters:** `event:`, `errors:`, **Optional:** `model_class:`
+
+**Example:**
+```ruby
+begin
+  order.confirm!  # But items array is empty
+rescue BetterModel::Errors::Stateable::ValidationFailedError => e
+  # Attribute access
+  e.event         # => :confirm
+  e.errors        # => ActiveModel::Errors object
+  e.model_class   # => Order
+
+  # Sentry-compatible data
+  e.tags          # => {error_category: 'validation_failed', module: 'stateable', event: 'confirm'}
+  e.context       # => {model_class: 'Order', event: :confirm}
+  e.extra         # => {errors: ['Must have at least one item']}
+
+  # Sentry integration
+  Sentry.capture_exception(e) do |scope|
+    scope.set_context("error_details", e.context)
+    scope.set_tags(e.tags)
+    scope.set_extras(e.extra)
+  end
+end
+```
+
+**Methods that raise:** `<event>!` (transition methods with validations)
+
+### NotEnabledError
+
+Raised when Stateable methods are called but the module is not enabled.
+
+**Required parameters:** `model_class:`
+
+**Example:**
+```ruby
+begin
+  order.confirm!  # But stateable not configured
+rescue BetterModel::Errors::Stateable::NotEnabledError => e
+  # Attribute access
+  e.model_class  # => Order
+
+  # Sentry-compatible data
+  e.tags         # => {error_category: 'not_enabled', module: 'stateable'}
+  e.context      # => {model_class: 'Order'}
+  e.extra        # => {}
+
+  # Sentry integration
+  Sentry.capture_exception(e) do |scope|
+    scope.set_context("error_details", e.context)
+    scope.set_tags(e.tags)
+    scope.set_extras(e.extra)
+  end
+end
+```
+
+**Solution:** Enable Stateable by adding `stateable do...end` to your model.
 
 ### Handling Errors in Controllers
 
@@ -1076,11 +1163,11 @@ class OrdersController < ApplicationController
     @order.confirm!(user_id: current_user.id)
 
     redirect_to @order, notice: "Order confirmed"
-  rescue BetterModel::InvalidTransitionError
+  rescue BetterModel::Errors::Stateable::InvalidTransitionError => e
     redirect_to @order, alert: "Order cannot be confirmed in current state"
-  rescue BetterModel::CheckFailedError => e
+  rescue BetterModel::Errors::Stateable::CheckFailedError => e
     redirect_to @order, alert: "Cannot confirm: #{e.check_description}"
-  rescue BetterModel::ValidationFailedError => e
+  rescue BetterModel::Errors::Stateable::ValidationFailedError => e
     redirect_to @order, alert: "Validation failed: #{e.errors.full_messages.join(', ')}"
   end
 end
@@ -1093,11 +1180,139 @@ if order.can_confirm?
   begin
     order.confirm!(user_id: current_user.id, notes: params[:notes])
     flash[:notice] = "Order confirmed successfully"
-  rescue BetterModel::ValidationFailedError => e
+  rescue BetterModel::Errors::Stateable::ValidationFailedError => e
     flash[:alert] = "Validation failed: #{e.errors.full_messages.join(', ')}"
   end
 else
   flash[:alert] = "Order cannot be confirmed at this time"
+end
+```
+
+## Sentry Integration
+
+Stateable errors are designed to work seamlessly with Sentry for error tracking and monitoring.
+
+### Basic Integration
+
+```ruby
+class OrdersController < ApplicationController
+  def confirm
+    @order = Order.find(params[:id])
+    @order.confirm!(user_id: current_user.id)
+
+    redirect_to @order, notice: "Order confirmed"
+  rescue BetterModel::Errors::Stateable::StateableError => e
+    # Automatically capture with full context
+    Sentry.capture_exception(e) do |scope|
+      scope.set_context("error_details", e.context)
+      scope.set_tags(e.tags)
+      scope.set_extras(e.extra)
+
+      # Add order context
+      scope.set_context("order", {
+        id: @order.id,
+        state: @order.state,
+        customer_id: @order.customer_id
+      })
+    end
+
+    # Handle gracefully
+    redirect_to @order, alert: "Unable to confirm order"
+  end
+end
+```
+
+### Error Grouping
+
+All Stateable errors include consistent tags for Sentry grouping:
+
+```ruby
+# Common tags across all Stateable errors:
+{
+  error_category: 'invalid_transition' | 'check_failed' | 'validation_failed' | 'not_enabled',
+  module: 'stateable'
+}
+
+# Specific tags per error type:
+# InvalidTransitionError: { event: 'ship', from_state: 'pending', to_state: 'shipped' }
+# CheckFailedError: { event: 'pay' }
+# ValidationFailedError: { event: 'confirm' }
+# NotEnabledError: (no additional tags)
+```
+
+### Production Error Handling
+
+```ruby
+class ApplicationController < ActionController::Base
+  rescue_from BetterModel::Errors::Stateable::InvalidTransitionError do |e|
+    log_and_report_stateable_error(e, "Invalid state transition")
+    render json: { error: "Cannot perform this action in the current state" }, status: :unprocessable_entity
+  end
+
+  rescue_from BetterModel::Errors::Stateable::CheckFailedError do |e|
+    log_and_report_stateable_error(e, "Transition check failed")
+    render json: { error: "Preconditions not met" }, status: :unprocessable_entity
+  end
+
+  rescue_from BetterModel::Errors::Stateable::ValidationFailedError do |e|
+    log_and_report_stateable_error(e, "Transition validation failed")
+    render json: { error: "Validation failed", details: e.errors.full_messages }, status: :unprocessable_entity
+  end
+
+  rescue_from BetterModel::Errors::Stateable::NotEnabledError do |e|
+    log_and_report_stateable_error(e, "Stateable not enabled")
+    render json: { error: "Feature not available" }, status: :internal_server_error
+  end
+
+  private
+
+  def log_and_report_stateable_error(exception, message)
+    Rails.logger.warn "#{message}: #{exception.message}"
+    Sentry.capture_exception(exception) do |scope|
+      scope.set_context("error_details", exception.context)
+      scope.set_tags(exception.tags)
+      scope.set_extras(exception.extra)
+      scope.set_user(id: current_user&.id)
+    end
+  end
+end
+```
+
+### Tracking State Machine Issues
+
+Use Sentry to identify patterns in state transition failures:
+
+```ruby
+class Order < ApplicationRecord
+  stateable do
+    # ... state machine configuration
+
+    transition :confirm, from: :pending, to: :confirmed do
+      check { items.any? }
+
+      validate do
+        errors.add(:base, "Minimum order not met") if total_amount < 10
+      end
+
+      before_transition do
+        begin
+          calculate_final_total
+        rescue => e
+          # Capture calculation errors with context
+          Sentry.capture_exception(e) do |scope|
+            scope.set_context("order", {
+              id: id,
+              state: state,
+              items_count: items.count,
+              subtotal: subtotal
+            })
+            scope.set_tags(operation: "calculate_total")
+          end
+          raise
+        end
+      end
+    end
+  end
 end
 ```
 

@@ -39,15 +39,15 @@ section("ARCHIVABLE - Test Predicates (Auto-Generated)")
 test("archived_at_present exists") { Article.respond_to?(:archived_at_present) }
 test("archived_at_null exists") { Article.respond_to?(:archived_at_null) }
 test("archived_at_within exists") { Article.respond_to?(:archived_at_within) }
-test("archived_at_today exists") { Article.respond_to?(:archived_at_today) }
-test("archived_at_this_week exists") { Article.respond_to?(:archived_at_this_week) }
+# Helper methods archived_at_today and archived_at_this_week are not auto-generated predicates
+# These are custom helper methods tested separately in the "Helper Methods" section below
 
 test("archived_at_present works") do
-  Article.unscoped.archived_at_present.count >= 2
+  Article.unscoped.archived_at_present(true).count >= 2
 end
 
 test("archived_at_null works") do
-  Article.unscoped.archived_at_null.count == Article.unscoped.count - Article.unscoped.archived.count
+  Article.unscoped.archived_at_null(true).count == Article.unscoped.count - Article.unscoped.archived.count
 end
 
 test("archived_at_within works") do
@@ -126,7 +126,7 @@ test("archive! on already archived raises error") do
   begin
     already_archived.archive!
     false
-  rescue BetterModel::AlreadyArchivedError
+  rescue BetterModel::Errors::Archivable::AlreadyArchivedError
     true
   end
 end
@@ -136,7 +136,7 @@ test("restore! on not archived raises error") do
   begin
     active.restore!
     false
-  rescue BetterModel::NotArchivedError
+  rescue BetterModel::Errors::Archivable::NotArchivedError
     true
   end
 end

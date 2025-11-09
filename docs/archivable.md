@@ -739,6 +739,136 @@ Product.archived_at_between(3.months.ago, Time.current)
        .where(status: "discontinued")
 ```
 
+## Error Handling
+
+Archivable raises specific errors for invalid operations, all compatible with Sentry for error tracking and monitoring.
+
+### AlreadyArchivedError
+
+Raised when attempting to archive a record that is already archived.
+
+```ruby
+article = Article.find(1)
+article.archive!(by: current_user)
+
+begin
+  article.archive!(by: current_user)  # Trying to archive again
+rescue BetterModel::Errors::Archivable::AlreadyArchivedError => e
+  # Error attributes
+  e.archived_at    # => 2025-01-15 10:30:00 UTC (Time when first archived)
+  e.model_class    # => Article
+  e.model_id       # => 1
+
+  # Sentry-compatible data
+  e.tags           # => {error_category: 'already_archived', module: 'archivable'}
+  e.context        # => {model_class: 'Article'}
+  e.extra          # => {archived_at: Time, model_id: 1}
+
+  # Error message
+  e.message        # => "Record is already archived (archived at: 2025-01-15 10:30:00 UTC)"
+end
+```
+
+### NotArchivedError
+
+Raised when attempting to restore a record that is not archived.
+
+```ruby
+article = Article.find(1)
+
+begin
+  article.restore!  # Record is not archived
+rescue BetterModel::Errors::Archivable::NotArchivedError => e
+  # Error attributes
+  e.model_class    # => Article
+  e.model_id       # => 1
+
+  # Sentry-compatible data
+  e.tags           # => {error_category: 'not_archived', module: 'archivable'}
+  e.context        # => {model_class: 'Article'}
+  e.extra          # => {model_id: 1}
+
+  # Error message
+  e.message        # => "Record is not archived"
+end
+```
+
+### NotEnabledError
+
+Raised when attempting to use archivable methods on a model that doesn't have archivable enabled.
+
+```ruby
+class Comment < ApplicationRecord
+  include BetterModel
+  # archivable not enabled
+end
+
+comment = Comment.first
+
+begin
+  comment.archive!
+rescue BetterModel::Errors::Archivable::NotEnabledError => e
+  # Error attributes
+  e.model_class    # => Comment
+
+  # Sentry-compatible data
+  e.tags           # => {error_category: 'not_enabled', module: 'archivable'}
+  e.context        # => {model_class: 'Comment'}
+  e.extra          # => {}
+
+  # Error message
+  e.message        # => "Archivable is not enabled for Comment"
+end
+```
+
+### Integrating with Sentry
+
+All Archivable errors are compatible with Sentry's error tracking:
+
+```ruby
+# In your ApplicationController or error handler
+rescue_from BetterModel::Errors::Archivable::ArchivableError do |error|
+  # Automatically captured by Sentry with structured data
+  Sentry.capture_exception(error, {
+    tags: error.tags,           # Indexed tags for filtering
+    contexts: {
+      archivable: error.context # Additional context
+    },
+    extra: error.extra          # Detailed error data
+  })
+
+  render json: { error: error.message }, status: :unprocessable_entity
+end
+```
+
+### Error Handling Best Practices
+
+```ruby
+# Controller example
+def archive
+  @article = Article.find(params[:id])
+  @article.archive!(by: current_user, reason: params[:reason])
+
+  redirect_to @article, notice: "Article archived successfully"
+rescue BetterModel::Errors::Archivable::AlreadyArchivedError => e
+  redirect_to @article, alert: "This article is already archived (archived at: #{e.archived_at})"
+rescue BetterModel::Errors::Archivable::NotEnabledError => e
+  redirect_to @article, alert: "Archiving is not available for this resource"
+end
+
+# Service object example
+class ArticleArchiver
+  def archive(article, user:, reason: nil)
+    article.archive!(by: user, reason: reason)
+    { success: true, article: article }
+  rescue BetterModel::Errors::Archivable::AlreadyArchivedError => e
+    { success: false, error: :already_archived, message: e.message, archived_at: e.archived_at }
+  rescue BetterModel::Errors::Archivable::NotEnabledError => e
+    { success: false, error: :not_enabled, message: e.message }
+  end
+end
+```
+
 ## Best Practices
 
 ### 1. Always Use Tracking Columns for Audit Trails

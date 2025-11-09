@@ -221,7 +221,7 @@ class ArticlesController < ApplicationController
     else
       redirect_to @article, alert: "Cannot submit article"
     end
-  rescue BetterModel::GuardFailedError => e
+  rescue BetterModel::Errors::Stateable::CheckFailedError => e
     redirect_to @article, alert: "Article not ready: #{e.message}"
   end
 
@@ -1090,7 +1090,7 @@ class ApplicationsController < ApplicationController
       redirect_to edit_application_path(@application),
                   alert: "Please complete all sections"
     end
-  rescue BetterModel::GuardFailedError => e
+  rescue BetterModel::Errors::Stateable::CheckFailedError => e
     redirect_to edit_application_path(@application),
                 alert: "Application incomplete: #{e.message}"
   end

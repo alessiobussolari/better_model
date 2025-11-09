@@ -1042,6 +1042,56 @@ class Article < ApplicationRecord
 end
 ```
 
+### Error Handling
+
+Traceable raises ConfigurationError for invalid configuration with full Sentry-compatible error data:
+
+```ruby
+# Missing track configuration
+begin
+  traceable do
+    # No fields specified
+  end
+rescue BetterModel::Errors::Traceable::ConfigurationError => e
+  # Error attributes
+  e.reason        # => "At least one field must be tracked"
+  e.model_class   # => Article
+  e.expected      # => "One or more field names"
+  e.provided      # => []
+
+  # Sentry-compatible data
+  e.tags     # => {error_category: 'configuration', module: 'traceable'}
+  e.context  # => {model_class: 'Article'}
+  e.extra    # => {reason: 'At least one field must be tracked', expected: 'One or more field names', provided: []}
+
+  # Error message
+  e.message  # => "At least one field must be tracked (expected: \"One or more field names\") (provided: [])"
+end
+
+# Invalid field name
+begin
+  traceable do
+    track :nonexistent_field
+  end
+rescue BetterModel::Errors::Traceable::ConfigurationError => e
+  e.reason      # => "Field does not exist in model"
+  e.provided    # => :nonexistent_field
+  e.message     # => "Field does not exist in model (provided: :nonexistent_field)"
+end
+```
+
+**Integration with Sentry:**
+
+```ruby
+rescue_from BetterModel::Errors::Traceable::ConfigurationError do |error|
+  Sentry.capture_exception(error, {
+    tags: error.tags,
+    contexts: { traceable: error.context },
+    extra: error.extra
+  })
+end
+```
+
 ---
 
 **Related Documentation:**

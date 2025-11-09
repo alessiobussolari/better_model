@@ -16,7 +16,7 @@ Article.class_eval do
   end
 
   register_complex_validation :valid_date_order do
-    return if starts_at.blank? || ends_at.blank?
+    next if starts_at.blank? || ends_at.blank?
 
     if starts_at >= ends_at
       errors.add(:starts_at, "must be before end date")

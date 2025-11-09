@@ -826,21 +826,44 @@ end
 
 ### BetterModel Exceptions
 
-When using Searchable, additional exceptions may be raised:
+When using Searchable, additional exceptions may be raised with full Sentry-compatible error data:
 
 ```ruby
-# BetterModel::Searchable::InvalidPredicateError
+# BetterModel::Errors::Searchable::InvalidPredicateError
 begin
   repo.search({ invalid_predicate: "value" })
-rescue BetterModel::Searchable::InvalidPredicateError => e
-  # Invalid predicate used
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
+  # Error attributes
+  e.predicate_scope       # => :invalid_predicate
+  e.value                 # => "value"
+  e.available_predicates  # => [:title_eq, :title_cont, ...]
+  e.model_class           # => Article
+
+  # Sentry-compatible data
+  e.tags     # => {error_category: 'invalid_predicate', module: 'searchable', predicate: 'invalid_predicate'}
+  e.context  # => {model_class: 'Article'}
+  e.extra    # => {predicate_scope: :invalid_predicate, value: 'value', available_predicates: [...]}
+
+  # Error message
+  e.message  # => "Invalid predicate scope: :invalid_predicate. Available predicable scopes: title_eq, title_cont, ..."
 end
 
-# BetterModel::Searchable::InvalidOrderError
+# BetterModel::Errors::Searchable::InvalidOrderError
 begin
   repo.search({}, orders: [:invalid_sort_scope])
-rescue BetterModel::Searchable::InvalidOrderError => e
-  # Invalid sort scope used
+rescue BetterModel::Errors::Searchable::InvalidOrderError => e
+  # Error attributes
+  e.order_scope         # => :invalid_sort_scope
+  e.available_orders    # => [:sort_title_asc, :sort_title_desc, ...]
+  e.model_class         # => Article
+
+  # Sentry-compatible data
+  e.tags     # => {error_category: 'invalid_order', module: 'searchable', order: 'invalid_sort_scope'}
+  e.context  # => {model_class: 'Article'}
+  e.extra    # => {order_scope: :invalid_sort_scope, available_orders: [...]}
+
+  # Error message
+  e.message  # => "Invalid order scope: :invalid_sort_scope. Available sort scopes: sort_title_asc, sort_title_desc, ..."
 end
 ```
 

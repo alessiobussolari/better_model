@@ -202,25 +202,61 @@ end
 
 ### Permission Error Handling
 
-Permissible validates definitions and provides clear error messages:
+Permissible raises ConfigurationError for invalid configuration with full Sentry-compatible error data:
 
 ```ruby
 # Missing condition
-permit :delete
-# => ArgumentError: Condition proc or block is required
+begin
+  permit :delete
+rescue BetterModel::Errors::Permissible::ConfigurationError => e
+  # Error attributes
+  e.reason        # => "Condition proc or block is required"
+  e.model_class   # => Article
+  e.expected      # => "Proc or block"
+  e.provided      # => nil
+
+  # Sentry-compatible data
+  e.tags     # => {error_category: 'configuration', module: 'permissible'}
+  e.context  # => {model_class: 'Article'}
+  e.extra    # => {reason: 'Condition proc or block is required', expected: 'Proc or block', provided: nil}
+
+  # Error message
+  e.message  # => "Condition proc or block is required (expected: \"Proc or block\")"
+end
 
 # Blank permission name
-permit "", -> { true }
-# => ArgumentError: Permission name cannot be blank
+begin
+  permit "", -> { true }
+rescue BetterModel::Errors::Permissible::ConfigurationError => e
+  e.reason   # => "Permission name cannot be blank"
+  e.message  # => "Permission name cannot be blank"
+end
 
 # Non-callable condition
-permit :delete, "not a proc"
-# => ArgumentError: Condition must respond to call
+begin
+  permit :delete, "not a proc"
+rescue BetterModel::Errors::Permissible::ConfigurationError => e
+  e.reason      # => "Condition must respond to call"
+  e.provided    # => "not a proc"
+  e.message     # => "Condition must respond to call (provided: \"not a proc\")"
+end
 ```
 
 Undefined permissions return `false` by default (secure by default):
 
 ```ruby
 article.permit?(:nonexistent_permission)  # => false
+```
+
+**Integration with Sentry:**
+
+```ruby
+rescue_from BetterModel::Errors::Permissible::ConfigurationError do |error|
+  Sentry.capture_exception(error, {
+    tags: error.tags,
+    contexts: { permissible: error.context },
+    extra: error.extra
+  })
+end
 ```
 

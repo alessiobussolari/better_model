@@ -369,58 +369,233 @@ Article.searchable_sorts_for(:title)
 
 ### Error Handling
 
+Searchable raises specific errors with v3.0.0 Sentry-compatible format. All errors provide attribute access, Sentry-compatible data structures, and detailed context.
+
 #### InvalidPredicateError
 
-Raised when using non-existent predicate scope:
+Raised when using an invalid predicate in search queries.
 
+**Required parameters:** `predicate_scope:`, **Optional:** `value:`, `available_predicates:`, `model_class:`
+
+**Example:**
 ```ruby
-Article.search({ nonexistent_predicate: "value" })
-# Raises: BetterModel::Searchable::InvalidPredicateError
-#   Invalid predicate scope: nonexistent_predicate
-#   Available predicable scopes: title_eq, title_cont, status_eq, ...
+begin
+  Article.search({ title_xxx: "Rails" })
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
+  # Attribute access
+  e.predicate_scope         # => :title_xxx
+  e.value                   # => "Rails"
+  e.available_predicates    # => [:title_eq, :title_cont, :title_start, ...]
+  e.model_class             # => Article
+
+  # Sentry-compatible data
+  e.tags                    # => {error_category: 'invalid_predicate', module: 'searchable', predicate: 'title_xxx'}
+  e.context                 # => {model_class: 'Article'}
+  e.extra                   # => {predicate_scope: :title_xxx, value: 'Rails', available_predicates: [...]}
+
+  # Sentry integration
+  Sentry.capture_exception(e) do |scope|
+    scope.set_context("error_details", e.context)
+    scope.set_tags(e.tags)
+    scope.set_extras(e.extra)
+  end
+end
 ```
+
+**Methods that raise:** `search`, `apply_predicates`
 
 #### InvalidOrderError
 
-Raised when using non-existent sort scope:
+Raised when using an invalid sort scope in search queries.
 
+**Required parameters:** `order_scope:`, **Optional:** `available_sorts:`, `model_class:`
+
+**Example:**
 ```ruby
-Article.search({}, orders: [:nonexistent_sort])
-# Raises: BetterModel::Searchable::InvalidOrderError
-#   Invalid order scope: nonexistent_sort
-#   Available sortable scopes: sort_title_asc, sort_view_count_desc, ...
+begin
+  Article.search({}, orders: [:sort_title_xxx])
+rescue BetterModel::Errors::Searchable::InvalidOrderError => e
+  # Attribute access
+  e.order_scope          # => :sort_title_xxx
+  e.available_sorts      # => [:sort_title_asc, :sort_title_desc, :sort_view_count_asc, ...]
+  e.model_class          # => Article
+
+  # Sentry-compatible data
+  e.tags                 # => {error_category: 'invalid_order', module: 'searchable', order_scope: 'sort_title_xxx'}
+  e.context              # => {model_class: 'Article'}
+  e.extra                # => {order_scope: :sort_title_xxx, available_sorts: [...]}
+
+  # Sentry integration
+  Sentry.capture_exception(e) do |scope|
+    scope.set_context("error_details", e.context)
+    scope.set_tags(e.tags)
+    scope.set_extras(e.extra)
+  end
+end
 ```
+
+**Methods that raise:** `search`, `apply_orders`
 
 #### InvalidPaginationError
 
-Raised for invalid pagination parameters:
+Raised when using invalid pagination parameters.
 
+**Required parameters:** `parameter:`, `value:`, **Optional:** `reason:`
+
+**Example:**
 ```ruby
-# page must be >= 1
-Article.search({}, pagination: { page: 0 })
-# Raises: BetterModel::Searchable::InvalidPaginationError: page must be >= 1
+begin
+  Article.search({}, pagination: { page: 0 })
+rescue BetterModel::Errors::Searchable::InvalidPaginationError => e
+  # Attribute access
+  e.parameter     # => :page
+  e.value         # => 0
+  e.reason        # => "page must be >= 1"
 
-# per_page must be >= 1
-Article.search({}, pagination: { page: 1, per_page: 0 })
-# Raises: BetterModel::Searchable::InvalidPaginationError: per_page must be >= 1
+  # Sentry-compatible data
+  e.tags          # => {error_category: 'invalid_pagination', module: 'searchable', parameter: 'page'}
+  e.context       # => {parameter: :page, value: 0}
+  e.extra         # => {reason: "page must be >= 1"}
+
+  # Sentry integration
+  Sentry.capture_exception(e) do |scope|
+    scope.set_context("error_details", e.context)
+    scope.set_tags(e.tags)
+    scope.set_extras(e.extra)
+  end
+end
 ```
+
+**Common validation errors:**
+- `page must be >= 1` - Page number is less than 1
+- `per_page must be >= 1` - Items per page is less than 1
+
+**Methods that raise:** `search`, `validate_pagination`
 
 #### InvalidSecurityError
 
-Raised for security violations:
+Raised when security requirements are not met in search queries.
+
+**Required parameters:** `security_name:`, **Optional:** `required_predicates:`, `available_securities:`, `model_class:`
+
+**Example:**
+```ruby
+begin
+  Article.search({ title_cont: "Test" }, security: :status_required)
+rescue BetterModel::Errors::Searchable::InvalidSecurityError => e
+  # Attribute access
+  e.security_name           # => :status_required
+  e.required_predicates     # => [:status_eq]
+  e.available_securities    # => [:status_required, :tenant_scope]
+  e.model_class             # => Article
+
+  # Sentry-compatible data
+  e.tags                    # => {error_category: 'invalid_security', module: 'searchable', security_name: 'status_required'}
+  e.context                 # => {model_class: 'Article', required_predicates: [:status_eq]}
+  e.extra                   # => {security_name: :status_required, available_securities: [...]}
+
+  # Sentry integration
+  Sentry.capture_exception(e) do |scope|
+    scope.set_context("error_details", e.context)
+    scope.set_tags(e.tags)
+    scope.set_extras(e.extra)
+  end
+end
+```
+
+**Common security violations:**
+- Unknown security name
+- Missing required predicate
+- Required predicate has nil/blank value
+
+**Methods that raise:** `search`, `enforce_security`
+
+## Sentry Integration
+
+Searchable errors are designed to work seamlessly with Sentry for error tracking and monitoring.
+
+### Basic Integration
 
 ```ruby
-# Unknown security name
-Article.search({}, security: :nonexistent)
-# Raises: BetterModel::Searchable::InvalidSecurityError
-#   Unknown security: nonexistent
-#   Available securities: status_required, tenant_scope
+class ArticlesController < ApplicationController
+  def index
+    @articles = Article.search(search_params)
+  rescue BetterModel::Errors::Searchable::SearchableError => e
+    # Automatically capture with full context
+    Sentry.capture_exception(e) do |scope|
+      scope.set_context("error_details", e.context)
+      scope.set_tags(e.tags)
+      scope.set_extras(e.extra)
 
-# Missing required predicate
-Article.search({ title_cont: "Test" }, security: :status_required)
-# Raises: BetterModel::Searchable::InvalidSecurityError
-#   Security :status_required requires the following predicates with valid values: status_eq
-#   These predicates must be present and have non-blank values in the search parameters.
+      # Add request context
+      scope.set_context("request", {
+        controller: controller_name,
+        action: action_name,
+        params: params.to_unsafe_h
+      })
+    end
+
+    # Handle gracefully
+    @articles = Article.none
+    flash[:alert] = "Invalid search parameters"
+  end
+end
+```
+
+### Error Grouping
+
+All Searchable errors include consistent tags for Sentry grouping:
+
+```ruby
+# Common tags across all Searchable errors:
+{
+  error_category: 'invalid_predicate' | 'invalid_order' | 'invalid_pagination' | 'invalid_security',
+  module: 'searchable'
+}
+
+# Specific tags per error type:
+# InvalidPredicateError: { predicate: 'field_name_predicate' }
+# InvalidOrderError: { order_scope: 'sort_field_direction' }
+# InvalidPaginationError: { parameter: 'page' | 'per_page' }
+# InvalidSecurityError: { security_name: 'security_rule_name' }
+```
+
+### Production Error Handling
+
+```ruby
+class ApplicationController < ActionController::Base
+  rescue_from BetterModel::Errors::Searchable::InvalidPredicateError do |e|
+    log_and_report_error(e, "Invalid search predicate")
+    render json: { error: "Invalid search field" }, status: :bad_request
+  end
+
+  rescue_from BetterModel::Errors::Searchable::InvalidOrderError do |e|
+    log_and_report_error(e, "Invalid sort field")
+    render json: { error: "Invalid sort field" }, status: :bad_request
+  end
+
+  rescue_from BetterModel::Errors::Searchable::InvalidPaginationError do |e|
+    log_and_report_error(e, "Invalid pagination")
+    render json: { error: e.reason }, status: :bad_request
+  end
+
+  rescue_from BetterModel::Errors::Searchable::InvalidSecurityError do |e|
+    log_and_report_error(e, "Security violation")
+    render json: { error: "Access denied" }, status: :forbidden
+  end
+
+  private
+
+  def log_and_report_error(exception, message)
+    Rails.logger.warn "#{message}: #{exception.message}"
+    Sentry.capture_exception(exception) do |scope|
+      scope.set_context("error_details", exception.context)
+      scope.set_tags(exception.tags)
+      scope.set_extras(exception.extra)
+      scope.set_user(id: current_user&.id)
+    end
+  end
+end
 ```
 
 ### Real-World Examples

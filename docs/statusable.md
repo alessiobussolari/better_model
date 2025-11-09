@@ -184,25 +184,61 @@ Statusable is thread-safe:
 
 ### Error Handling
 
-Statusable validates definitions and provides clear error messages:
+Statusable raises ConfigurationError for invalid configuration with full Sentry-compatible error data:
 
 ```ruby
 # Missing condition
-is :test_status
-# => ArgumentError: Condition proc or block is required
+begin
+  is :test_status
+rescue BetterModel::Errors::Statusable::ConfigurationError => e
+  # Error attributes
+  e.reason        # => "Condition proc or block is required"
+  e.model_class   # => Article
+  e.expected      # => "Proc or block"
+  e.provided      # => nil
+
+  # Sentry-compatible data
+  e.tags     # => {error_category: 'configuration', module: 'statusable'}
+  e.context  # => {model_class: 'Article'}
+  e.extra    # => {reason: 'Condition proc or block is required', expected: 'Proc or block', provided: nil}
+
+  # Error message
+  e.message  # => "Condition proc or block is required (expected: \"Proc or block\")"
+end
 
 # Blank status name
-is "", -> { true }
-# => ArgumentError: Status name cannot be blank
+begin
+  is "", -> { true }
+rescue BetterModel::Errors::Statusable::ConfigurationError => e
+  e.reason   # => "Status name cannot be blank"
+  e.message  # => "Status name cannot be blank"
+end
 
 # Non-callable condition
-is :test, "not a proc"
-# => ArgumentError: Condition must respond to call
+begin
+  is :test, "not a proc"
+rescue BetterModel::Errors::Statusable::ConfigurationError => e
+  e.reason      # => "Condition must respond to call"
+  e.provided    # => "not a proc"
+  e.message     # => "Condition must respond to call (provided: \"not a proc\")"
+end
 ```
 
 Undefined statuses return `false` by default (secure by default):
 
 ```ruby
 article.is?(:nonexistent_status)  # => false
+```
+
+**Integration with Sentry:**
+
+```ruby
+rescue_from BetterModel::Errors::Statusable::ConfigurationError do |error|
+  Sentry.capture_exception(error, {
+    tags: error.tags,
+    contexts: { statusable: error.context },
+    extra: error.extra
+  })
+end
 ```
 

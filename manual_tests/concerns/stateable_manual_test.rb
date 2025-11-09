@@ -147,7 +147,7 @@
 		begin
 			@check_test_article.submit_for_review!
 			false
-		rescue BetterModel::Stateable::GuardFailedError
+		rescue BetterModel::Errors::Stateable::CheckFailedError
 			true
 		end
 	end
@@ -188,7 +188,7 @@
 			# Can't publish from draft (must go through review)
 			test_article.publish!
 			false
-		rescue BetterModel::Stateable::InvalidTransitionError => e
+		rescue BetterModel::Errors::Stateable::InvalidTransitionError => e
 			e.message.include?("Cannot transition")
 		end
 	end
@@ -320,7 +320,7 @@
 		a.publish!
 	end
 
-	state_transition_class = BetterModel::StateTransitions
+	state_transition_class = BetterModel::Models::StateTransition
 
 	test("StateTransition model exists") do
 		state_transition_class.present?
@@ -454,7 +454,7 @@
 			instance = temp_class.create!(title: "Test", content: "Content", status: "draft")
 			instance.transition_to!(:nonexistent)
 			false
-		rescue BetterModel::Stateable::NotEnabledError
+		rescue BetterModel::Errors::Stateable::NotEnabledError
 			true
 		end
 	end
@@ -568,7 +568,7 @@
 		begin
 			@validation_article.publish_with_validation!
 			false
-		rescue BetterModel::Stateable::ValidationFailedError => e
+		rescue BetterModel::Errors::Stateable::ValidationFailedError => e
 			e.message.include?("Title too short")
 		end
 	end
@@ -589,7 +589,7 @@
 		begin
 			@validation_article.publish_with_validation!
 			false
-		rescue BetterModel::Stateable::ValidationFailedError => e
+		rescue BetterModel::Errors::Stateable::ValidationFailedError => e
 			e.message.include?("Title too short") && e.message.include?("Content required") == false
 		end
 	end
@@ -730,13 +730,13 @@
 	end
 
 	test("recent scope filters transitions within timeframe") do
-		state_transition_class = BetterModel::StateTransitions
+		state_transition_class = BetterModel::Models::StateTransition
 		recent_transitions = state_transition_class.recent(1.hour)
 		recent_transitions.is_a?(ActiveRecord::Relation)
 	end
 
 	test("between scope filters transitions in date range") do
-		state_transition_class = BetterModel::StateTransitions
+		state_transition_class = BetterModel::Models::StateTransition
 		start_time = 1.day.ago
 		end_time = Time.current
 
@@ -745,7 +745,7 @@
 	end
 
 	test("to_s alias works for description") do
-		transitions = BetterModel::StateTransitions.limit(1)
+		transitions = BetterModel::Models::StateTransition.limit(1)
 		if transitions.any?
 			transition = transitions.first
 			transition.to_s == transition.description
@@ -822,7 +822,7 @@
 		begin
 			# Try invalid transition
 			fail_article.publish!  # Can't publish from draft
-		rescue BetterModel::Stateable::InvalidTransitionError
+		rescue BetterModel::Errors::Stateable::InvalidTransitionError
 		end
 
 		fail_article.reload

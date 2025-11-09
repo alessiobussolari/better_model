@@ -272,10 +272,10 @@
 			end
 
 			instance = temp_class.new
-			instance.changes_for(:status) rescue BetterModel::NotEnabledError
+			instance.changes_for(:status) rescue BetterModel::Errors::Traceable::NotEnabledError
 			true
 		rescue => e
-			e.is_a?(BetterModel::NotEnabledError)
+			e.is_a?(BetterModel::Errors::Traceable::NotEnabledError)
 		end
 	end
 

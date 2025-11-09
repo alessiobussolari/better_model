@@ -258,8 +258,8 @@ def archive!(by: nil, reason: nil)
 **Returns:** `self`
 
 **Raises:**
-- `BetterModel::Archivable::NotEnabledError` - If archivable is not enabled
-- `BetterModel::Archivable::AlreadyArchivedError` - If record is already archived
+- `BetterModel::Errors::Archivable::NotEnabledError` - If archivable is not enabled
+- `BetterModel::Errors::Archivable::AlreadyArchivedError` - If record is already archived
 
 **Examples:**
 
@@ -299,12 +299,12 @@ article.archive!(
 ```ruby
 # Trying to archive without enabling archivable
 article.archive!
-# => BetterModel::Archivable::NotEnabledError
+# => BetterModel::Errors::Archivable::NotEnabledError
 
 # Trying to archive already archived record
 article.archive!
 article.archive!  # Second time
-# => BetterModel::Archivable::AlreadyArchivedError
+# => BetterModel::Errors::Archivable::AlreadyArchivedError
 ```
 
 ### `restore!`
@@ -319,8 +319,8 @@ def restore!
 **Returns:** `self`
 
 **Raises:**
-- `BetterModel::Archivable::NotEnabledError` - If archivable is not enabled
-- `BetterModel::Archivable::NotArchivedError` - If record is not archived
+- `BetterModel::Errors::Archivable::NotEnabledError` - If archivable is not enabled
+- `BetterModel::Errors::Archivable::NotArchivedError` - If record is not archived
 
 **Examples:**
 
@@ -338,7 +338,7 @@ article.archive!(by: admin, reason: "Test").restore!
 # Error handling
 article.restore!
 article.restore!  # Second time
-# => BetterModel::Archivable::NotArchivedError
+# => BetterModel::Errors::Archivable::NotArchivedError
 ```
 
 **What it does:**
@@ -1060,7 +1060,7 @@ class ArticlesController < ApplicationController
     else
       redirect_to article_path(@article), alert: "Failed to archive article"
     end
-  rescue BetterModel::Archivable::AlreadyArchivedError
+  rescue BetterModel::Errors::Archivable::AlreadyArchivedError
     redirect_to article_path(@article), alert: "Article is already archived"
   end
 
@@ -1073,7 +1073,7 @@ class ArticlesController < ApplicationController
     @article.restore!
 
     redirect_to article_path(@article), notice: "Article restored successfully"
-  rescue BetterModel::Archivable::NotArchivedError
+  rescue BetterModel::Errors::Archivable::NotArchivedError
     redirect_to articles_path, alert: "Article is not archived"
   end
 
@@ -2163,9 +2163,9 @@ Article.archived_at_gteq(Date.today.beginning_of_day)
 def archive
   @article.archive!(by: current_user, reason: params[:reason])
   redirect_to articles_path, notice: "Archived"
-rescue BetterModel::Archivable::AlreadyArchivedError
+rescue BetterModel::Errors::Archivable::AlreadyArchivedError
   redirect_to @article, alert: "Already archived"
-rescue BetterModel::Archivable::NotEnabledError
+rescue BetterModel::Errors::Archivable::NotEnabledError
   redirect_to @article, alert: "Archiving not enabled"
 end
 ```
@@ -2219,7 +2219,7 @@ class ArticleTest < ActiveSupport::TestCase
     article = articles(:one)
     article.archive!
 
-    assert_raises(BetterModel::Archivable::AlreadyArchivedError) do
+    assert_raises(BetterModel::Errors::Archivable::AlreadyArchivedError) do
       article.archive!
     end
   end

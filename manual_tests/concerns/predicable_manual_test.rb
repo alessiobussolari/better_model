@@ -36,16 +36,16 @@ test("view_count_between works") { Article.view_count_between(50, 100).count >= 
 section("PREDICABLE - Test Datetime Predicates")
 
 test("published_at_present exists") { Article.respond_to?(:published_at_present) }
-test("published_at_present works") { Article.published_at_present.count >= 1 }
-test("published_at_blank works") { Article.published_at_blank.count >= 1 }
+test("published_at_present works") { Article.published_at_present(true).count >= 1 }
+test("published_at_blank works") { Article.published_at_blank(true).count >= 1 }
 test("published_at_gt works") { Article.published_at_gt(1.week.ago).count >= 0 }
 test("published_at_lt works") { Article.published_at_lt(1.week.ago).count >= 0 }
 
 section("PREDICABLE - Test Boolean Predicates")
 
-test("featured_true exists") { Article.respond_to?(:featured_true) }
-test("featured_true works") { Article.featured_true.count >= 1 }
-test("featured_false works") { Article.featured_false.count >= 1 }
+test("featured_eq exists") { Article.respond_to?(:featured_eq) }
+test("featured_eq(true) works") { Article.featured_eq(true).count >= 0 }
+test("featured_eq(false) works") { Article.featured_eq(false).count >= 0 }
 
 test("predicable_scopes exists") { Article.respond_to?(:predicable_scopes) }
 

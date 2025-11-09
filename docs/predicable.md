@@ -459,3 +459,40 @@ Predicable registries are thread-safe:
 - **Memory footprint** - ~150-200 bytes per model for registries
 - **Conditional generation** - PostgreSQL predicates only generated when needed
 
+### Error Handling
+
+Predicable raises ConfigurationError for invalid configuration with full Sentry-compatible error data:
+
+```ruby
+# Invalid field type
+begin
+  predicates :nonexistent_field
+rescue BetterModel::Errors::Predicable::ConfigurationError => e
+  # Error attributes
+  e.reason        # => "Field does not exist in model"
+  e.model_class   # => Article
+  e.expected      # => "Valid column name"
+  e.provided      # => :nonexistent_field
+
+  # Sentry-compatible data
+  e.tags     # => {error_category: 'configuration', module: 'predicable'}
+  e.context  # => {model_class: 'Article'}
+  e.extra    # => {reason: 'Field does not exist in model', expected: 'Valid column name', provided: :nonexistent_field}
+
+  # Error message
+  e.message  # => "Field does not exist in model (expected: \"Valid column name\") (provided: :nonexistent_field)"
+end
+```
+
+**Integration with Sentry:**
+
+```ruby
+rescue_from BetterModel::Errors::Predicable::ConfigurationError do |error|
+  Sentry.capture_exception(error, {
+    tags: error.tags,
+    contexts: { predicable: error.context },
+    extra: error.extra
+  })
+end
+```
+
