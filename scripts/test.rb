@@ -9,7 +9,7 @@
 # HOW TO USE:
 #   cd test/dummy
 #   rails console
-#   load '../../manual_test.rb'
+#   load '../../scripts/test.rb'
 #
 # NOTE: This file should NOT be auto-loaded during the test suite.
 # If tests are finding unexpected "Perf Article" records, it means

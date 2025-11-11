@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -e
+
+echo ""
+echo "================================================================================"
+echo "  BETTERMODEL - RUNNING ALL TESTS"
+echo "================================================================================"
+echo ""
+
+# Run automated tests
+echo "================================================================================"
+echo "  AUTOMATED TESTS (Minitest)"
+echo "================================================================================"
+echo ""
+bundle exec rake test
+automated_exit=$?
+
+echo ""
+echo "================================================================================"
+echo "  MANUAL TESTS (Transaction-based)"
+echo "================================================================================"
+echo ""
+
+# Run manual tests from the dummy app
+cd test/dummy
+bundle exec rails runner "load '../../scripts/test.rb'"
+manual_exit=$?
+cd ../..
+
+echo ""
+echo "================================================================================"
+echo "  SUMMARY"
+echo "================================================================================"
+
+if [ $automated_exit -eq 0 ] && [ $manual_exit -eq 0 ]; then
+  echo "✓ All tests passed successfully!"
+  exit 0
+else
+  echo "✗ Some tests failed:"
+  [ $automated_exit -ne 0 ] && echo "  - Automated tests: FAILED"
+  [ $manual_exit -ne 0 ] && echo "  - Manual tests: FAILED"
+  exit 1
+fi

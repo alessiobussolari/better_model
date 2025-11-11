@@ -34,7 +34,7 @@
     "docker-compose.yml",
     "Dockerfile",
     "better_model.gemspec",
-    "manual_test.rb"
+    "test.rb"
   ],
   "rules": [
     "Include BetterModel in ActiveRecord models to enable all features at once with 'include BetterModel'",
