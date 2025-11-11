@@ -793,6 +793,8 @@ If the model uses BetterModel, the generator includes comments with available pr
 
 ## Error Handling
 
+> **ℹ️ Version 3.0.0 Compatible**: All error examples use standard Ruby exception patterns with `e.message`. Domain-specific attributes and Sentry helpers have been removed in v3.0.0 for simplicity.
+
 ### Exception Classes
 
 Repositories delegate to ActiveRecord, so standard ActiveRecord exceptions apply:
@@ -805,6 +807,7 @@ begin
   article = repo.find(999999)
 rescue ActiveRecord::RecordNotFound => e
   # Handle not found
+  Rails.logger.warn("Record not found: #{e.message}")
 end
 
 # ActiveRecord::RecordInvalid
@@ -812,6 +815,7 @@ begin
   article = repo.create!(title: nil) # If title is required
 rescue ActiveRecord::RecordInvalid => e
   # Handle validation errors
+  Rails.logger.warn("Validation failed: #{e.message}")
   errors = e.record.errors
 end
 
@@ -821,49 +825,39 @@ begin
   article.save!
 rescue ActiveRecord::RecordNotSaved => e
   # Handle save failure
+  Rails.logger.warn("Save failed: #{e.message}")
 end
 ```
 
 ### BetterModel Exceptions
 
-When using Searchable, additional exceptions may be raised with full Sentry-compatible error data:
+When using Searchable, additional exceptions may be raised:
 
 ```ruby
 # BetterModel::Errors::Searchable::InvalidPredicateError
 begin
   repo.search({ invalid_predicate: "value" })
 rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
-  # Error attributes
-  e.predicate_scope       # => :invalid_predicate
-  e.value                 # => "value"
-  e.available_predicates  # => [:title_eq, :title_cont, ...]
-  e.model_class           # => Article
+  # Only message available in v3.0.0
+  e.message
+  # => "Invalid predicate scope: invalid_predicate. Available predicates: title_eq, title_cont, ..."
 
-  # Sentry-compatible data
-  e.tags     # => {error_category: 'invalid_predicate', module: 'searchable', predicate: 'invalid_predicate'}
-  e.context  # => {model_class: 'Article'}
-  e.extra    # => {predicate_scope: :invalid_predicate, value: 'value', available_predicates: [...]}
-
-  # Error message
-  e.message  # => "Invalid predicate scope: :invalid_predicate. Available predicable scopes: title_eq, title_cont, ..."
+  # Log or report
+  Rails.logger.warn("Search error: #{e.message}")
+  Sentry.capture_exception(e)
 end
 
 # BetterModel::Errors::Searchable::InvalidOrderError
 begin
   repo.search({}, orders: [:invalid_sort_scope])
 rescue BetterModel::Errors::Searchable::InvalidOrderError => e
-  # Error attributes
-  e.order_scope         # => :invalid_sort_scope
-  e.available_orders    # => [:sort_title_asc, :sort_title_desc, ...]
-  e.model_class         # => Article
+  # Only message available in v3.0.0
+  e.message
+  # => "Invalid order scope: invalid_sort_scope. Available sorts: sort_title_asc, sort_title_desc, ..."
 
-  # Sentry-compatible data
-  e.tags     # => {error_category: 'invalid_order', module: 'searchable', order: 'invalid_sort_scope'}
-  e.context  # => {model_class: 'Article'}
-  e.extra    # => {order_scope: :invalid_sort_scope, available_orders: [...]}
-
-  # Error message
-  e.message  # => "Invalid order scope: :invalid_sort_scope. Available sort scopes: sort_title_asc, sort_title_desc, ..."
+  # Log or report
+  Rails.logger.warn("Sort error: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
 
@@ -882,6 +876,7 @@ class ArticleRepository < ApplicationRepository
   def safe_create(attributes)
     create!(attributes)
   rescue ActiveRecord::RecordInvalid => e
+    Rails.logger.warn("Create failed: #{e.message}")
     { success: false, errors: e.record.errors }
   else
     { success: true }
@@ -892,7 +887,8 @@ class ArticleRepository < ApplicationRepository
       ids.each { |id| update(id, attributes) }
     end
   rescue ActiveRecord::RecordInvalid => e
-    Rails.logger.error "Bulk update failed: #{e.message}"
+    Rails.logger.error("Bulk update failed: #{e.message}")
+    Sentry.capture_exception(e)
     raise
   end
 end

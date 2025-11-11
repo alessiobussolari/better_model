@@ -349,13 +349,13 @@ module BetterModel
     end
 
     test "ConfigurationError can be instantiated with message" do
-      error = BetterModel::Errors::Statusable::ConfigurationError.new(reason: "test message")
+      error = BetterModel::Errors::Statusable::ConfigurationError.new("test message")
       assert_equal "test message", error.message
     end
 
     test "ConfigurationError can be caught as ArgumentError" do
       begin
-        raise BetterModel::Errors::Statusable::ConfigurationError.new(reason: "test")
+        raise BetterModel::Errors::Statusable::ConfigurationError.new("test")
       rescue ArgumentError => e
         assert_instance_of BetterModel::Errors::Statusable::ConfigurationError, e
       end

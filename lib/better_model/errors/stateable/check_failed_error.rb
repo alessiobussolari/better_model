@@ -6,6 +6,9 @@ module BetterModel
   module Errors
     module Stateable
       class CheckFailedError < StateableError; end
+
+      # Alias for backward compatibility
+      GuardFailedError = CheckFailedError
     end
   end
 end

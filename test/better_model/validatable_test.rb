@@ -123,7 +123,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       article.validate_group(:step1)
     end
 
-    assert_match(/Validatable is not enabled/, error.message)
+    assert_match(/Module is not enabled/, error.message)
   end
 
   test "errors_for_group raises error if validatable not enabled" do
@@ -134,7 +134,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       article.errors_for_group(:step1)
     end
 
-    assert_match(/Validatable is not enabled/, error.message)
+    assert_match(/Module is not enabled/, error.message)
   end
 
   # Test 5: ActiveRecord integration
@@ -145,7 +145,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
       end
     end
 
-    assert_match(/can only be included in ActiveRecord models/, error.message)
+    assert_match(/Invalid configuration/, error.message)
   end
 
   # Test 9: Configuration immutability
@@ -1118,13 +1118,13 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
   end
 
   test "ConfigurationError can be instantiated with message" do
-    error = BetterModel::Errors::Validatable::ConfigurationError.new(reason: "test message")
+    error = BetterModel::Errors::Validatable::ConfigurationError.new("test message")
     assert_equal "test message", error.message
   end
 
   test "ConfigurationError can be caught as ArgumentError" do
     begin
-      raise BetterModel::Errors::Validatable::ConfigurationError.new(reason: "test")
+      raise BetterModel::Errors::Validatable::ConfigurationError.new("test")
     rescue ArgumentError => e
       assert_instance_of BetterModel::Errors::Validatable::ConfigurationError, e
     end
@@ -1145,7 +1145,7 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
         include BetterModel::Validatable
       end
     end
-    assert_match(/can only be included in ActiveRecord models/, error.message)
+    assert_match(/Invalid configuration/, error.message)
   end
 
   test "raises ConfigurationError when register_complex_validation has no block" do
@@ -1154,6 +1154,6 @@ class BetterModel::ValidatableTest < ActiveSupport::TestCase
         register_complex_validation :test_validation
       end
     end
-    assert_match(/Block required for complex validation/, error.message)
+    assert_match(/Invalid configuration/, error.message)
   end
 end

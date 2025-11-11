@@ -202,43 +202,40 @@ end
 
 ### Permission Error Handling
 
-Permissible raises ConfigurationError for invalid configuration with full Sentry-compatible error data:
+> **ℹ️ Version 3.0.0 Compatible**: All error examples use standard Ruby exception patterns with `e.message`. Domain-specific attributes and Sentry helpers have been removed in v3.0.0 for simplicity.
+
+Permissible raises ConfigurationError for invalid configuration during class definition:
 
 ```ruby
 # Missing condition
 begin
   permit :delete
 rescue BetterModel::Errors::Permissible::ConfigurationError => e
-  # Error attributes
-  e.reason        # => "Condition proc or block is required"
-  e.model_class   # => Article
-  e.expected      # => "Proc or block"
-  e.provided      # => nil
+  # Only message available in v3.0.0
+  e.message
+  # => "Condition proc or block is required"
 
-  # Sentry-compatible data
-  e.tags     # => {error_category: 'configuration', module: 'permissible'}
-  e.context  # => {model_class: 'Article'}
-  e.extra    # => {reason: 'Condition proc or block is required', expected: 'Proc or block', provided: nil}
-
-  # Error message
-  e.message  # => "Condition proc or block is required (expected: \"Proc or block\")"
+  # Log or report
+  Rails.logger.error("Permissible configuration error: #{e.message}")
+  Sentry.capture_exception(e)
 end
 
 # Blank permission name
 begin
   permit "", -> { true }
 rescue BetterModel::Errors::Permissible::ConfigurationError => e
-  e.reason   # => "Permission name cannot be blank"
   e.message  # => "Permission name cannot be blank"
+  Rails.logger.error(e.message)
+  Sentry.capture_exception(e)
 end
 
 # Non-callable condition
 begin
   permit :delete, "not a proc"
 rescue BetterModel::Errors::Permissible::ConfigurationError => e
-  e.reason      # => "Condition must respond to call"
-  e.provided    # => "not a proc"
-  e.message     # => "Condition must respond to call (provided: \"not a proc\")"
+  e.message  # => "Condition must respond to call"
+  Rails.logger.error(e.message)
+  Sentry.capture_exception(e)
 end
 ```
 
@@ -252,11 +249,9 @@ article.permit?(:nonexistent_permission)  # => false
 
 ```ruby
 rescue_from BetterModel::Errors::Permissible::ConfigurationError do |error|
-  Sentry.capture_exception(error, {
-    tags: error.tags,
-    contexts: { permissible: error.context },
-    extra: error.extra
-  })
+  Rails.logger.error("Configuration error: #{error.message}")
+  Sentry.capture_exception(error)
+  render json: { error: "Server configuration error" }, status: :internal_server_error
 end
 ```
 

@@ -401,13 +401,13 @@ errors[:first_name]  # => [] (not in step1)
 
 ## Error Handling
 
-Validatable raises specific errors with v3.0.0 Sentry-compatible format. All errors provide attribute access, Sentry-compatible data structures, and detailed context.
+> **ℹ️ Version 3.0.0 Compatible**: All error examples use standard Ruby exception patterns with `e.message`. Domain-specific attributes and Sentry helpers have been removed in v3.0.0 for simplicity.
+
+Validatable raises specific errors for different failure scenarios. All errors provide helpful error messages via `.message`.
 
 ### NotEnabledError
 
 Raised when Validatable methods are called but the module is not enabled.
-
-**Required parameters:** `model_class:`
 
 **Example:**
 
@@ -421,20 +421,13 @@ article = Article.new
 begin
   article.validate_group(:step1)
 rescue BetterModel::Errors::Validatable::NotEnabledError => e
-  # Attribute access
-  e.model_class  # => Article
+  # Only message available in v3.0.0
+  e.message
+  # => "Validatable is not enabled for Article"
 
-  # Sentry-compatible data
-  e.tags         # => {error_category: 'not_enabled', module: 'validatable'}
-  e.context      # => {model_class: 'Article'}
-  e.extra        # => {}
-
-  # Sentry integration
-  Sentry.capture_exception(e) do |scope|
-    scope.set_context("error_details", e.context)
-    scope.set_tags(e.tags)
-    scope.set_extras(e.extra)
-  end
+  # Log or report
+  Rails.logger.error("Validatable not enabled: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
 
@@ -468,14 +461,8 @@ class RegistrationController < ApplicationController
         render :step1
       end
     rescue BetterModel::Errors::Validatable::NotEnabledError => e
-      Rails.logger.error "Validatable not configured: #{e.message}"
-
-      # Report to Sentry
-      Sentry.capture_exception(e) do |scope|
-        scope.set_context("error_details", e.context)
-        scope.set_tags(e.tags)
-        scope.set_extras(e.extra)
-      end
+      Rails.logger.error("Validatable error: #{e.message}")
+      Sentry.capture_exception(e)
 
       # Fall back to standard validation
       if @user.valid?
@@ -492,8 +479,6 @@ end
 
 Raised when there are configuration issues during class definition.
 
-**Required parameters:** `message:`, **Optional:** `model_class:`, `validation_name:`
-
 #### Scenario 1: Non-ActiveRecord Model
 
 ```ruby
@@ -505,14 +490,13 @@ end
 begin
   # Configuration happens at class load time
 rescue BetterModel::Errors::Validatable::ConfigurationError => e
-  # Attribute access
-  e.message       # => "BetterModel::Validatable can only be included in ActiveRecord models"
-  e.model_class   # => PlainRubyClass
+  # Only message available in v3.0.0
+  e.message
+  # => "BetterModel::Validatable can only be included in ActiveRecord models"
 
-  # Sentry-compatible data
-  e.tags          # => {error_category: 'configuration_error', module: 'validatable'}
-  e.context       # => {model_class: 'PlainRubyClass'}
-  e.extra         # => {message: "BetterModel::Validatable can only be included in ActiveRecord models"}
+  # Log or report
+  Rails.logger.error("Configuration error: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
 
@@ -531,15 +515,13 @@ end
 begin
   # Configuration happens at class load time
 rescue BetterModel::Errors::Validatable::ConfigurationError => e
-  # Attribute access
-  e.message           # => "Block required for complex validation"
-  e.validation_name   # => :valid_pricing
-  e.model_class       # => Product
+  # Only message available in v3.0.0
+  e.message
+  # => "Block required for complex validation: valid_pricing"
 
-  # Sentry-compatible data
-  e.tags              # => {error_category: 'configuration_error', module: 'validatable', validation_name: 'valid_pricing'}
-  e.context           # => {model_class: 'Product'}
-  e.extra             # => {message: "Block required for complex validation", validation_name: :valid_pricing}
+  # Log or report
+  Rails.logger.error("Configuration error: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
 
@@ -659,13 +641,15 @@ class ApiController < ApplicationController
 
   rescue BetterModel::Errors::Validatable::NotEnabledError => e
     # Validatable not configured - fall back to standard validation
-    Rails.logger.warn "Validatable not enabled for #{@model.class.name}: #{e.message}"
+    Rails.logger.warn("Validatable not enabled: #{e.message}")
+    Sentry.capture_exception(e)
     validate_fully
 
   rescue ArgumentError => e
     # Configuration or parameter error
     if e.message.include?("Unknown complex validation")
-      Rails.logger.error "Invalid validation configuration: #{e.message}"
+      Rails.logger.error("Invalid validation configuration: #{e.message}")
+      Sentry.capture_exception(e)
       render json: { error: "Server configuration error" }, status: :internal_server_error
     else
       raise  # Re-raise if not a Validatable error
@@ -710,7 +694,8 @@ end
    ```ruby
    begin
      user.validate_group(:step1)
-   rescue BetterModel::Errors::Validatable::NotEnabledError
+   rescue BetterModel::Errors::Validatable::NotEnabledError => e
+     Rails.logger.warn(e.message)
      # Handle gracefully with fallback
      user.valid?
    end
@@ -745,7 +730,8 @@ end
    ```ruby
    rescue BetterModel::Errors::Validatable::NotEnabledError => e
      # Log technical details
-     Rails.logger.error "#{e.class}: #{e.message}"
+     Rails.logger.error("#{e.class}: #{e.message}")
+     Sentry.capture_exception(e)
      # Show user-friendly message
      redirect_to root_path, alert: "Validation feature is not available"
    end
@@ -765,11 +751,11 @@ end
    end
    ```
 
-## Sentry Integration
+## Error Tracking Integration
 
-Validatable errors are designed to work seamlessly with Sentry for error tracking and monitoring.
+All BetterModel errors work with standard error tracking tools like Sentry, Rollbar, etc. Simply capture the exception:
 
-### Basic Integration
+### Basic Sentry Integration
 
 ```ruby
 class RegistrationController < ApplicationController
@@ -784,19 +770,8 @@ class RegistrationController < ApplicationController
         render_errors_for_step(group)
       end
     rescue BetterModel::Errors::Validatable::ValidatableError => e
-      # Automatically capture with full context
-      Sentry.capture_exception(e) do |scope|
-        scope.set_context("error_details", e.context)
-        scope.set_tags(e.tags)
-        scope.set_extras(e.extra)
-
-        # Add user context
-        scope.set_context("user_registration", {
-          step: params[:step],
-          validation_group: group,
-          user_email: @user.email
-        })
-      end
+      # Simple capture - message contains all context
+      Sentry.capture_exception(e)
 
       # Handle gracefully
       flash[:alert] = "Validation feature temporarily unavailable"
@@ -806,143 +781,28 @@ class RegistrationController < ApplicationController
 end
 ```
 
-### Error Grouping
-
-All Validatable errors include consistent tags for Sentry grouping:
-
-```ruby
-# Common tags across all Validatable errors:
-{
-  error_category: 'not_enabled' | 'configuration_error',
-  module: 'validatable'
-}
-
-# Specific tags per error type:
-# NotEnabledError: (no additional tags)
-# ConfigurationError: { validation_name: 'complex_validation_name' } (if applicable)
-```
-
 ### Production Error Handling
 
 ```ruby
 class ApplicationController < ActionController::Base
   rescue_from BetterModel::Errors::Validatable::NotEnabledError do |e|
-    log_and_report_validatable_error(e, "Validatable not enabled")
+    Rails.logger.error("Validatable not enabled: #{e.message}")
+    Sentry.capture_exception(e)
     # Fall back to standard validation
     flash[:warning] = "Using standard validation"
     retry_with_standard_validation
   end
 
   rescue_from BetterModel::Errors::Validatable::ConfigurationError do |e|
-    log_and_report_validatable_error(e, "Validatable configuration error")
+    Rails.logger.error("Validatable configuration error: #{e.message}")
+    Sentry.capture_exception(e)
     render json: { error: "Server configuration error" }, status: :internal_server_error
   end
 
   private
 
-  def log_and_report_validatable_error(exception, message)
-    Rails.logger.error "#{message}: #{exception.message}"
-    Sentry.capture_exception(exception) do |scope|
-      scope.set_context("error_details", exception.context)
-      scope.set_tags(exception.tags)
-      scope.set_extras(exception.extra)
-      scope.set_user(id: current_user&.id)
-      scope.set_level(:error)
-    end
-  end
-
   def retry_with_standard_validation
     # Fallback logic here
-  end
-end
-```
-
-### Monitoring Validation Groups
-
-Track validation group usage and failures:
-
-```ruby
-class User < ApplicationRecord
-  include BetterModel
-
-  validatable do
-    # ... validation configuration
-
-    validation_group :step1, [:email, :password]
-    validation_group :step2, [:first_name, :last_name]
-    validation_group :step3, [:address, :city, :zip_code]
-  end
-
-  def validate_with_tracking(group_name)
-    start_time = Time.current
-
-    begin
-      result = validate_group(group_name)
-
-      # Track successful validation
-      Sentry.add_breadcrumb(
-        category: 'validation',
-        message: "Validation group #{group_name} succeeded",
-        level: 'info',
-        data: {
-          group: group_name,
-          duration: Time.current - start_time,
-          errors_count: errors.count
-        }
-      )
-
-      result
-    rescue BetterModel::Errors::Validatable::NotEnabledError => e
-      # Track configuration issue
-      Sentry.capture_exception(e) do |scope|
-        scope.set_context("error_details", e.context)
-        scope.set_tags(e.tags.merge(validation_group: group_name))
-        scope.set_extras(e.extra.merge(
-          attempted_group: group_name,
-          available_groups: self.class.validation_groups_registry.keys
-        ))
-      end
-      raise
-    end
-  end
-end
-```
-
-### Development vs Production Reporting
-
-Configure different Sentry behavior based on environment:
-
-```ruby
-# config/initializers/validatable_sentry.rb
-if defined?(Sentry)
-  Sentry.configure do |config|
-    # In development, log configuration errors but don't send to Sentry
-    if Rails.env.development?
-      config.before_send = lambda do |event, hint|
-        if hint[:exception].is_a?(BetterModel::Errors::Validatable::ConfigurationError)
-          Rails.logger.error "Validatable Configuration Error: #{hint[:exception].message}"
-          nil # Don't send to Sentry in development
-        else
-          event
-        end
-      end
-    end
-
-    # In production, capture everything
-    if Rails.env.production?
-      config.traces_sample_rate = 0.1
-      config.before_send = lambda do |event, hint|
-        # Add custom context for Validatable errors
-        if hint[:exception].is_a?(BetterModel::Errors::Validatable::ValidatableError)
-          event.contexts[:validatable] = {
-            module: 'validatable',
-            error_type: hint[:exception].class.name,
-            rails_version: Rails.version
-          }
-        end
-        event
-      end
-    end
   end
 end
 ```

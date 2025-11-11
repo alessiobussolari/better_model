@@ -1025,38 +1025,33 @@ end
 
 ## Error Handling
 
-Stateable raises specific errors with v3.0.0 Sentry-compatible format. All errors provide attribute access, Sentry-compatible data structures, and detailed context.
+> **ℹ️ Version 3.0.0 Compatible**: All error examples use standard Ruby exception patterns with `e.message`. Domain-specific attributes and Sentry helpers have been removed in v3.0.0 for simplicity.
+
+Stateable raises specific errors for different state transition failures. All errors provide helpful error messages via `.message`.
 
 ### InvalidTransitionError
 
 Raised when attempting an invalid state transition.
-
-**Required parameters:** `event:`, `from_state:`, `to_state:`, **Optional:** `model_class:`
 
 **Example:**
 ```ruby
 begin
   order.ship!  # But order is still "pending"
 rescue BetterModel::Errors::Stateable::InvalidTransitionError => e
-  # Attribute access
-  e.event        # => :ship
-  e.from_state   # => "pending"
-  e.to_state     # => "shipped"
-  e.model_class  # => Order
+  # Only message available in v3.0.0
+  e.message
+  # => "Invalid transition: cannot transition from 'pending' to 'shipped' via event 'ship'"
 
-  # Sentry-compatible data
-  e.tags         # => {error_category: 'invalid_transition', module: 'stateable', event: 'ship', from_state: 'pending', to_state: 'shipped'}
-  e.context      # => {model_class: 'Order', event: :ship}
-  e.extra        # => {from_state: 'pending', to_state: 'shipped'}
-
-  # Sentry integration
-  Sentry.capture_exception(e) do |scope|
-    scope.set_context("error_details", e.context)
-    scope.set_tags(e.tags)
-    scope.set_extras(e.extra)
-  end
+  # Log or report
+  Rails.logger.warn("Transition error: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
+
+**Common causes:**
+- Attempting transition from wrong state
+- Event not defined for current state
+- Transition not configured in state machine
 
 **Methods that raise:** `<event>!` (transition methods)
 
@@ -1064,31 +1059,25 @@ end
 
 Raised when a transition check condition is not met.
 
-**Required parameters:** `event:`, `check_description:`, **Optional:** `model_class:`
-
 **Example:**
 ```ruby
 begin
   order.pay!  # But payment_method is nil
 rescue BetterModel::Errors::Stateable::CheckFailedError => e
-  # Attribute access
-  e.event               # => :pay
-  e.check_description   # => "method check: payment_method_present?"
-  e.model_class         # => Order
+  # Only message available in v3.0.0
+  e.message
+  # => "Check failed for event 'pay': method check: payment_method_present?"
 
-  # Sentry-compatible data
-  e.tags                # => {error_category: 'check_failed', module: 'stateable', event: 'pay'}
-  e.context             # => {model_class: 'Order', event: :pay}
-  e.extra               # => {check_description: 'method check: payment_method_present?'}
-
-  # Sentry integration
-  Sentry.capture_exception(e) do |scope|
-    scope.set_context("error_details", e.context)
-    scope.set_tags(e.tags)
-    scope.set_extras(e.extra)
-  end
+  # Log or report
+  Rails.logger.warn("Check failed: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
+
+**Common causes:**
+- Check method returns false
+- Check lambda evaluates to falsy value
+- Preconditions not met before transition
 
 **Methods that raise:** `<event>!` (transition methods with checks)
 
@@ -1096,31 +1085,25 @@ end
 
 Raised when a transition validation fails.
 
-**Required parameters:** `event:`, `errors:`, **Optional:** `model_class:`
-
 **Example:**
 ```ruby
 begin
   order.confirm!  # But items array is empty
 rescue BetterModel::Errors::Stateable::ValidationFailedError => e
-  # Attribute access
-  e.event         # => :confirm
-  e.errors        # => ActiveModel::Errors object
-  e.model_class   # => Order
+  # Only message available in v3.0.0
+  e.message
+  # => "Validation failed for event 'confirm': Must have at least one item"
 
-  # Sentry-compatible data
-  e.tags          # => {error_category: 'validation_failed', module: 'stateable', event: 'confirm'}
-  e.context       # => {model_class: 'Order', event: :confirm}
-  e.extra         # => {errors: ['Must have at least one item']}
-
-  # Sentry integration
-  Sentry.capture_exception(e) do |scope|
-    scope.set_context("error_details", e.context)
-    scope.set_tags(e.tags)
-    scope.set_extras(e.extra)
-  end
+  # Log or report
+  Rails.logger.warn("Validation failed: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
+
+**Common causes:**
+- Model validations fail during transition
+- Custom validation block adds errors
+- Business rules not satisfied
 
 **Methods that raise:** `<event>!` (transition methods with validations)
 
@@ -1128,27 +1111,18 @@ end
 
 Raised when Stateable methods are called but the module is not enabled.
 
-**Required parameters:** `model_class:`
-
 **Example:**
 ```ruby
 begin
   order.confirm!  # But stateable not configured
 rescue BetterModel::Errors::Stateable::NotEnabledError => e
-  # Attribute access
-  e.model_class  # => Order
+  # Only message available in v3.0.0
+  e.message
+  # => "Stateable is not enabled for Order"
 
-  # Sentry-compatible data
-  e.tags         # => {error_category: 'not_enabled', module: 'stateable'}
-  e.context      # => {model_class: 'Order'}
-  e.extra        # => {}
-
-  # Sentry integration
-  Sentry.capture_exception(e) do |scope|
-    scope.set_context("error_details", e.context)
-    scope.set_tags(e.tags)
-    scope.set_extras(e.extra)
-  end
+  # Log or report
+  Rails.logger.error("Stateable not enabled: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
 
@@ -1164,11 +1138,14 @@ class OrdersController < ApplicationController
 
     redirect_to @order, notice: "Order confirmed"
   rescue BetterModel::Errors::Stateable::InvalidTransitionError => e
+    Rails.logger.warn("Transition error: #{e.message}")
     redirect_to @order, alert: "Order cannot be confirmed in current state"
   rescue BetterModel::Errors::Stateable::CheckFailedError => e
-    redirect_to @order, alert: "Cannot confirm: #{e.check_description}"
+    Rails.logger.warn("Check failed: #{e.message}")
+    redirect_to @order, alert: e.message
   rescue BetterModel::Errors::Stateable::ValidationFailedError => e
-    redirect_to @order, alert: "Validation failed: #{e.errors.full_messages.join(', ')}"
+    Rails.logger.warn("Validation failed: #{e.message}")
+    redirect_to @order, alert: e.message
   end
 end
 ```
@@ -1181,18 +1158,19 @@ if order.can_confirm?
     order.confirm!(user_id: current_user.id, notes: params[:notes])
     flash[:notice] = "Order confirmed successfully"
   rescue BetterModel::Errors::Stateable::ValidationFailedError => e
-    flash[:alert] = "Validation failed: #{e.errors.full_messages.join(', ')}"
+    Rails.logger.warn(e.message)
+    flash[:alert] = e.message
   end
 else
   flash[:alert] = "Order cannot be confirmed at this time"
 end
 ```
 
-## Sentry Integration
+## Error Tracking Integration
 
-Stateable errors are designed to work seamlessly with Sentry for error tracking and monitoring.
+All BetterModel errors work with standard error tracking tools like Sentry, Rollbar, etc. Simply capture the exception:
 
-### Basic Integration
+### Basic Sentry Integration
 
 ```ruby
 class OrdersController < ApplicationController
@@ -1202,19 +1180,8 @@ class OrdersController < ApplicationController
 
     redirect_to @order, notice: "Order confirmed"
   rescue BetterModel::Errors::Stateable::StateableError => e
-    # Automatically capture with full context
-    Sentry.capture_exception(e) do |scope|
-      scope.set_context("error_details", e.context)
-      scope.set_tags(e.tags)
-      scope.set_extras(e.extra)
-
-      # Add order context
-      scope.set_context("order", {
-        id: @order.id,
-        state: @order.state,
-        customer_id: @order.customer_id
-      })
-    end
+    # Simple capture - message contains all context
+    Sentry.capture_exception(e)
 
     # Handle gracefully
     redirect_to @order, alert: "Unable to confirm order"
@@ -1222,58 +1189,32 @@ class OrdersController < ApplicationController
 end
 ```
 
-### Error Grouping
-
-All Stateable errors include consistent tags for Sentry grouping:
-
-```ruby
-# Common tags across all Stateable errors:
-{
-  error_category: 'invalid_transition' | 'check_failed' | 'validation_failed' | 'not_enabled',
-  module: 'stateable'
-}
-
-# Specific tags per error type:
-# InvalidTransitionError: { event: 'ship', from_state: 'pending', to_state: 'shipped' }
-# CheckFailedError: { event: 'pay' }
-# ValidationFailedError: { event: 'confirm' }
-# NotEnabledError: (no additional tags)
-```
-
 ### Production Error Handling
 
 ```ruby
 class ApplicationController < ActionController::Base
   rescue_from BetterModel::Errors::Stateable::InvalidTransitionError do |e|
-    log_and_report_stateable_error(e, "Invalid state transition")
+    Rails.logger.warn("Invalid transition: #{e.message}")
+    Sentry.capture_exception(e)
     render json: { error: "Cannot perform this action in the current state" }, status: :unprocessable_entity
   end
 
   rescue_from BetterModel::Errors::Stateable::CheckFailedError do |e|
-    log_and_report_stateable_error(e, "Transition check failed")
+    Rails.logger.warn("Check failed: #{e.message}")
+    Sentry.capture_exception(e)
     render json: { error: "Preconditions not met" }, status: :unprocessable_entity
   end
 
   rescue_from BetterModel::Errors::Stateable::ValidationFailedError do |e|
-    log_and_report_stateable_error(e, "Transition validation failed")
-    render json: { error: "Validation failed", details: e.errors.full_messages }, status: :unprocessable_entity
+    Rails.logger.warn("Validation failed: #{e.message}")
+    Sentry.capture_exception(e)
+    render json: { error: e.message }, status: :unprocessable_entity
   end
 
   rescue_from BetterModel::Errors::Stateable::NotEnabledError do |e|
-    log_and_report_stateable_error(e, "Stateable not enabled")
+    Rails.logger.error("Stateable not enabled: #{e.message}")
+    Sentry.capture_exception(e)
     render json: { error: "Feature not available" }, status: :internal_server_error
-  end
-
-  private
-
-  def log_and_report_stateable_error(exception, message)
-    Rails.logger.warn "#{message}: #{exception.message}"
-    Sentry.capture_exception(exception) do |scope|
-      scope.set_context("error_details", exception.context)
-      scope.set_tags(exception.tags)
-      scope.set_extras(exception.extra)
-      scope.set_user(id: current_user&.id)
-    end
   end
 end
 ```

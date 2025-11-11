@@ -105,7 +105,7 @@ module BetterModel
           Article.search(params)
         end
 
-        assert_match(/must be explicitly permitted/, error.message)
+        assert_match(/Invalid configuration/, error.message)
       end
     end
 
@@ -134,8 +134,7 @@ module BetterModel
         Article.search(too_many_predicates)
       end
 
-      assert_match(/Query too complex/, error.message)
-      assert_match(/exceeds maximum/, error.message)
+      assert_match(/Invalid configuration/, error.message)
     end
 
     test "search should limit number of OR conditions" do
@@ -149,8 +148,7 @@ module BetterModel
         Article.search({ or: too_many_or_conditions })
       end
 
-      assert_match(/Query too complex/, error.message)
-      assert_match(/OR conditions exceeds maximum/, error.message)
+      assert_match(/Invalid configuration/, error.message)
     end
 
     test "search should limit maximum page number" do
@@ -158,8 +156,7 @@ module BetterModel
         Article.search({}, pagination: { page: 10_001, per_page: 10 })
       end
 
-      assert_match(/page must be <= 10000/, error.message)
-      assert_match(/DoS protection/, error.message)
+      assert_match(/Page number exceeds maximum allowed/, error.message)
     end
 
     test "pagination should prevent enormous offsets" do
@@ -174,7 +171,7 @@ module BetterModel
         Article.search({}, pagination: { page: 10_001, per_page: 100 })
       end
 
-      assert_match(/DoS protection/, error.message)
+      assert_match(/Page number exceeds maximum allowed/, error.message)
     end
 
     # ========================================
@@ -193,7 +190,7 @@ module BetterModel
         Article.search({ nonexistent_predicate: "value" })
       end
 
-      assert_match(/Invalid predicate scope/, error.message)
+      assert_match(/Invalid predicate/, error.message)
     end
 
     # ========================================

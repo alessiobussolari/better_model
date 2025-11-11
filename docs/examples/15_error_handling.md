@@ -2,6 +2,13 @@
 
 Real-world examples of error handling patterns with BetterModel's error system.
 
+> **⚠️ Note for v3.0+ Users**: This file contains examples that may reference the v2.x Sentry-compatible error system. BetterModel v3.0+ uses simplified standard Ruby exceptions. Key changes:
+> - **Removed**: `error.tags`, `error.context`, `error.extra`, `error.predicate_scope`, etc.
+> - **Use**: Only `error.message` (standard Ruby)
+> - **Sentry**: Use standard `Sentry.capture_exception(e)` (see [Sentry Integration](#sentry-integration))
+>
+> See [CHANGELOG.md](../../CHANGELOG.md) for migration guide and [docs/errors.md](../errors.md) for v3.0+ patterns.
+
 ## Table of Contents
 
 - [Controller Error Handling](#controller-error-handling)
@@ -1728,12 +1735,13 @@ Sentry.init do |config|
       event.request.env = filter_sensitive_env(event.request.env)
     end
 
-    # Add custom tags for BetterModel errors
+    # Add custom tags for BetterModel errors (v3.0+: standard exceptions)
     if hint[:exception].is_a?(BetterModel::Errors::BetterModelError)
       error = hint[:exception]
-      event.tags.merge!(error.tags)
-      event.contexts[:error_details] = error.context
-      event.extra.merge!(error.extra)
+      # Extract module name from error class (e.g., "Searchable")
+      module_name = error.class.name.split("::")[2]
+      event.tags[:better_model_module] = module_name if module_name
+      event.tags[:error_type] = error.class.name.demodulize.underscore
     end
 
     event

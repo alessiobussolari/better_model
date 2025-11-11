@@ -7,25 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.0.0] - 2025-11-09
+## [3.0.0] - 2025-11-11
 
 ### ⚠️ BREAKING CHANGES
 
-#### Error Classes - Sentry-Compatible Data Structures
+#### Error System Simplification
 
-**All error classes now require named parameters instead of simple string messages:**
+**All error classes simplified to standard Ruby exceptions:**
 
-All BetterModel errors have been completely refactored to include rich contextual data compatible with Sentry's error enrichment API. This is a **breaking change** that affects all error handling code.
+All BetterModel errors have been refactored to remove complex Sentry-compatible data structures in favor of simple, idiomatic Ruby exception patterns. This is a **breaking change** for code that accessed error attributes beyond the message.
 
 **Before (v2.x):**
 ```ruby
-raise BetterModel::Errors::Searchable::InvalidPredicateError, "Invalid predicate: #{predicate}"
-raise BetterModel::Errors::Stateable::ConfigurationError, "Unknown transition"
-raise BetterModel::Errors::Validatable::NotEnabledError
-```
-
-**After (v3.0):**
-```ruby
+# Complex error instantiation with named parameters
 raise BetterModel::Errors::Searchable::InvalidPredicateError.new(
   predicate_scope: :title_xxx,
   value: "Rails",
@@ -33,130 +27,142 @@ raise BetterModel::Errors::Searchable::InvalidPredicateError.new(
   model_class: Article
 )
 
-raise BetterModel::Errors::Stateable::ConfigurationError.new(
-  reason: "Unknown transition",
-  model_class: Article
-)
-
-raise BetterModel::Errors::Validatable::NotEnabledError.new(
-  module_name: "Validatable",
-  method_called: "validate_group",
-  model_class: Article
-)
+# Access to structured data
+begin
+  article.search(params)
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
+  e.predicate_scope        # => :title_xxx
+  e.available_predicates   # => [:title_eq, :title_cont, ...]
+  e.tags                   # => {error_category: "invalid_predicate", ...}
+  e.context                # => {model_class: "Article"}
+  e.extra                  # => {predicate_scope: :title_xxx, value: "Rails", ...}
+end
 ```
+
+**After (v3.0):**
+```ruby
+# Simple, idiomatic Ruby exception raising
+raise BetterModel::Errors::Searchable::InvalidPredicateError,
+  "Invalid predicate scope: title_xxx. Available: title_eq, title_cont, ..."
+
+raise BetterModel::Errors::Stateable::ConfigurationError, "Invalid configuration"
+
+raise BetterModel::Errors::Validatable::NotEnabledError, "Module is not enabled"
+
+# Only message attribute available
+begin
+  article.search(params)
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
+  e.message  # => "Invalid predicate scope: title_xxx. Available: title_eq, ..."
+end
+```
+
+**Why this change?**
+
+The v2.x approach added significant complexity for minimal benefit:
+- ✅ **Simpler**: Standard Ruby exception patterns familiar to all developers
+- ✅ **Maintainable**: Reduced codebase complexity (54 lines per error → 1 line)
+- ✅ **Idiomatic**: Follows Ruby/Rails conventions for exception handling
+- ✅ **Compatible**: Works with all monitoring tools (Sentry, Rollbar, etc.) using standard patterns
+- ✅ **Descriptive**: Error messages remain detailed and helpful
 
 **Error Classes Affected (28 total):**
-- **ConfigurationError** (10 modules) - Now requires `reason:`, accepts `model_class:`, `expected:`, `provided:`
-- **NotEnabledError** (4 modules) - Now requires `module_name:`, accepts `method_called:`, `model_class:`
-- **InvalidTransitionError** - Now requires `event:`, `from_state:`, `to_state:`, accepts `model_class:`
-- **CheckFailedError** - Now requires `event:`, accepts `check_description:`, `check_type:`, `current_state:`, `model_class:`
-- **ValidationFailedError** - Now requires `event:`, `errors_object:`, accepts `current_state:`, `target_state:`, `model_class:`
-- **InvalidStateError** - Now requires `state:`, accepts `available_states:`, `model_class:`
-- **InvalidPredicateError** - Now requires `predicate_scope:`, accepts `value:`, `available_predicates:`, `model_class:`
-- **InvalidOrderError** - Now requires `order_scope:`, accepts `available_sorts:`, `model_class:`
-- **InvalidPaginationError** - Now requires `parameter_name:`, accepts `value:`, `valid_range:`, `reason:`
-- **InvalidSecurityError** - Now requires `policy_name:`, accepts `violations:`, `requested_value:`, `model_class:`
-- **AlreadyArchivedError** - Now requires `archived_at:`, accepts `model_class:`, `model_id:`
-- **NotArchivedError** - Now requires `method_called:`, accepts `model_class:`, `model_id:`
 
-### Added
+All errors now use simple string messages:
+- **ConfigurationError** (10 modules) - All modules
+- **NotEnabledError** (4 modules) - Validatable, Stateable, Archivable, Statusable
+- **InvalidTransitionError**, **CheckFailedError**, **ValidationFailedError**
+- **InvalidStateError**, **InvalidPredicateError**, **InvalidOrderError**
+- **InvalidPaginationError**, **InvalidSecurityError**
+- **AlreadyArchivedError**, **NotArchivedError**
+- And 16 more error classes across all modules
 
-#### Sentry-Compatible Error Enrichment
+### Removed
 
-All errors now include three Sentry-compatible data structures:
+#### Sentry-Compatible Error Infrastructure
 
-**`tags`** - Filterable metadata for grouping and searching:
+Removed complex error infrastructure in favor of standard Ruby exceptions:
+
+**Removed attributes:**
+- `tags` - Structured metadata for grouping
+- `context` - High-level structured data
+- `extra` - Detailed debug parameters
+- Domain-specific attributes (e.g., `predicate_scope`, `event`, `state`)
+
+**Removed concerns:**
+- `BetterModel::Errors::Concerns::SentryCompatible` module
+
+**Standard Sentry integration still works:**
 ```ruby
+# v3.0 - Simple and idiomatic
+begin
+  article.search(params)
 rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
-  e.tags # => {error_category: 'invalid_predicate', module: 'searchable', predicate: 'title_xxx'}
-end
-```
+  # Standard Sentry capture (works with all monitoring tools)
+  Sentry.capture_exception(e)
 
-**`context`** - High-level structured metadata:
-```ruby
-rescue BetterModel::Errors::Stateable::InvalidTransitionError => e
-  e.context # => {model_class: 'Article'}
-end
-```
-
-**`extra`** - Detailed debug data with all error-specific parameters:
-```ruby
-rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
-  e.extra # => {predicate_scope: :title_xxx, value: 'Rails', available_predicates: [...]}
-end
-```
-
-**Direct Sentry Integration:**
-```ruby
-rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
-  # Access domain-specific attributes
-  logger.error("Invalid predicate: #{e.predicate_scope}")
-
-  # Sentry integration (when configured)
+  # Or with custom context if needed
   Sentry.capture_exception(e) do |scope|
-    scope.set_context("error_details", e.context)
-    scope.set_tags(e.tags)
-    scope.set_extras(e.extra)
+    scope.set_context("search", { params: params })
+    scope.set_tag("error_category", "search")
   end
 
-  # API error responses with rich data
-  render json: {
-    error: e.message,
-    details: e.extra,
-    available_options: e.available_predicates
-  }, status: :bad_request
+  render json: { error: e.message }, status: :bad_request
 end
 ```
-
-**New Infrastructure:**
-- Added `BetterModel::Errors::Concerns::SentryCompatible` module for shared error enrichment helpers
-- All error base classes now include `context`, `tags`, `extra` attributes
-- All errors expose domain-specific attributes for programmatic access (e.g., `predicate_scope`, `event`, `state`, etc.)
 
 ### Migration Guide
 
-**Update all rescue clauses that rescue BetterModel errors:**
+**For most applications, no changes are needed.** If you only rescue exceptions and use their messages, your code continues to work unchanged.
 
-1. **If you only rescue and re-raise** - No changes needed, errors propagate correctly
-2. **If you inspect error messages** - Update to use new attributes or message format
-3. **If you instantiate errors** - Update to use named parameters (rare, usually only in tests)
+**Action required only if:**
+1. You access error attributes like `.predicate_scope`, `.tags`, `.context`, `.extra`
+2. You instantiate errors with named parameters in tests
 
 **Example migrations:**
 
 ```ruby
-# BEFORE
+# BEFORE (v2.x) - Accessing structured attributes
+begin
+  article.search(params)
+rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
+  logger.error("Invalid predicate: #{e.predicate_scope}")
+  Sentry.capture_exception(e) do |scope|
+    scope.set_tags(e.tags)
+    scope.set_context("error_details", e.context)
+  end
+  render json: {
+    error: e.message,
+    available: e.available_predicates
+  }, status: :bad_request
+end
+
+# AFTER (v3.0) - Message-based handling
 begin
   article.search(params)
 rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
   logger.error("Search error: #{e.message}")
-  render json: {error: e.message}, status: :bad_request
+  Sentry.capture_exception(e)  # Standard capture works
+  render json: { error: e.message }, status: :bad_request
 end
+```
 
-# AFTER (Option 1: Use message - still works)
-begin
-  article.search(params)
-rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
-  logger.error("Search error: #{e.message}")  # Still works
-  render json: {error: e.message}, status: :bad_request
-end
+```ruby
+# Test migrations - if instantiating errors directly
+# BEFORE (v2.x)
+error = BetterModel::Errors::Searchable::ConfigurationError.new(
+  reason: "Invalid configuration",
+  model_class: Article
+)
 
-# AFTER (Option 2: Use rich data - recommended)
-begin
-  article.search(params)
-rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
-  logger.error("Invalid predicate #{e.predicate_scope}: #{e.value}")
-  render json: {
-    error: e.message,
-    predicate: e.predicate_scope,
-    available: e.available_predicates
-  }, status: :bad_request
-end
+# AFTER (v3.0)
+error = BetterModel::Errors::Searchable::ConfigurationError.new("Invalid configuration")
 ```
 
 ### Changed
 - **Version**: Bumped to 3.0.0 for breaking changes in error API
-- **All error classes**: Complete refactoring with Sentry-compatible data structures
-- **Error messages**: Enhanced with more contextual information
+- **All error classes**: Simplified to standard Ruby exceptions
+- **Error messages**: Remain descriptive with contextual information
 
 ## [2.1.1] - 2025-11-09
 
@@ -307,10 +313,10 @@ end
 
 #### Test Suite
 
-- **Total tests**: 751 (+0 from v1.3.0)
+- **Total tests**: 751 (+0 from v2.1.1)
   - Added 14 comprehensive sensitive fields tests
   - Removed ~150 unused variable assignments from test files
-- **Total assertions**: 2392 (+26 from v1.3.0)
+- **Total assertions**: 2392 (+26 from v2.1.1)
 - **Code coverage**: 92.51% (1506/1628 lines)
 - **Pass rate**: 100%
   - 0 failures
@@ -343,73 +349,6 @@ end
 - String predicates override `_present` to handle empty string semantics
 - All configurations remain frozen and thread-safe
 - Zero runtime performance impact from refactoring
-
-## [1.3.0] - 2025-10-31
-
-### Added
-
-#### Taggable - Tag Management System
-- **Three-level redaction system** for protecting sensitive data in version history:
-  - **`:full`**: Complete redaction - all values replaced with `"[REDACTED]"`
-  - **`:partial`**: Pattern-based masking with smart pattern detection
-  - **`:hash`**: SHA256 hashing for value verification without exposure
-- **Pattern detection for partial masking**:
-  - Credit cards: Shows last 4 digits (e.g., `"4532123456789012"` → `"****9012"`)
-  - Emails: Shows first char + domain (e.g., `"user@example.com"` → `"u***@example.com"`)
-  - SSN: Shows last 4 digits (e.g., `"123456789"` → `"***-**-6789"`)
-  - Phone numbers: Shows last 4 digits (e.g., `"5551234567"` → `"***-***-4567"`)
-  - Unknown patterns: Shows character count (e.g., `"random_text_123"` → `"[REDACTED:15chars]"`)
-- **Rollback protection**: Sensitive fields excluded from rollback by default
-  - Override with `allow_sensitive: true` option (not recommended)
-  - Warning: Rolling back sensitive fields will set them to redacted values
-- **Configuration introspection**: `traceable_sensitive_fields` class method
-- **Thread-safe implementation** with frozen configuration
-
-### Changed
-
-#### Documentation
-- **Traceable guide** updated with comprehensive sensitive fields section:
-  - Added "Sensitive Fields" subsection to Configuration
-  - Added redaction levels with practical examples
-  - Added rollback behavior with sensitive fields
-  - Added configuration introspection documentation
-  - Updated Overview with sensitive data protection feature
-  - Updated Table of Contents
-  - Added "Sensitive Data Protection" to Best Practices section
-  - Added guidance table for choosing redaction levels
-  - Updated "Don't track sensitive data" best practice to reference the `sensitive:` option
-- Examples of protecting passwords, PII, tokens, credit cards, and API keys
-- Healthcare, e-commerce, and authentication system examples
-
-### Testing & Quality
-
-#### Test Suite
-- **Total tests**: 751 (+0 from v1.3.0)
-  - Added 14 comprehensive sensitive fields tests
-  - Removed ~150 unused variable assignments from test files
-- **Total assertions**: 2392 (+26 from v1.3.0)
-- **Code coverage**: 92.51% (1506/1628 lines)
-- **Pass rate**: 100%
-  - 0 failures
-  - 0 errors
-  - 0 skips
-  - 0 warnings from project code
-- **Test execution time**: ~7.5s for full test suite
-
-#### Sensitive Fields Test Coverage
-- **Full redaction**: Complete value redaction and nil handling (2 tests)
-- **Hash redaction**: SHA256 hashing with deterministic output (3 tests)
-- **Partial masking**: Pattern detection for credit cards, emails, SSN, phone, unknown (4 tests)
-- **Rollback behavior**: Default skipping and allow_sensitive option (2 tests)
-- **Integration**: Mixed sensitive/normal fields, configuration introspection (2 tests)
-- **Edge cases**: Nil values, empty strings, special characters (1 test)
-
-#### Code Quality
-- **RuboCop**: 100% compliant (0 offenses)
-- Removed 151 unused variable assignments from test files
-- All sensitive field code follows Rails Omakase style guide
-- Thread-safe configuration with frozen objects
-- Comprehensive error handling
 
 ## [1.3.0] - 2025-10-31
 
@@ -742,6 +681,8 @@ end
 - Strong parameters compatible
 - Chainable with standard ActiveRecord methods
 
+[3.0.0]: https://github.com/alessiobussolari/better_model/compare/v2.1.1...v3.0.0
+[2.1.1]: https://github.com/alessiobussolari/better_model/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/alessiobussolari/better_model/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/alessiobussolari/better_model/compare/v1.3.0...v2.0.0
 [1.3.0]: https://github.com/alessiobussolari/better_model/compare/v1.2.0...v1.3.0

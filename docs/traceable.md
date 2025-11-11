@@ -1044,7 +1044,9 @@ end
 
 ### Error Handling
 
-Traceable raises ConfigurationError for invalid configuration with full Sentry-compatible error data:
+> **ℹ️ Version 3.0.0 Compatible**: All error examples use standard Ruby exception patterns with `e.message`. Domain-specific attributes and Sentry helpers have been removed in v3.0.0 for simplicity.
+
+Traceable raises ConfigurationError for invalid configuration during class definition:
 
 ```ruby
 # Missing track configuration
@@ -1053,19 +1055,13 @@ begin
     # No fields specified
   end
 rescue BetterModel::Errors::Traceable::ConfigurationError => e
-  # Error attributes
-  e.reason        # => "At least one field must be tracked"
-  e.model_class   # => Article
-  e.expected      # => "One or more field names"
-  e.provided      # => []
+  # Only message available in v3.0.0
+  e.message
+  # => "At least one field must be tracked"
 
-  # Sentry-compatible data
-  e.tags     # => {error_category: 'configuration', module: 'traceable'}
-  e.context  # => {model_class: 'Article'}
-  e.extra    # => {reason: 'At least one field must be tracked', expected: 'One or more field names', provided: []}
-
-  # Error message
-  e.message  # => "At least one field must be tracked (expected: \"One or more field names\") (provided: [])"
+  # Log or report
+  Rails.logger.error("Traceable configuration error: #{e.message}")
+  Sentry.capture_exception(e)
 end
 
 # Invalid field name
@@ -1074,9 +1070,9 @@ begin
     track :nonexistent_field
   end
 rescue BetterModel::Errors::Traceable::ConfigurationError => e
-  e.reason      # => "Field does not exist in model"
-  e.provided    # => :nonexistent_field
-  e.message     # => "Field does not exist in model (provided: :nonexistent_field)"
+  e.message  # => "Field does not exist in model: nonexistent_field"
+  Rails.logger.error(e.message)
+  Sentry.capture_exception(e)
 end
 ```
 
@@ -1084,11 +1080,9 @@ end
 
 ```ruby
 rescue_from BetterModel::Errors::Traceable::ConfigurationError do |error|
-  Sentry.capture_exception(error, {
-    tags: error.tags,
-    contexts: { traceable: error.context },
-    extra: error.extra
-  })
+  Rails.logger.error("Configuration error: #{error.message}")
+  Sentry.capture_exception(error)
+  render json: { error: "Server configuration error" }, status: :internal_server_error
 end
 ```
 

@@ -1437,13 +1437,13 @@ module BetterModel
     end
 
     test "ConfigurationError can be instantiated with message" do
-      error = BetterModel::Errors::Traceable::ConfigurationError.new(reason: "test message")
+      error = BetterModel::Errors::Traceable::ConfigurationError.new("test message")
       assert_equal "test message", error.message
     end
 
     test "ConfigurationError can be caught as ArgumentError" do
       begin
-        raise BetterModel::Errors::Traceable::ConfigurationError.new(reason: "test")
+        raise BetterModel::Errors::Traceable::ConfigurationError.new("test")
       rescue ArgumentError => e
         assert_instance_of BetterModel::Errors::Traceable::ConfigurationError, e
       end
@@ -1464,7 +1464,7 @@ module BetterModel
           include BetterModel::Traceable
         end
       end
-      assert_match(/can only be included in ActiveRecord models/, error.message)
+      assert_match(/Invalid configuration/, error.message)
     end
   end
 end

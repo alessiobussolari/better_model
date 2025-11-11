@@ -800,7 +800,9 @@ end
 
 ### Error Handling
 
-Taggable raises ConfigurationError for invalid configuration with full Sentry-compatible error data:
+> **ℹ️ Version 3.0.0 Compatible**: All error examples use standard Ruby exception patterns with `e.message`. Domain-specific attributes and Sentry helpers have been removed in v3.0.0 for simplicity.
+
+Taggable raises ConfigurationError for invalid configuration during class definition:
 
 ```ruby
 # Missing tag field configuration
@@ -809,19 +811,13 @@ begin
     # tag_field not specified
   end
 rescue BetterModel::Errors::Taggable::ConfigurationError => e
-  # Error attributes
-  e.reason        # => "Tag field must be specified"
-  e.model_class   # => Article
-  e.expected      # => "Symbol representing tag column"
-  e.provided      # => nil
+  # Only message available in v3.0.0
+  e.message
+  # => "Tag field must be specified"
 
-  # Sentry-compatible data
-  e.tags     # => {error_category: 'configuration', module: 'taggable'}
-  e.context  # => {model_class: 'Article'}
-  e.extra    # => {reason: 'Tag field must be specified', expected: 'Symbol representing tag column', provided: nil}
-
-  # Error message
-  e.message  # => "Tag field must be specified (expected: \"Symbol representing tag column\")"
+  # Log or report
+  Rails.logger.error("Taggable configuration error: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
 
@@ -829,11 +825,9 @@ end
 
 ```ruby
 rescue_from BetterModel::Errors::Taggable::ConfigurationError do |error|
-  Sentry.capture_exception(error, {
-    tags: error.tags,
-    contexts: { taggable: error.context },
-    extra: error.extra
-  })
+  Rails.logger.error("Configuration error: #{error.message}")
+  Sentry.capture_exception(error)
+  render json: { error: "Server configuration error" }, status: :internal_server_error
 end
 ```
 

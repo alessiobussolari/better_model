@@ -1,117 +1,135 @@
-# Traceable - Comprehensive Audit Trail and Change Tracking
+# Traceable - Audit Trail e Versioning
 
-## Overview
+## Panoramica
 
-**Traceable** is an opt-in audit trail and change tracking system for Rails models that provides complete visibility into your data's history. It automatically records all changes to configured model attributes with full context including what changed, when, who made the change, and why.
+**Versione**: 3.0.0 | **Tipo**: Opt-in
 
-**Key Features**:
-- **Automatic Change Tracking**: Records create, update, and destroy operations
-- **Sensitive Data Protection**: Three-level redaction system (full, partial, hash)
-- **Time Travel**: Reconstruct object state at any point in history
-- **Rollback Support**: Restore records to previous versions
-- **User Attribution**: Track who made each change (`updated_by_id`)
-- **Change Context**: Optional reason field for change explanations (`updated_reason`)
-- **Rich Query API**: Find records by user changes, time ranges, or field transitions
-- **Flexible Storage**: Per-model tables, shared tables, or custom table names
-- **Database Optimized**: PostgreSQL JSONB, MySQL JSON, SQLite text support
-- **Thread-Safe**: Immutable configuration and safe for concurrent requests
+Traceable fornisce un sistema completo di audit trail per tracciare tutte le modifiche ai record con informazioni su cosa è cambiato, quando, chi ha fatto il cambiamento e perché.
 
-**When to Use Traceable**:
-- Content management systems requiring revision history
-- Compliance and regulatory requirements (HIPAA, GDPR, SOX)
-- Financial systems tracking transaction changes
-- Document approval workflows
-- Multi-tenant applications with audit requirements
-- E-commerce order status tracking
-- HR systems managing employee record changes
-- Feature flag management with change history
-- Any system requiring "who changed what and when"
+**Caratteristiche principali**:
+- Tracking automatico di create/update/destroy
+- Protezione dati sensibili (3 livelli di redazione)
+- Time travel: ricostruire stato passato
+- Rollback: ripristinare versioni precedenti
+- User attribution e change context
+- Query API per trovare record per cambiamenti
+- Storage flessibile (per-model, shared, custom tables)
+- Thread-safe
 
-## Basic Concepts
+**Opt-in**: Traceable NON è attivo di default. Deve essere esplicitamente abilitato.
 
-### Opt-In Activation
+## Setup Database
 
-Traceable is **not active by default**. You must explicitly enable it:
+### 1. Tabella Versions Base
 
+**Cosa fa**: Crea la tabella per memorizzare le versioni dei record.
+
+**Quando usarlo**: Prima di usare Traceable, serve una migration per creare la tabella versions.
+
+**Esempio**:
 ```ruby
-class Article < ApplicationRecord
-  include BetterModel
-
-  # Enable Traceable
-  traceable do
-    track :status, :title, :content, :published_at
-  end
-end
-```
-
-### What Gets Tracked
-
-Only explicitly specified fields are tracked:
-- Changes to tracked fields create version records
-- Untracked fields don't create versions
-- `id`, `created_at`, `updated_at` are automatically excluded
-- Foreign keys can be tracked if explicitly specified
-
-### Version Record Anatomy
-
-Each change creates a version record containing:
-
-```ruby
-version.item_type        # Polymorphic type ("Article")
-version.item_id          # Record ID (123)
-version.event            # "created", "updated", or "destroyed"
-version.object_changes   # JSON hash of field changes
-version.updated_by_id    # User who made the change
-version.updated_reason   # Why the change was made
-version.created_at       # When the version was created
-```
-
-### Database Schema
-
-Versions are stored in dedicated tables with this structure:
-
-```ruby
+# migration
 create_table :article_versions do |t|
-  t.string :item_type, null: false      # Polymorphic type
-  t.bigint :item_id, null: false        # Polymorphic ID
-  t.string :event                        # created/updated/destroyed
-  t.json :object_changes                 # Field changes (use jsonb for PostgreSQL)
-  t.bigint :updated_by_id               # User attribution
-  t.string :updated_reason              # Change context
-  t.timestamps                           # Version timestamps
+  t.string :item_type, null: false
+  t.bigint :item_id, null: false
+  t.string :event
+  t.jsonb :object_changes  # use jsonb per PostgreSQL
+  t.bigint :updated_by_id
+  t.string :updated_reason
+  t.timestamps
 end
 
 add_index :article_versions, [:item_type, :item_id]
 add_index :article_versions, :updated_by_id
 add_index :article_versions, :created_at
+add_index :article_versions, :object_changes, using: :gin  # PostgreSQL
 ```
 
-**Important**: Use `item_type` and `item_id` (NOT `trackable_type`/`trackable_id` or `whodunnit`)
+### 2. Shared Table per Tutti i Models
 
-## Configuration
+**Cosa fa**: Crea una singola tabella condivisa per tracciare versioni di multipli models.
 
-### Basic Configuration
+**Quando usarlo**: Quando vuoi centralizzare l'audit trail invece di creare una tabella per ogni model.
 
-Enable Traceable and specify tracked fields:
+**Esempio**:
+```ruby
+# migration
+create_table :better_model_versions do |t|
+  t.string :item_type, null: false
+  t.bigint :item_id, null: false
+  t.string :event
+  t.jsonb :object_changes
+  t.bigint :updated_by_id
+  t.string :updated_reason
+  t.timestamps
+end
 
+add_index :better_model_versions, [:item_type, :item_id]
+add_index :better_model_versions, :updated_by_id
+add_index :better_model_versions, :created_at
+```
+
+## Configurazione Base
+
+### 3. Abilitare Traceable
+
+**Cosa fa**: Attiva il tracking delle modifiche su campi specifici del model.
+
+**Quando usarlo**: Quando vuoi tracciare la storia delle modifiche ai dati del model.
+
+**Esempio**:
 ```ruby
 class Article < ApplicationRecord
   include BetterModel
 
   traceable do
-    track :status, :title, :content, :published_at, :featured
+    track :status, :title, :content, :published_at
+  end
+end
+
+# Uso
+article = Article.create!(title: "Hello", status: "draft")
+article.update!(status: "published")
+
+article.versions.count  # => 2
+article.versions.last.event  # => "updated"
+article.versions.last.object_changes
+# => {"status" => ["draft", "published"]}
+```
+
+### 4. Custom Table Name
+
+**Cosa fa**: Specifica un nome custom per la tabella versions invece del default.
+
+**Quando usarlo**: Quando vuoi usare naming convention specifiche o shared tables.
+
+**Esempio**:
+```ruby
+class Article < ApplicationRecord
+  traceable do
+    versions_table :content_audit_trail  # custom name
+    track :status, :title
+  end
+end
+
+# O shared table
+class BlogPost < ApplicationRecord
+  traceable do
+    versions_table :better_model_versions  # shared
+    track :content, :published
   end
 end
 ```
 
-### Sensitive Data Protection
+## Protezione Dati Sensibili
 
-Protect sensitive information in version history using three redaction levels:
+### 5. Redazione Completa (:full)
 
-#### Level 1: Full Redaction (`:full`)
+**Cosa fa**: Sostituisce completamente i valori con `[REDACTED]` nelle versioni.
 
-Complete redaction - all values replaced with `"[REDACTED]"`:
+**Quando usarlo**: Per password, chiavi di cifratura, secrets che non devono mai apparire nei log.
 
+**Esempio**:
 ```ruby
 class User < ApplicationRecord
   traceable do
@@ -121,39 +139,56 @@ class User < ApplicationRecord
   end
 end
 
-# Stored as: {"password_digest" => ["[REDACTED]", "[REDACTED]"]}
+user = User.create!(
+  email: "user@example.com",
+  password: "secret123"
+)
+
+version = user.versions.last
+version.object_changes
+# => {"password_digest" => ["[REDACTED]", "[REDACTED]"]}
 ```
 
-**Use for**: Passwords, encryption keys, security secrets
+### 6. Redazione Parziale (:partial)
 
-#### Level 2: Partial Redaction (`:partial`)
+**Cosa fa**: Maschera parzialmente i dati mostrando solo pattern riconoscibili.
 
-Pattern-based masking showing partial data:
+**Quando usarlo**: Per credit card, SSN, email, phone dove serve vedere gli ultimi digit o pattern.
 
+**Esempio**:
 ```ruby
 class User < ApplicationRecord
   traceable do
-    track :credit_card, sensitive: :partial   # "4532123456789012" → "****9012"
-    track :ssn, sensitive: :partial           # "123456789" → "***-**-6789"
-    track :email, sensitive: :partial         # "user@example.com" → "u***@example.com"
-    track :phone, sensitive: :partial         # "5551234567" → "***-***-4567"
+    track :credit_card, sensitive: :partial
+    track :ssn, sensitive: :partial
+    track :email, sensitive: :partial
+    track :phone, sensitive: :partial
   end
 end
+
+user.update!(
+  credit_card: "4532123456789012",
+  ssn: "123456789",
+  email: "user@example.com",
+  phone: "5551234567"
+)
+
+version.object_changes
+# => {
+#   "credit_card" => [nil, "****9012"],
+#   "ssn" => [nil, "***-**-6789"],
+#   "email" => [nil, "u***@example.com"],
+#   "phone" => [nil, "***-***-4567"]
+# }
 ```
 
-**Supported patterns**:
-- Credit cards: Shows last 4 digits
-- SSN: Shows last 4 digits with formatting
-- Email: Shows first character + domain
-- Phone: Shows last 4 digits with formatting
-- Unknown: Shows character count
+### 7. Redazione Hash (:hash)
 
-**Use for**: Credit cards, SSN, phone numbers, partial PII
+**Cosa fa**: Memorizza un hash SHA256 invece del valore reale.
 
-#### Level 3: Hash Redaction (`:hash`)
+**Quando usarlo**: Per API tokens, session IDs dove serve verificare se è cambiato senza vedere il valore.
 
-SHA256 cryptographic hashing:
-
+**Esempio**:
 ```ruby
 class User < ApplicationRecord
   traceable do
@@ -162,76 +197,48 @@ class User < ApplicationRecord
   end
 end
 
-# Stored as: "sha256:a1b2c3d4..."
+user.update!(api_token: "secret_token_abc123")
+
+version.object_changes
+# => {"api_token" => [nil, "sha256:a1b2c3d4..."]}
+
+# Puoi verificare se è cambiato confrontando gli hash
+# ma non puoi recuperare il valore originale
 ```
 
-**Benefits**:
-- Verify if value changed without seeing actual value
-- Deterministic (same input = same hash)
-- One-way (cannot recover original)
+## Metodi Instance - Visualizzazione
 
-**Use for**: API tokens, session IDs, verification codes
+### 8. Visualizzare Tutte le Versioni
 
-### Custom Table Names
+**Cosa fa**: Restituisce array di tutte le versioni del record (newest first).
 
-Override the default table naming:
+**Quando usarlo**: Per mostrare la storia completa delle modifiche a un record.
 
-```ruby
-class Article < ApplicationRecord
-  traceable do
-    versions_table :article_audit_trail  # Custom name
-    track :status, :title
-  end
-end
-
-# Or use a shared table across models
-class BlogPost < ApplicationRecord
-  traceable do
-    versions_table :better_model_versions  # Shared table
-    track :content, :published
-  end
-end
-```
-
-### Configuration Introspection
-
-Check sensitive field configuration:
-
-```ruby
-User.traceable_sensitive_fields
-# => {password_digest: :full, ssn: :partial, api_token: :hash}
-
-User.traceable_enabled?
-# => true
-```
-
-## Instance Methods
-
-### versions
-
-Returns all versions for the record (newest first):
-
+**Esempio**:
 ```ruby
 article = Article.find(1)
-article.versions
-# => [#<ArticleVersion>, #<ArticleVersion>, ...]
+article.versions  # => [#<ArticleVersion>, ...]
 
-article.versions.count
-# => 5
+article.versions.each do |v|
+  puts "#{v.event} at #{v.created_at}"
+  puts "By: #{v.updated_by_id}"
+  puts "Reason: #{v.updated_reason}"
+  puts "Changes: #{v.object_changes}"
+end
 
-# Access specific version
-version = article.versions.first
-version.event          # => "updated"
-version.created_at     # => 2025-01-15 14:30:00
-version.updated_by_id  # => 123
-version.updated_reason # => "Fixed typo"
-version.object_changes # => {"title" => ["Old", "New"]}
+# Accesso a versione specifica
+latest = article.versions.first
+latest.event          # => "updated"
+latest.object_changes # => {"title" => ["Old", "New"]}
 ```
 
-### changes_for(field)
+### 9. Storia di un Campo Specifico
 
-Get change history for a specific field:
+**Cosa fa**: Mostra tutti i cambiamenti di un singolo campo nel tempo.
 
+**Quando usarlo**: Quando ti interessa solo la storia di un campo specifico, non tutte le modifiche.
+
+**Esempio**:
 ```ruby
 article.changes_for(:status)
 # => [
@@ -251,74 +258,99 @@ article.changes_for(:status)
 #   }
 # ]
 
-# Check if field was ever changed
-article.changes_for(:featured).any?
-# => true
+# Check se campo è mai stato cambiato
+article.changes_for(:featured).any?  # => true
 ```
 
-### audit_trail
+### 10. Audit Trail Completo
 
-Get formatted complete history:
+**Cosa fa**: Restituisce array formattato con tutti gli eventi e cambiamenti.
 
+**Quando usarlo**: Per mostrare una timeline completa delle modifiche in UI/API.
+
+**Esempio**:
 ```ruby
 article.audit_trail
 # => [
 #   {
 #     event: "updated",
-#     changes: {"status" => ["draft", "published"], "title" => ["Old", "New"]},
+#     changes: {"status" => ["draft", "published"]},
 #     at: 2025-01-15 14:30:00,
 #     by: 123,
 #     reason: "Ready for publication"
 #   },
 #   {
 #     event: "created",
-#     changes: {"title" => [nil, "Hello World"], "status" => [nil, "draft"]},
+#     changes: {"title" => [nil, "Hello"]},
 #     at: 2025-01-15 10:00:00,
 #     by: 123,
 #     reason: "Initial draft"
 #   }
 # ]
 
-# Group by date for timeline view
-article.audit_trail.group_by { |entry| entry[:at].to_date }
+# Group by date per timeline view
+timeline = article.audit_trail.group_by { |e| e[:at].to_date }
 ```
 
-### as_of(timestamp)
+### 11. JSON con Audit Trail
 
-Time travel - reconstruct object state at any point in history:
+**Cosa fa**: Includere audit trail nelle risposte JSON API.
 
+**Quando usarlo**: Quando vuoi esporre la storia delle modifiche tramite API.
+
+**Esempio**:
 ```ruby
-# View article as it was 3 days ago
-past_article = article.as_of(3.days.ago)
-past_article.title        # => "Old Title"
-past_article.status       # => "draft"
-past_article.readonly?    # => true (can't save)
-
-# View at specific timestamp
-past_article = article.as_of(Time.new(2025, 1, 10, 14, 30, 0))
-
-# Compare past and present
-puts "Title changed from '#{past_article.title}' to '#{article.title}'"
-puts "Status changed from '#{past_article.status}' to '#{article.status}'"
+article.as_json(include_audit_trail: true)
+# => {
+#   "id" => 1,
+#   "title" => "Hello World",
+#   "audit_trail" => [
+#     {
+#       "event" => "updated",
+#       "changes" => {"status" => ["draft", "published"]},
+#       "at" => "2025-01-15T14:30:00Z",
+#       "by" => 123,
+#       "reason" => "Ready for publication"
+#     }
+#   ]
+# }
 ```
 
-**How it works**:
-1. Finds all versions created before the timestamp
-2. Starts with blank object
-3. Applies changes chronologically
-4. Returns readonly object
+## Time Travel e Rollback
 
-**Limitations**:
-- Only tracked fields are reconstructed
-- Associations not loaded (only foreign keys)
-- Object is readonly (use `rollback_to` to restore)
+### 12. Time Travel - Ricostruire Stato Passato
 
-### rollback_to(version, **options)
+**Cosa fa**: Ricostruisce lo stato dell'oggetto a un punto specifico nel tempo.
 
-Restore record to a previous version:
+**Quando usarlo**: Per vedere come era un record in passato o confrontare con lo stato attuale.
 
+**Esempio**:
 ```ruby
-# Find version to restore
+article = Article.find(1)
+
+# Vedi articolo come era 3 giorni fa
+past = article.as_of(3.days.ago)
+past.title        # => "Old Title"
+past.status       # => "draft"
+past.readonly?    # => true (non salvabile)
+
+# A timestamp specifico
+past = article.as_of(Time.new(2025, 1, 10, 14, 30))
+
+# Confronto passato-presente
+puts "Title: #{past.title} → #{article.title}"
+puts "Status: #{past.status} → #{article.status}"
+```
+
+### 13. Rollback a Versione Precedente
+
+**Cosa fa**: Ripristina il record a una versione precedente creando una nuova versione.
+
+**Quando usarlo**: Per annullare modifiche errate o ripristinare uno stato precedente valido.
+
+**Esempio**:
+```ruby
+# Trova versione da ripristinare
 version = article.versions.find_by(event: "published")
 
 # Rollback
@@ -328,267 +360,204 @@ article.rollback_to(
   updated_reason: "Reverted accidental change"
 )
 
-# Rollback by version ID
+# O per ID
 article.rollback_to(
   42,  # version ID
   updated_by_id: current_user.id,
   updated_reason: "Restored previous state"
 )
+```
 
-# Rollback with validation (skipped by default)
+### 14. Rollback con Validazioni
+
+**Cosa fa**: Rollback con validazioni abilitate (skippate di default).
+
+**Quando usarlo**: Quando vuoi assicurarti che il rollback produca un record valido.
+
+**Esempio**:
+```ruby
 article.rollback_to(
   version,
   updated_by_id: current_user.id,
+  updated_reason: "Rollback with validation",
   validate: true  # Run validations
 )
+
+# Se le validazioni falliscono, il rollback non viene eseguito
+if article.rollback_to(version, validate: true, updated_by_id: user.id)
+  puts "Rollback successful"
+else
+  puts "Rollback failed: #{article.errors.full_messages}"
+end
 ```
 
-**Options**:
-- `updated_by_id` (required if field exists): User performing rollback
-- `updated_reason` (optional): Why rolling back
-- `allow_sensitive` (default: false): Include sensitive fields (not recommended)
-- `validate` (default: false): Run validations before save
+### 15. Rollback e Campi Sensitivi
 
-**Behavior**:
-- Applies "before" values from specified version
-- Creates new version to record rollback
-- Skips validations by default
-- Callbacks still triggered
-- Sensitive fields skipped by default (safety)
+**Cosa fa**: Controlla se i campi sensitivi vengono inclusi nel rollback.
 
-**Rollback with Sensitive Fields**:
+**Quando usarlo**: Quando serve decidere se ripristinare anche dati sensitivi (generalmente sconsigliato).
 
+**Esempio**:
 ```ruby
 user = User.create!(
   email: "user@example.com",
-  password_digest: "secret123"  # tracked with sensitive: :full
+  password_digest: "secret123"  # sensitive: :full
 )
 
-user.update!(email: "new@example.com", password_digest: "newsecret")
+user.update!(email: "new@example.com", password_digest: "new")
 
-# Default behavior: sensitive fields NOT rolled back
+# Default: campi sensitivi NON rolled back
 user.rollback_to(user.versions.first, updated_by_id: admin.id)
-user.email          # => "user@example.com" (rolled back)
-user.password_digest # => "newsecret" (NOT rolled back - sensitive)
+user.email           # => "user@example.com" (ripristinato)
+user.password_digest # => "new" (NON ripristinato)
 
-# With allow_sensitive: will set to redacted value
+# Con allow_sensitive: imposta valore redatto
 user.rollback_to(user.versions.first,
   updated_by_id: admin.id,
   allow_sensitive: true
 )
-user.password_digest # => "[REDACTED]" (from stored version)
+user.password_digest # => "[REDACTED]" (dal valore storato)
 ```
 
-**Security Note**: Since sensitive fields are redacted in storage, rolling back with `allow_sensitive: true` will set the field to the redacted value (e.g., `"[REDACTED]"`), not the original value.
+## Query e Class Methods
 
-### as_json(include_audit_trail: true)
+### 16. Query per User - changed_by
 
-Include audit trail in JSON responses:
+**Cosa fa**: Trova tutti i record modificati da un utente specifico.
 
+**Quando usarlo**: Per audit report, tracking attività utente, monitoring modifiche admin.
+
+**Esempio**:
 ```ruby
-article.as_json(include_audit_trail: true)
-# => {
-#   "id" => 1,
-#   "title" => "Hello World",
-#   "status" => "published",
-#   "audit_trail" => [
-#     {
-#       "event" => "updated",
-#       "changes" => {"status" => ["draft", "published"]},
-#       "at" => "2025-01-15T14:30:00Z",
-#       "by" => 123,
-#       "reason" => "Ready for publication"
-#     },
-#     {
-#       "event" => "created",
-#       "changes" => {"title" => [nil, "Hello World"]},
-#       "at" => "2025-01-15T10:00:00Z",
-#       "by" => 123,
-#       "reason" => "Initial draft"
-#     }
-#   ]
-# }
-```
-
-## Class Methods & Query Scopes
-
-### changed_by(user_id)
-
-Find all records modified by a specific user:
-
-```ruby
-# Articles changed by user 123
+# Articoli modificati da user 123
 Article.changed_by(123)
 
-# With additional filters
-Article.changed_by(current_user.id).where(status: "published")
+# Con filtri addizionali
+Article.changed_by(current_user.id)
+       .where(status: "published")
 
-# Count changes by user
+# Count modifiche per user
 Article.changed_by(current_user.id).count
 
-# Find articles modified by admin team
+# Multipli users
 admin_ids = User.where(role: "admin").pluck(:id)
 Article.changed_by(admin_ids)
 ```
 
-### changed_between(start_time, end_time)
+### 17. Query per Range Temporale - changed_between
 
-Find records modified in a time range:
+**Cosa fa**: Trova record modificati in un intervallo di tempo specifico.
 
+**Quando usarlo**: Per report periodici, incident analysis, compliance audits.
+
+**Esempio**:
 ```ruby
-# Articles changed this week
+# Modifiche questa settimana
 Article.changed_between(1.week.ago, Time.current)
 
-# Articles changed in January 2025
+# Modifiche in Gennaio 2025
 Article.changed_between(
   Time.new(2025, 1, 1),
   Time.new(2025, 1, 31).end_of_day
 )
 
-# Combine with user filter
+# Combina con user filter
 Article.changed_by(current_user.id)
        .changed_between(1.month.ago, Time.current)
 
-# Changed today
-Article.changed_between(Time.current.beginning_of_day, Time.current)
+# Oggi
+Article.changed_between(
+  Time.current.beginning_of_day,
+  Time.current
+)
 ```
 
-### field_changed(field)
+### 18. Query per Campo Cambiato
 
-Query builder for field-specific changes:
+**Cosa fa**: Trova record dove un campo specifico è stato modificato.
 
+**Quando usarlo**: Per tracking modifiche a campi specifici (es: prezzo, status, permessi).
+
+**Esempio**:
 ```ruby
-# Find all articles where title changed
+# Tutti gli articoli dove title è cambiato
 Article.field_changed(:title)
 
-# Find articles where status changed to published
-Article.field_changed(:status).where("object_changes->>'status' LIKE '%published%'")
+# Articoli dove status è cambiato a "published"
+Article.field_changed(:status)
+       .where("object_changes->>'status' LIKE '%published%'")
+
+# Con altri filtri
+Article.field_changed(:price)
+       .changed_between(1.week.ago, Time.current)
 ```
 
-### {field}_changed_from(value).to(value)
+### 19. Query Transition Specifica
 
-Dynamic methods for field transitions:
+**Cosa fa**: Trova record con transizioni specifiche di valore per un campo.
 
+**Quando usarlo**: Per tracking workflow specifici (draft→published, pending→approved, etc).
+
+**Esempio**:
 ```ruby
-# For each tracked field, Traceable generates dynamic methods:
-traceable do
-  track :status, :title, :priority
+class Article < ApplicationRecord
+  traceable do
+    track :status, :title, :priority
+  end
 end
 
-# Generated methods:
+# Genera automaticamente:
 Article.status_changed_from("draft").to("published")
 Article.title_changed_from(nil).to("Hello World")
 Article.priority_changed_from(1).to(5)
 
-# Find status transitions
-Article.status_changed_from("draft").to("published")
-# => [#<Article id: 1>, #<Article id: 5>, ...]
+# Uso pratico
+published_articles = Article.status_changed_from("draft")
+                            .to("published")
 
-# Find any title changes from nil (initial creation)
-Article.title_changed_from(nil).to("Hello")
-
-# Combine with other scopes
+# Combina con altri scopes
 Article.status_changed_from("draft").to("published")
        .changed_by(current_user.id)
        .changed_between(1.week.ago, Time.current)
 ```
 
-## Table Naming Strategies
+### 20. Combinare Query Multiple
 
-### Per-Model Tables (Default)
+**Cosa fa**: Combina filtri multipli per query complesse di audit.
 
-Each model gets its own versions table:
+**Quando usarlo**: Per report dettagliati, compliance audits, incident analysis.
 
+**Esempio**:
 ```ruby
-class Article < ApplicationRecord
-  traceable do
-    track :status, :title
-  end
-end
-# Uses table: article_versions
+# Report complesso
+Article.changed_by(admin.id)
+       .changed_between(1.month.ago, Time.current)
+       .status_changed_from("draft").to("published")
+       .includes(:versions)
 
-class BlogPost < ApplicationRecord
-  traceable do
-    track :content
-  end
-end
-# Uses table: blog_post_versions
+# Post-incident analysis
+incident_time = (incident.started_at)..(incident.ended_at)
+suspicious_changes = Article
+  .changed_between(incident_time.begin, incident_time.end)
+  .field_changed(:price)
+  .where("(object_changes->>'price')::jsonb->1 > ?", 1000)
 ```
 
-**Pros**:
-- Clear separation per model
-- Easier to partition/archive
-- Independent schema evolution
+## User Attribution
 
-**Cons**:
-- More tables to manage
-- Potential duplication
+### 21. Impostare updated_by_id Automaticamente
 
-### Shared Versions Table
+**Cosa fa**: Imposta automaticamente chi ha fatto la modifica tramite callback.
 
-Use a single table for all models:
+**Quando usarlo**: Per evitare di passare sempre manualmente updated_by_id.
 
+**Esempio**:
 ```ruby
 class Article < ApplicationRecord
   traceable do
-    versions_table :better_model_versions
-    track :status, :title
-  end
-end
-
-class BlogPost < ApplicationRecord
-  traceable do
-    versions_table :better_model_versions
-    track :content
-  end
-end
-```
-
-**Pros**:
-- Single audit trail across models
-- Centralized change history
-- Cross-model queries easier
-
-**Cons**:
-- Large table growth
-- Requires good indexing strategy
-
-### Custom Table Names
-
-Domain-specific naming:
-
-```ruby
-class Article < ApplicationRecord
-  traceable do
-    versions_table :content_audit_trail
-    track :status, :title
-  end
-end
-
-class Document < ApplicationRecord
-  traceable do
-    versions_table :document_history
-    track :version, :approved
-  end
-end
-```
-
-## Real-World Examples
-
-### Example 1: Content Management System - Article Versioning
-
-Track article changes with full editorial history:
-
-```ruby
-# app/models/article.rb
-class Article < ApplicationRecord
-  belongs_to :author, class_name: "User"
-
-  traceable do
-    track :title, :content, :status, :published_at, :featured, :excerpt
+    track :status, :title, :content
   end
 
-  # Automatically set updated_by_id from current user
   before_save :set_updated_by
 
   private
@@ -598,218 +567,185 @@ class Article < ApplicationRecord
   end
 end
 
-# app/controllers/articles_controller.rb
+# Setup Current.user (application_controller.rb)
+class ApplicationController < ActionController::Base
+  before_action :set_current_user
+
+  private
+
+  def set_current_user
+    Current.user = current_user
+  end
+end
+
+# Ora tutti gli update trackano automaticamente
+article.update!(status: "published")
+# Crea version con updated_by_id = Current.user.id
+```
+
+### 22. Passare updated_reason Esplicitamente
+
+**Cosa fa**: Specifica il motivo della modifica per audit trail migliore.
+
+**Quando usarlo**: Sempre, specialmente per compliance e regulatory requirements.
+
+**Esempio**:
+```ruby
+# In controller
+article.update!(
+  status: "published",
+  updated_by_id: current_user.id,
+  updated_reason: "Approved after editorial review"
+)
+
+# Con form input
+def article_params_with_metadata
+  params.require(:article)
+        .permit(:title, :content, :status)
+        .merge(
+          updated_by_id: current_user.id,
+          updated_reason: params[:change_reason] || "Article updated"
+        )
+end
+
+# Service object
+class OrderProcessor
+  def ship_order(order, tracking:, user:)
+    order.update!(
+      status: "shipped",
+      tracking_number: tracking,
+      updated_by_id: user.id,
+      updated_reason: "Order shipped with tracking #{tracking}"
+    )
+  end
+end
+```
+
+### 23. Validazione Obbligatoria User e Reason
+
+**Cosa fa**: Forza la presenza di updated_by_id e updated_reason per compliance.
+
+**Quando usarlo**: In contesti regulated (healthcare, finance) dove l'audit trail è obbligatorio.
+
+**Esempio**:
+```ruby
+class MedicalRecord < ApplicationRecord
+  traceable do
+    track :diagnosis, :treatment_plan, :medications
+  end
+
+  # Compliance: obbligatorio per update
+  validates :updated_by_id, presence: true, on: :update
+  validates :updated_reason, presence: true, on: :update
+end
+
+# In controller
+def update
+  unless params[:update_reason].present?
+    return render json: {
+      error: "Update reason required for compliance"
+    }, status: :unprocessable_entity
+  end
+
+  @record.update!(
+    medical_record_params.merge(
+      updated_by_id: current_user.id,
+      updated_reason: params[:update_reason]
+    )
+  )
+end
+```
+
+## Casi d'Uso Real-World
+
+### 24. CMS - Article Versioning
+
+**Cosa fa**: Sistema completo di versioning per CMS con rollback e audit log.
+
+**Quando usarlo**: Content management systems che richiedono storia editoriale completa.
+
+**Esempio**:
+```ruby
+class Article < ApplicationRecord
+  traceable do
+    track :title, :content, :status, :published_at, :excerpt
+  end
+
+  before_save :set_updated_by
+  def set_updated_by
+    self.updated_by_id = Current.user&.id if Current.user
+  end
+end
+
+# Controller
 class ArticlesController < ApplicationController
   def update
     if @article.update(article_params.merge(
       updated_by_id: current_user.id,
-      updated_reason: params[:change_reason] || "Updated article"
+      updated_reason: params[:change_reason]
     ))
-      redirect_to @article, notice: "Article updated successfully"
-    else
-      render :edit
+      redirect_to @article, notice: "Article updated"
     end
-  end
-
-  def audit_log
-    @changes = @article.audit_trail.group_by { |change| change[:at].to_date }
   end
 
   def revert
     version = @article.versions.find(params[:version_id])
-
-    if @article.rollback_to(version,
-      updated_by_id: current_user.id,
-      updated_reason: "Reverted to version from #{version.created_at}"
-    )
-      redirect_to @article, notice: "Article reverted successfully"
-    else
-      redirect_to article_audit_log_path(@article), alert: "Revert failed"
-    end
+    @article.rollback_to(version, updated_by_id: current_user.id)
+    redirect_to @article, notice: "Reverted"
   end
 end
-
-# app/views/articles/audit_log.html.erb
-<h2>Audit Log for "<%= @article.title %>"</h2>
-
-<% @changes.each do |date, day_changes| %>
-  <div class="audit-day">
-    <h3><%= date.strftime("%B %d, %Y") %></h3>
-
-    <% day_changes.each do |change| %>
-      <div class="audit-entry">
-        <div class="audit-header">
-          <%= change[:event].titleize %> by <%= User.find(change[:by]).name %>
-          at <%= change[:at].strftime("%I:%M %p") %>
-        </div>
-
-        <% if change[:reason].present? %>
-          <div class="audit-reason"><%= change[:reason] %></div>
-        <% end %>
-
-        <div class="audit-changes">
-          <% change[:changes].each do |field, (old_val, new_val)| %>
-            <div class="field-change">
-              <strong><%= field.titleize %>:</strong>
-              <span class="old-value"><%= old_val || "(empty)" %></span>
-              →
-              <span class="new-value"><%= new_val %></span>
-            </div>
-          <% end %>
-        </div>
-
-        <%= link_to "Revert to this version",
-                    revert_article_path(@article, version_id: change[:version_id]),
-                    method: :post,
-                    data: { confirm: "Revert to this version?" },
-                    class: "btn btn-secondary" %>
-      </div>
-    <% end %>
-  </div>
-<% end %>
-
-# Usage Example:
-article = Article.create!(
-  title: "Introduction to Rails",
-  content: "Rails is a web framework...",
-  status: "draft",
-  author: current_user,
-  updated_by_id: current_user.id,
-  updated_reason: "Initial draft"
-)
-
-article.update!(
-  status: "published",
-  published_at: Time.current,
-  updated_by_id: current_user.id,
-  updated_reason: "Ready for publication"
-)
-
-# View complete history
-article.audit_trail
-# View title changes only
-article.changes_for(:title)
 ```
 
-### Example 2: E-commerce Order Tracking
+### 25. E-commerce - Order Tracking
 
-Track order status and modifications with admin oversight:
+**Cosa fa**: Traccia tutte le modifiche agli ordini con audit trail per admin.
 
+**Quando usarlo**: E-commerce dove serve tracciare status, shipping, modifiche admin.
+
+**Esempio**:
 ```ruby
-# app/models/order.rb
 class Order < ApplicationRecord
-  belongs_to :customer, class_name: "User"
-
   traceable do
     versions_table :order_audit_trail
-    track :status, :shipping_address, :total_amount, :payment_status, :notes
+    track :status, :shipping_address, :total_amount
   end
 
-  # Track status transitions
+  # Scope personalizzati
   def self.shipped_today
-    changed_between(Time.current.beginning_of_day, Time.current.end_of_day)
+    changed_between(Time.current.beginning_of_day, Time.current)
       .status_changed_from("processing").to("shipped")
   end
 
-  # Find orders modified by admin team
   def self.admin_modifications
     admin_ids = User.where(role: "admin").pluck(:id)
     changed_by(admin_ids)
   end
-
-  # Find suspicious price changes
-  def self.price_changes_over(amount)
-    field_changed(:total_amount)
-      .joins(:versions)
-      .where("(object_changes->>'total_amount')::jsonb->1 > ?", amount)
-  end
 end
 
-# app/services/order_processor.rb
+# Service
 class OrderProcessor
-  def ship_order(order, tracking_number:, user:)
+  def ship_order(order, tracking:, user:)
     order.update!(
       status: "shipped",
-      tracking_number: tracking_number,
-      shipped_at: Time.current,
+      tracking_number: tracking,
       updated_by_id: user.id,
-      updated_reason: "Order shipped with tracking #{tracking_number}"
+      updated_reason: "Shipped: #{tracking}"
     )
-
-    # Send notification
-    OrderMailer.shipped(order).deliver_later
-  end
-
-  def cancel_order(order, reason:, user:)
-    order.update!(
-      status: "cancelled",
-      cancelled_at: Time.current,
-      updated_by_id: user.id,
-      updated_reason: reason
-    )
-
-    # Log for audit
-    Rails.logger.info "[AUDIT] Order ##{order.id} cancelled by #{user.email}: #{reason}"
-  end
-end
-
-# app/controllers/admin/orders_controller.rb
-class Admin::OrdersController < AdminController
-  def modify
-    @order = Order.find(params[:id])
-
-    if @order.update(order_params.merge(
-      updated_by_id: current_admin.id,
-      updated_reason: params[:modification_reason]
-    ))
-      flash[:notice] = "Order modified. Change logged to audit trail."
-      redirect_to admin_order_path(@order)
-    else
-      render :edit
-    end
-  end
-
-  def audit_report
-    @orders = Order.admin_modifications
-                   .changed_between(params[:start_date], params[:end_date])
-                   .includes(:customer, :versions)
-  end
-end
-
-# Usage:
-order = Order.create!(
-  customer: user,
-  total_amount: 99.99,
-  status: "pending",
-  updated_by_id: user.id,
-  updated_reason: "Order placed"
-)
-
-# Find all orders shipped today
-Order.shipped_today.each do |order|
-  puts "Order ##{order.id} shipped at #{order.shipped_at}"
-end
-
-# Audit admin changes
-Order.admin_modifications.each do |order|
-  puts "Order ##{order.id} modified by admin"
-  order.audit_trail.each do |change|
-    puts "  #{change[:at]}: #{change[:reason]}"
   end
 end
 ```
 
-### Example 3: Document Approval Workflow
+### 26. Document Approval Workflow
 
-Track document lifecycle with approval/rejection history:
+**Cosa fa**: Traccia approval/rejection di documenti con storia completa.
 
+**Quando usarlo**: Workflow di approvazione con multiple revisioni e autorizzazioni.
+
+**Esempio**:
 ```ruby
-# app/models/document.rb
 class Document < ApplicationRecord
-  belongs_to :author, class_name: "User"
-
   traceable do
-    track :status, :approved_at, :rejected_at, :approval_notes, :content_hash
+    track :status, :approved_at, :rejected_at, :approval_notes
   end
 
   validates :updated_by_id, presence: true, on: :update
@@ -819,317 +755,41 @@ class Document < ApplicationRecord
     update!(
       status: "approved",
       approved_at: Time.current,
-      rejection_reason: nil,
       updated_by_id: by.id,
       updated_reason: notes || "Document approved"
     )
   end
 
-  def reject!(by:, reason:)
-    raise ArgumentError, "Rejection reason required" if reason.blank?
-
-    update!(
-      status: "rejected",
-      rejected_at: Time.current,
-      updated_by_id: by.id,
-      updated_reason: reason
-    )
-  end
-
-  def resubmit!(by:, changes_summary:)
-    update!(
-      status: "pending_review",
-      rejected_at: nil,
-      updated_by_id: by.id,
-      updated_reason: "Resubmitted: #{changes_summary}"
-    )
-  end
-
-  # View approval/rejection history
   def approval_history
     changes_for(:status).select do |change|
       ["approved", "rejected"].include?(change[:after])
     end
   end
-
-  # Check if ever approved
-  def was_ever_approved?
-    versions.exists?("object_changes->>'status' LIKE '%approved%'")
-  end
-
-  # Get approval timeline
-  def approval_timeline
-    audit_trail.select { |entry| entry[:changes].key?("status") }
-  end
-end
-
-# app/services/document_approval_service.rb
-class DocumentApprovalService
-  def initialize(document)
-    @document = document
-  end
-
-  def approve(approver:, notes: nil)
-    ActiveRecord::Base.transaction do
-      @document.approve!(by: approver, notes: notes)
-
-      # Notify author
-      DocumentMailer.approved(@document, approver).deliver_later
-
-      # Log for compliance
-      AuditLog.create!(
-        action: "document_approved",
-        document_id: @document.id,
-        user_id: approver.id,
-        details: { notes: notes }
-      )
-    end
-  end
-
-  def reject(rejector:, reason:)
-    ActiveRecord::Base.transaction do
-      @document.reject!(by: rejector, reason: reason)
-
-      # Notify author
-      DocumentMailer.rejected(@document, rejector, reason).deliver_later
-    end
-  end
-end
-
-# app/views/documents/audit.html.erb
-<h2>Approval History</h2>
-
-<div class="timeline">
-  <% @document.approval_timeline.each do |entry| %>
-    <div class="timeline-entry <%= entry[:changes]['status']&.last %>">
-      <div class="timestamp"><%= entry[:at].strftime("%B %d, %Y at %I:%M %p") %></div>
-      <div class="user">by <%= User.find(entry[:by]).name %></div>
-      <div class="status-change">
-        Status: <%= entry[:changes]['status'].first %> →
-        <strong><%= entry[:changes]['status'].last %></strong>
-      </div>
-      <% if entry[:reason].present? %>
-        <div class="reason"><%= entry[:reason] %></div>
-      <% end %>
-    </div>
-  <% end %>
-</div>
-
-# Usage:
-document = Document.create!(
-  title: "Q4 Financial Report",
-  content: "...",
-  author: employee,
-  status: "pending_review",
-  updated_by_id: employee.id,
-  updated_reason: "Submitted for approval"
-)
-
-# Approve
-service = DocumentApprovalService.new(document)
-service.approve(
-  approver: manager,
-  notes: "All figures verified. Approved for publication."
-)
-
-# Later reject revision
-document.reject!(
-  by: manager,
-  reason: "Contains outdated Q3 comparisons. Please update."
-)
-
-# Author resubmits
-document.resubmit!(
-  by: employee,
-  changes_summary: "Updated Q3 comparison data as requested"
-)
-
-# View full approval history
-document.approval_history.each do |change|
-  puts "#{change[:at]}: #{change[:before]} → #{change[:after]}"
-  puts "By: #{User.find(change[:by]).name}"
-  puts "Reason: #{change[:reason]}"
 end
 ```
 
-### Example 4: User Account Management with Sensitive Data
+### 27. Healthcare/Finance Compliance
 
-Track user changes while protecting sensitive information:
+**Cosa fa**: Audit trail obbligatorio per settori regolamentati (HIPAA, SOX).
 
+**Quando usarlo**: Healthcare, finance, ogni contesto regulated con compliance requirements.
+
+**Esempio**:
 ```ruby
-# app/models/user.rb
-class User < ApplicationRecord
-  has_secure_password
-
-  traceable do
-    track :email, :name, :role, :status
-    track :password_digest, sensitive: :full       # Completely redacted
-    track :ssn, sensitive: :partial                # Shows last 4 digits
-    track :api_token, sensitive: :hash             # SHA256 hash
-    track :two_factor_secret, sensitive: :full     # Completely redacted
-  end
-
-  # Audit security-related changes
-  def security_change_log
-    changes_for(:password_digest)
-      .concat(changes_for(:two_factor_secret))
-      .sort_by { |change| change[:at] }
-      .reverse
-  end
-
-  # Check if password was changed recently
-  def password_changed_recently?(days = 90)
-    changes_for(:password_digest)
-      .any? { |change| change[:at] > days.days.ago }
-  end
-
-  # Detect role escalations
-  def role_escalations
-    changes_for(:role).select do |change|
-      escalation?(change[:before], change[:after])
-    end
-  end
-
-  private
-
-  def escalation?(old_role, new_role)
-    role_hierarchy = { "user" => 0, "moderator" => 1, "admin" => 2 }
-    role_hierarchy[new_role] > role_hierarchy[old_role]
-  end
-end
-
-# app/services/user_management_service.rb
-class UserManagementService
-  def change_role(user, new_role:, changed_by:, reason:)
-    old_role = user.role
-
-    user.update!(
-      role: new_role,
-      updated_by_id: changed_by.id,
-      updated_reason: "Role changed: #{reason}"
-    )
-
-    # Alert if privilege escalation
-    if escalation?(old_role, new_role)
-      SecurityMailer.privilege_escalation(
-        user: user,
-        changed_by: changed_by,
-        reason: reason
-      ).deliver_later
-    end
-  end
-
-  def reset_password(user, new_password:, reset_by:)
-    user.update!(
-      password: new_password,
-      updated_by_id: reset_by.id,
-      updated_reason: "Password reset by admin"
-    )
-
-    # Log security event
-    SecurityLog.create!(
-      event: "password_reset",
-      user_id: user.id,
-      admin_id: reset_by.id
-    )
-  end
-
-  private
-
-  def escalation?(old_role, new_role)
-    role_hierarchy = { "user" => 0, "moderator" => 1, "admin" => 2 }
-    role_hierarchy[new_role] > role_hierarchy[old_role]
-  end
-end
-
-# app/controllers/admin/users_controller.rb
-class Admin::UsersController < AdminController
-  def audit
-    @user = User.find(params[:id])
-    @audit_trail = @user.audit_trail
-    @security_changes = @user.security_change_log
-  end
-
-  def role_escalation_report
-    @escalations = User.all.flat_map(&:role_escalations)
-                       .sort_by { |e| e[:at] }
-                       .reverse
-  end
-end
-
-# Usage:
-user = User.create!(
-  email: "john@example.com",
-  name: "John Doe",
-  password: "secure_password",
-  ssn: "123456789",
-  role: "user",
-  updated_by_id: admin.id,
-  updated_reason: "Account created"
-)
-
-# Change role (tracked)
-service = UserManagementService.new
-service.change_role(
-  user,
-  new_role: "admin",
-  changed_by: super_admin,
-  reason: "Promoted to admin role for project management"
-)
-
-# Reset password (tracked but redacted)
-service.reset_password(
-  user,
-  new_password: "new_secure_password",
-  reset_by: admin
-)
-
-# Check version storage (sensitive fields protected)
-version = user.versions.last
-version.object_changes
-# => {
-#   "password_digest" => ["[REDACTED]", "[REDACTED]"],
-#   "role" => ["user", "admin"]
-# }
-
-# View role escalations
-user.role_escalations.each do |escalation|
-  puts "#{escalation[:at]}: #{escalation[:before]} → #{escalation[:after]}"
-  puts "By: #{User.find(escalation[:by]).name}"
-  puts "Reason: #{escalation[:reason]}"
-end
-
-# Check if password changed recently (security audit)
-user.password_changed_recently?(90)  # => true/false
-```
-
-### Example 5: Compliance & Regulatory (Healthcare/Finance)
-
-Mandatory audit trails for regulated industries:
-
-```ruby
-# app/models/medical_record.rb
 class MedicalRecord < ApplicationRecord
-  belongs_to :patient
-  belongs_to :provider, class_name: "User"
-
   traceable do
     versions_table :medical_audit_trail
-    track :diagnosis, :treatment_plan, :medications, :notes, :status
+    track :diagnosis, :treatment_plan, :medications
   end
 
-  # Required for compliance: all changes must have user and reason
   validates :updated_by_id, presence: true, on: :update
   validates :updated_reason, presence: true, on: :update
 
-  # Export audit trail for compliance reporting
+  # Export per compliance
   def compliance_report
     {
       record_id: id,
       patient_id: patient_id,
-      patient_name: patient.full_name,
-      provider_id: provider_id,
-      created_at: created_at.iso8601,
       changes: versions.map do |v|
         {
           timestamp: v.created_at.iso8601,
@@ -1142,1334 +802,177 @@ class MedicalRecord < ApplicationRecord
       end
     }
   end
-
-  # HIPAA audit log format
-  def hipaa_audit_log
-    versions.map do |v|
-      {
-        date_time: v.created_at.iso8601,
-        user_id: v.updated_by_id,
-        action: v.event.upcase,
-        resource: "MedicalRecord##{id}",
-        patient_id: patient_id,
-        reason: v.updated_reason,
-        changes: v.object_changes.keys.join(", ")
-      }
-    end
-  end
 end
-
-# app/services/compliance_reporter.rb
-class ComplianceReporter
-  def generate_audit_report(start_date:, end_date:)
-    records = MedicalRecord.changed_between(start_date, end_date)
-
-    {
-      report_generated_at: Time.current.iso8601,
-      period: {
-        start: start_date.iso8601,
-        end: end_date.iso8601
-      },
-      total_records_modified: records.count,
-      records: records.map(&:compliance_report)
-    }
-  end
-
-  def user_access_log(user_id:, start_date:, end_date:)
-    MedicalRecord.changed_by(user_id)
-                 .changed_between(start_date, end_date)
-                 .includes(:patient, :versions)
-                 .flat_map(&:hipaa_audit_log)
-  end
-end
-
-# app/controllers/medical_records_controller.rb
-class MedicalRecordsController < ApplicationController
-  before_action :require_compliance_approval, only: [:update, :destroy]
-
-  def update
-    @record = MedicalRecord.find(params[:id])
-
-    # Compliance: reason is mandatory
-    unless params[:update_reason].present?
-      return render json: { error: "Update reason required for compliance" },
-                    status: :unprocessable_entity
-    end
-
-    if @record.update(
-      medical_record_params.merge(
-        updated_by_id: current_user.id,
-        updated_reason: params[:update_reason]
-      )
-    )
-      # Log to compliance system
-      ComplianceLog.log_change(@record, current_user)
-
-      render json: @record
-    else
-      render json: { errors: @record.errors }, status: :unprocessable_entity
-    end
-  end
-
-  def audit_trail
-    @record = MedicalRecord.find(params[:id])
-    authorize_audit_access!(@record)
-
-    render json: @record.compliance_report
-  end
-end
-
-# Scheduled compliance job
-# app/jobs/weekly_compliance_report_job.rb
-class WeeklyComplianceReportJob < ApplicationJob
-  queue_as :compliance
-
-  def perform
-    reporter = ComplianceReporter.new
-    report = reporter.generate_audit_report(
-      start_date: 1.week.ago,
-      end_date: Time.current
-    )
-
-    # Send to compliance officer
-    ComplianceMailer.weekly_report(report).deliver_now
-
-    # Archive report
-    ComplianceArchive.create!(
-      period_start: 1.week.ago,
-      period_end: Time.current,
-      data: report.to_json
-    )
-  end
-end
-
-# Usage:
-record = MedicalRecord.create!(
-  patient: patient,
-  provider: doctor,
-  diagnosis: "Type 2 Diabetes",
-  treatment_plan: "Metformin 500mg twice daily",
-  updated_by_id: doctor.id,
-  updated_reason: "Initial diagnosis"
-)
-
-record.update!(
-  treatment_plan: "Metformin 1000mg twice daily",
-  updated_by_id: doctor.id,
-  updated_reason: "Increased dosage due to elevated A1C levels"
-)
-
-# Generate compliance report
-report = record.compliance_report
-# => {
-#   record_id: 123,
-#   patient_id: 456,
-#   changes: [
-#     {
-#       timestamp: "2025-01-15T10:30:00Z",
-#       user_id: 789,
-#       user_name: "Dr. Smith",
-#       reason: "Increased dosage due to elevated A1C levels",
-#       changes: {"treatment_plan" => ["Metformin 500mg...", "Metformin 1000mg..."]}
-#     }
-#   ]
-# }
-
-# Generate user activity log (HIPAA compliance)
-reporter = ComplianceReporter.new
-activity_log = reporter.user_access_log(
-  user_id: doctor.id,
-  start_date: 1.month.ago,
-  end_date: Time.current
-)
 ```
 
-### Example 6: Multi-Tenant SaaS Configuration Management
+### 28. User Account con Dati Sensibili
 
-Track configuration changes across tenants:
+**Cosa fa**: Traccia modifiche a user account proteggendo dati sensibili.
 
+**Quando usarlo**: User management con password, SSN, dati di pagamento da proteggere.
+
+**Esempio**:
 ```ruby
-# app/models/tenant_config.rb
-class TenantConfig < ApplicationRecord
-  belongs_to :tenant
+class User < ApplicationRecord
+  traceable do
+    track :email, :name, :role, :status
+    track :password_digest, sensitive: :full
+    track :ssn, sensitive: :partial
+    track :api_token, sensitive: :hash
+  end
 
+  # Security audit
+  def security_change_log
+    changes_for(:password_digest)
+      .concat(changes_for(:two_factor_secret))
+      .sort_by { |c| c[:at] }.reverse
+  end
+
+  def password_changed_recently?(days = 90)
+    changes_for(:password_digest)
+      .any? { |c| c[:at] > days.days.ago }
+  end
+end
+
+# Service
+class UserManagementService
+  def change_role(user, new_role:, by:, reason:)
+    user.update!(
+      role: new_role,
+      updated_by_id: by.id,
+      updated_reason: "Role changed: #{reason}"
+    )
+  end
+end
+```
+
+### 29. Multi-Tenant Config Management
+
+**Cosa fa**: Traccia modifiche a configurazioni tenant con rollback.
+
+**Quando usarlo**: SaaS multi-tenant dove config changes devono essere tracciati e reversibili.
+
+**Esempio**:
+```ruby
+class TenantConfig < ApplicationRecord
   traceable do
     versions_table :config_audit_trail
-    track :api_enabled, :webhook_url, :rate_limit, :features, :subscription_tier
+    track :api_enabled, :webhook_url, :rate_limit, :features
   end
 
-  # Find config changes by admin
   def self.admin_changes_for_tenant(tenant_id)
-    admin_ids = User.where(tenant_id: tenant_id, role: "admin").pluck(:id)
+    admin_ids = User.where(tenant_id: tenant_id,
+                          role: "admin").pluck(:id)
     where(tenant_id: tenant_id).changed_by(admin_ids)
   end
-
-  # Detect feature toggle changes
-  def self.feature_toggles_changed(feature_name)
-    field_changed(:features)
-      .joins(:versions)
-      .where("object_changes->'features' IS NOT NULL")
-  end
 end
 
-# app/services/config_rollback_service.rb
+# Rollback service
 class ConfigRollbackService
-  def initialize(config)
-    @config = config
-  end
+  def rollback_to_previous(config)
+    prev = config.versions.where(event: "updated").second
+    return false unless prev
 
-  def rollback_to_previous
-    previous_version = @config.versions.where(event: "updated").second
-
-    return false unless previous_version
-
-    @config.rollback_to(
-      previous_version,
+    config.rollback_to(prev,
       updated_by_id: Current.user.id,
-      updated_reason: "Rolled back due to reported issues"
+      updated_reason: "Rolled back due to issues"
     )
-
-    # Notify admins
-    AdminMailer.config_rolled_back(@config, previous_version).deliver_later
-
-    true
-  end
-
-  def compare_versions(version_id_1, version_id_2)
-    v1 = @config.versions.find(version_id_1)
-    v2 = @config.versions.find(version_id_2)
-
-    {
-      version_1: { timestamp: v1.created_at, changes: v1.object_changes },
-      version_2: { timestamp: v2.created_at, changes: v2.object_changes },
-      diff: calculate_diff(v1, v2)
-    }
-  end
-
-  private
-
-  def calculate_diff(v1, v2)
-    # Implementation to show differences between versions
-  end
-end
-
-# app/controllers/admin/tenant_configs_controller.rb
-class Admin::TenantConfigsController < AdminController
-  def update
-    @config = TenantConfig.find(params[:id])
-
-    if @config.update(
-      config_params.merge(
-        updated_by_id: current_admin.id,
-        updated_reason: params[:change_reason] || "Configuration updated"
-      )
-    )
-      flash[:notice] = "Configuration updated. Change logged."
-      redirect_to admin_tenant_config_path(@config)
-    else
-      render :edit
-    end
-  end
-
-  def history
-    @config = TenantConfig.find(params[:id])
-    @changes = @config.audit_trail.group_by { |c| c[:at].to_date }
-  end
-
-  def rollback
-    @config = TenantConfig.find(params[:id])
-    service = ConfigRollbackService.new(@config)
-
-    if service.rollback_to_previous
-      flash[:notice] = "Configuration rolled back successfully"
-    else
-      flash[:alert] = "No previous version to rollback to"
-    end
-
-    redirect_to admin_tenant_config_path(@config)
-  end
-end
-
-# Usage:
-config = TenantConfig.find_by(tenant: current_tenant)
-
-config.update!(
-  api_enabled: true,
-  webhook_url: "https://app.example.com/webhooks",
-  rate_limit: 1000,
-  updated_by_id: admin.id,
-  updated_reason: "Enabled API access for integration"
-)
-
-# Later, toggle feature
-config.update!(
-  features: config.features.merge(advanced_reporting: true),
-  updated_by_id: admin.id,
-  updated_reason: "Enabled advanced reporting for premium tier"
-)
-
-# Problem occurs, rollback
-service = ConfigRollbackService.new(config)
-service.rollback_to_previous
-
-# View all admin changes for this tenant
-TenantConfig.admin_changes_for_tenant(current_tenant.id).each do |config|
-  puts "Config #{config.id} changed:"
-  config.audit_trail.each do |change|
-    puts "  #{change[:at]}: #{change[:reason]}"
   end
 end
 ```
 
-### Example 7: Inventory Management
+### 30. Feature Flag Management
 
-Track product changes and inventory adjustments:
+**Cosa fa**: Traccia toggle di feature flags per debugging e rollback.
 
+**Quando usarlo**: Feature flag system dove serve sapere quando/chi ha toggleato flag.
+
+**Esempio**:
 ```ruby
-# app/models/product.rb
-class Product < ApplicationRecord
-  traceable do
-    track :price, :quantity, :location, :status, :supplier_id
-  end
-
-  # Find products with price changes over threshold
-  def self.significant_price_changes(threshold_percent)
-    field_changed(:price)
-      .joins(:versions)
-      .select do |product|
-        product.changes_for(:price).any? do |change|
-          old_price = change[:before].to_f
-          new_price = change[:after].to_f
-          percent_change = ((new_price - old_price) / old_price * 100).abs
-          percent_change > threshold_percent
-        end
-      end
-  end
-
-  # Track inventory adjustments
-  def inventory_adjustments
-    changes_for(:quantity).map do |change|
-      diff = change[:after].to_i - change[:before].to_i
-      {
-        date: change[:at],
-        adjusted_by: change[:by],
-        reason: change[:reason],
-        change: diff,
-        direction: diff > 0 ? "increase" : "decrease"
-      }
-    end
-  end
-end
-
-# app/services/inventory_adjuster.rb
-class InventoryAdjuster
-  def adjust(product:, new_quantity:, adjusted_by:, reason:)
-    old_quantity = product.quantity
-
-    product.update!(
-      quantity: new_quantity,
-      updated_by_id: adjusted_by.id,
-      updated_reason: "#{reason} (#{old_quantity} → #{new_quantity})"
-    )
-
-    # Alert if significant decrease
-    decrease = old_quantity - new_quantity
-    if decrease > 50
-      InventoryMailer.significant_decrease(product, decrease, adjusted_by).deliver_later
-    end
-  end
-
-  def bulk_adjust(adjustments, adjusted_by:)
-    ActiveRecord::Base.transaction do
-      adjustments.each do |adj|
-        adjust(
-          product: adj[:product],
-          new_quantity: adj[:new_quantity],
-          adjusted_by: adjusted_by,
-          reason: adj[:reason]
-        )
-      end
-    end
-  end
-end
-
-# app/controllers/inventory_controller.rb
-class InventoryController < ApplicationController
-  def adjust
-    @product = Product.find(params[:id])
-    adjuster = InventoryAdjuster.new
-
-    adjuster.adjust(
-      product: @product,
-      new_quantity: params[:new_quantity].to_i,
-      adjusted_by: current_user,
-      reason: params[:adjustment_reason]
-    )
-
-    redirect_to product_path(@product), notice: "Inventory adjusted"
-  end
-
-  def audit_report
-    @date_range = params[:start_date]..params[:end_date]
-    @products = Product.changed_between(@date_range.begin, @date_range.end)
-    @adjustments = @products.flat_map(&:inventory_adjustments)
-                            .select { |adj| @date_range.cover?(adj[:date]) }
-                            .sort_by { |adj| adj[:date] }
-                            .reverse
-  end
-end
-
-# Usage:
-product = Product.find(123)
-
-adjuster = InventoryAdjuster.new
-adjuster.adjust(
-  product: product,
-  new_quantity: 75,
-  adjusted_by: warehouse_manager,
-  reason: "Stock count adjustment after physical audit"
-)
-
-# View adjustment history
-product.inventory_adjustments.each do |adj|
-  puts "#{adj[:date]}: #{adj[:direction]} of #{adj[:change].abs} units"
-  puts "Reason: #{adj[:reason]}"
-  puts "By: #{User.find(adj[:adjusted_by]).name}"
-end
-
-# Find products with significant price changes
-Product.significant_price_changes(10).each do |product|
-  puts "#{product.name}: Price changed significantly"
-  product.changes_for(:price).each do |change|
-    puts "  #{change[:before]} → #{change[:after]}"
-  end
-end
-```
-
-### Example 8: Financial Transaction Auditing
-
-Track financial transactions with mandatory audit trail:
-
-```ruby
-# app/models/transaction.rb
-class Transaction < ApplicationRecord
-  belongs_to :account
-
-  traceable do
-    versions_table :financial_audit_trail
-    track :amount, :status, :approval_status, :notes, :processed_at
-    track :account_number, sensitive: :hash  # Hash for verification
-  end
-
-  # Compliance: all changes require user and reason
-  validates :updated_by_id, presence: true, on: :update
-  validates :updated_reason, presence: true, on: :update
-
-  # Find transactions modified after processing
-  def self.post_processing_modifications
-    field_changed(:amount)
-      .where("processed_at IS NOT NULL")
-      .joins(:versions)
-      .where("financial_audit_trail.created_at > transactions.processed_at")
-  end
-
-  # Approval history
-  def approval_history
-    changes_for(:approval_status).map do |change|
-      {
-        timestamp: change[:at],
-        approver: User.find(change[:by]),
-        from_status: change[:before],
-        to_status: change[:after],
-        reason: change[:reason]
-      }
-    end
-  end
-end
-
-# app/services/transaction_processor.rb
-class TransactionProcessor
-  def approve(transaction, approved_by:, notes: nil)
-    raise "Already processed" if transaction.processed_at.present?
-
-    ActiveRecord::Base.transaction do
-      transaction.update!(
-        approval_status: "approved",
-        status: "processing",
-        updated_by_id: approved_by.id,
-        updated_reason: notes || "Transaction approved"
-      )
-
-      # Process transaction
-      process_transaction(transaction)
-
-      transaction.update!(
-        status: "completed",
-        processed_at: Time.current,
-        updated_by_id: approved_by.id,
-        updated_reason: "Transaction processed successfully"
-      )
-    end
-
-    # Log for audit
-    FinancialAuditLog.create!(
-      event: "transaction_approved_and_processed",
-      transaction_id: transaction.id,
-      user_id: approved_by.id,
-      details: { notes: notes }
-    )
-  end
-
-  def reverse(transaction, reversed_by:, reason:)
-    raise ArgumentError, "Reversal reason required" if reason.blank?
-    raise "Cannot reverse unapproved transaction" unless transaction.approval_status == "approved"
-
-    ActiveRecord::Base.transaction do
-      # Create reversal transaction
-      reversal = Transaction.create!(
-        account: transaction.account,
-        amount: -transaction.amount,
-        status: "completed",
-        approval_status: "approved",
-        processed_at: Time.current,
-        updated_by_id: reversed_by.id,
-        updated_reason: "Reversal of transaction ##{transaction.id}: #{reason}"
-      )
-
-      # Update original transaction
-      transaction.update!(
-        status: "reversed",
-        reversed_at: Time.current,
-        reversal_transaction_id: reversal.id,
-        updated_by_id: reversed_by.id,
-        updated_reason: reason
-      )
-    end
-  end
-
-  private
-
-  def process_transaction(transaction)
-    # Implementation for transaction processing
-  end
-end
-
-# app/controllers/transactions_controller.rb
-class TransactionsController < ApplicationController
-  def approve
-    @transaction = Transaction.find(params[:id])
-    authorize_approval!(@transaction)
-
-    processor = TransactionProcessor.new
-    processor.approve(
-      @transaction,
-      approved_by: current_user,
-      notes: params[:approval_notes]
-    )
-
-    redirect_to transaction_path(@transaction), notice: "Transaction approved and processed"
-  rescue => e
-    redirect_to transaction_path(@transaction), alert: "Failed to approve: #{e.message}"
-  end
-
-  def audit_log
-    @transaction = Transaction.find(params[:id])
-    authorize_audit_access!(@transaction)
-
-    render json: {
-      transaction_id: @transaction.id,
-      account_id: @transaction.account_id,
-      amount: @transaction.amount,
-      audit_trail: @transaction.audit_trail
-    }
-  end
-end
-
-# Compliance reporting
-# app/services/financial_audit_reporter.rb
-class FinancialAuditReporter
-  def generate_report(start_date:, end_date:)
-    {
-      report_date: Time.current.iso8601,
-      period: { start: start_date.iso8601, end: end_date.iso8601 },
-      post_processing_modifications: post_processing_report(start_date, end_date),
-      all_modifications: all_modifications_report(start_date, end_date)
-    }
-  end
-
-  private
-
-  def post_processing_report(start_date, end_date)
-    Transaction.post_processing_modifications
-               .changed_between(start_date, end_date)
-               .map do |txn|
-      {
-        transaction_id: txn.id,
-        modified_at: txn.versions.last.created_at,
-        modified_by: txn.versions.last.updated_by_id,
-        reason: txn.versions.last.updated_reason,
-        changes: txn.versions.last.object_changes
-      }
-    end
-  end
-
-  def all_modifications_report(start_date, end_date)
-    Transaction.changed_between(start_date, end_date)
-               .flat_map(&:audit_trail)
-  end
-end
-
-# Usage:
-transaction = Transaction.create!(
-  account: account,
-  amount: 1000.00,
-  status: "pending",
-  approval_status: "pending",
-  updated_by_id: system_user.id,
-  updated_reason: "Transaction initiated"
-)
-
-# Approve and process
-processor = TransactionProcessor.new
-processor.approve(
-  transaction,
-  approved_by: approver,
-  notes: "Verified and approved for processing"
-)
-
-# View approval history
-transaction.approval_history.each do |approval|
-  puts "#{approval[:timestamp]}: #{approval[:from_status]} → #{approval[:to_status]}"
-  puts "Approved by: #{approval[:approver].name}"
-  puts "Reason: #{approval[:reason]}"
-end
-
-# Generate audit report
-reporter = FinancialAuditReporter.new
-report = reporter.generate_report(
-  start_date: 1.month.ago,
-  end_date: Time.current
-)
-```
-
-### Example 9: HR Employee Records
-
-Track employee data changes with sensitive field protection:
-
-```ruby
-# app/models/employee.rb
-class Employee < ApplicationRecord
-  traceable do
-    track :name, :email, :department, :position, :status
-    track :salary, sensitive: :hash          # Verify changes without exposing amount
-    track :ssn, sensitive: :partial          # Show last 4 digits
-    track :bank_account, sensitive: :full    # Completely redacted
-  end
-
-  # Compliance: all changes need approval
-  validates :updated_by_id, presence: true, on: :update
-  validates :updated_reason, presence: true, on: :update
-
-  # Find salary adjustments
-  def salary_history
-    changes_for(:salary).map do |change|
-      {
-        date: change[:at],
-        adjusted_by: User.find(change[:by]),
-        reason: change[:reason],
-        # Note: actual values are hashed
-        hash_before: change[:before],
-        hash_after: change[:after]
-      }
-    end
-  end
-
-  # Department transfer history
-  def transfer_history
-    changes_for(:department).map do |change|
-      {
-        date: change[:at],
-        from_dept: change[:before],
-        to_dept: change[:after],
-        authorized_by: User.find(change[:by]),
-        reason: change[:reason]
-      }
-    end
-  end
-
-  # Promotion history
-  def promotion_history
-    changes_for(:position).select do |change|
-      is_promotion?(change[:before], change[:after])
-    end
-  end
-
-  private
-
-  def is_promotion?(old_pos, new_pos)
-    # Implementation to detect promotions
-  end
-end
-
-# app/services/hr_change_service.rb
-class HrChangeService
-  def adjust_salary(employee:, new_salary:, adjusted_by:, reason:)
-    raise ArgumentError, "Reason required for salary adjustment" if reason.blank?
-    raise "Unauthorized" unless adjusted_by.has_role?(:hr_manager)
-
-    employee.update!(
-      salary: new_salary,
-      updated_by_id: adjusted_by.id,
-      updated_reason: "Salary adjustment: #{reason}"
-    )
-
-    # Notify payroll
-    PayrollMailer.salary_changed(employee, adjusted_by).deliver_later
-
-    # Log for audit
-    HrAuditLog.create!(
-      event: "salary_adjustment",
-      employee_id: employee.id,
-      hr_user_id: adjusted_by.id,
-      reason: reason
-    )
-  end
-
-  def transfer_department(employee:, new_department:, transferred_by:, effective_date:, reason:)
-    employee.update!(
-      department: new_department,
-      transfer_effective_date: effective_date,
-      updated_by_id: transferred_by.id,
-      updated_reason: "Department transfer: #{reason}"
-    )
-
-    # Notify relevant parties
-    DepartmentMailer.transfer_notification(employee, new_department).deliver_later
-  end
-
-  def promote(employee:, new_position:, promoted_by:, effective_date:, salary_increase: nil)
-    ActiveRecord::Base.transaction do
-      updates = {
-        position: new_position,
-        promotion_date: effective_date,
-        updated_by_id: promoted_by.id,
-        updated_reason: "Promotion to #{new_position}"
-      }
-
-      if salary_increase
-        updates[:salary] = employee.salary + salary_increase
-      end
-
-      employee.update!(updates)
-
-      # Create promotion record
-      Promotion.create!(
-        employee: employee,
-        from_position: employee.position_was,
-        to_position: new_position,
-        promoted_by: promoted_by,
-        effective_date: effective_date
-      )
-    end
-  end
-end
-
-# app/controllers/hr/employees_controller.rb
-class Hr::EmployeesController < HrController
-  def update
-    @employee = Employee.find(params[:id])
-
-    if @employee.update(
-      employee_params.merge(
-        updated_by_id: current_hr_user.id,
-        updated_reason: params[:change_reason]
-      )
-    )
-      redirect_to hr_employee_path(@employee), notice: "Employee record updated"
-    else
-      render :edit
-    end
-  end
-
-  def history
-    @employee = Employee.find(params[:id])
-    authorize_hr_access!(@employee)
-
-    @audit_trail = @employee.audit_trail
-    @salary_history = @employee.salary_history
-    @transfer_history = @employee.transfer_history
-  end
-end
-
-# Usage:
-employee = Employee.create!(
-  name: "Jane Doe",
-  email: "jane@company.com",
-  department: "Engineering",
-  position: "Senior Developer",
-  salary: 95000,
-  ssn: "123456789",
-  updated_by_id: hr_admin.id,
-  updated_reason: "New hire"
-)
-
-# Adjust salary
-service = HrChangeService.new
-service.adjust_salary(
-  employee: employee,
-  new_salary: 105000,
-  adjusted_by: hr_manager,
-  reason: "Annual performance review - exceeds expectations"
-)
-
-# View salary history (values are hashed)
-employee.salary_history.each do |adjustment|
-  puts "#{adjustment[:date]}: Salary adjusted"
-  puts "By: #{adjustment[:adjusted_by].name}"
-  puts "Reason: #{adjustment[:reason]}"
-  # Note: actual values are hashed for privacy
-  puts "Hash changed: #{adjustment[:hash_before] != adjustment[:hash_after]}"
-end
-
-# Transfer department
-service.transfer_department(
-  employee: employee,
-  new_department: "Engineering Leadership",
-  transferred_by: hr_director,
-  effective_date: 1.month.from_now,
-  reason: "Promoted to Engineering Manager"
-)
-
-# View transfer history
-employee.transfer_history.each do |transfer|
-  puts "#{transfer[:date]}: #{transfer[:from_dept]} → #{transfer[:to_dept]}"
-  puts "Authorized by: #{transfer[:authorized_by].name}"
-  puts "Reason: #{transfer[:reason]}"
-end
-```
-
-### Example 10: Feature Flag Management
-
-Track feature flag changes for debugging and rollback:
-
-```ruby
-# app/models/feature_flag.rb
 class FeatureFlag < ApplicationRecord
   traceable do
-    track :enabled, :rollout_percentage, :enabled_for_users, :enabled_for_tenants
+    track :enabled, :rollout_percentage, :enabled_for_users
   end
 
-  # Find flags toggled during incident
+  # Flags toggleati durante incident
   def self.toggled_during(time_range)
     field_changed(:enabled)
       .changed_between(time_range.begin, time_range.end)
   end
 
-  # Rollout history
-  def rollout_history
-    changes_for(:rollout_percentage).map do |change|
-      {
-        date: change[:at],
-        from_pct: change[:before],
-        to_pct: change[:after],
-        toggled_by: User.find(change[:by]),
-        reason: change[:reason]
-      }
-    end
-  end
-
-  # Check if flag was enabled during time
   def enabled_at?(timestamp)
-    state = as_of(timestamp)
-    state.enabled
+    as_of(timestamp).enabled
   end
 end
 
-# app/services/feature_flag_service.rb
+# Service
 class FeatureFlagService
-  def toggle(flag, enabled:, toggled_by:, reason:)
-    old_state = flag.enabled
-
-    flag.update!(
-      enabled: enabled,
-      updated_by_id: toggled_by.id,
-      updated_reason: reason
-    )
-
-    # Alert team if critical flag
-    if flag.critical? && old_state != enabled
-      SlackNotifier.feature_flag_toggled(flag, old_state, enabled, toggled_by)
-    end
-
-    # Log for debugging
-    Rails.logger.info "[FEATURE_FLAG] #{flag.key}: #{old_state} → #{enabled} by #{toggled_by.email}"
-  end
-
-  def gradual_rollout(flag, target_percentage:, rolled_out_by:)
-    steps = [10, 25, 50, 75, 100]
-    current_pct = flag.rollout_percentage
-
-    next_step = steps.find { |s| s > current_pct && s <= target_percentage }
-    return if next_step.nil?
-
-    flag.update!(
-      rollout_percentage: next_step,
-      updated_by_id: rolled_out_by.id,
-      updated_reason: "Gradual rollout to #{next_step}%"
-    )
-
-    # Schedule next step if not at target
-    if next_step < target_percentage
-      GradualRolloutJob.set(wait: 1.hour).perform_later(flag.id, target_percentage, rolled_out_by.id)
-    end
-  end
-
-  def emergency_rollback(flag, rolled_back_by:, incident_id:)
-    # Find last "safe" state (before incident)
+  def emergency_rollback(flag, by:, incident_id:)
     incident = Incident.find(incident_id)
-    safe_version = flag.versions.where("created_at < ?", incident.started_at).last
+    safe = flag.versions
+               .where("created_at < ?", incident.started_at)
+               .last
 
-    return false unless safe_version
-
-    flag.rollback_to(
-      safe_version,
-      updated_by_id: rolled_back_by.id,
-      updated_reason: "Emergency rollback due to incident ##{incident_id}"
+    flag.rollback_to(safe,
+      updated_by_id: by.id,
+      updated_reason: "Emergency rollback: incident #{incident_id}"
     )
-
-    # Alert team
-    SlackNotifier.emergency_rollback(flag, incident, rolled_back_by)
-
-    true
-  end
-end
-
-# app/controllers/admin/feature_flags_controller.rb
-class Admin::FeatureFlagsController < AdminController
-  def toggle
-    @flag = FeatureFlag.find(params[:id])
-    service = FeatureFlagService.new
-
-    service.toggle(
-      @flag,
-      enabled: params[:enabled],
-      toggled_by: current_admin,
-      reason: params[:reason] || "Manual toggle"
-    )
-
-    redirect_to admin_feature_flag_path(@flag), notice: "Feature flag updated"
-  end
-
-  def rollback
-    @flag = FeatureFlag.find(params[:id])
-    version = @flag.versions.find(params[:version_id])
-
-    @flag.rollback_to(
-      version,
-      updated_by_id: current_admin.id,
-      updated_reason: "Manual rollback to #{version.created_at}"
-    )
-
-    redirect_to admin_feature_flag_path(@flag), notice: "Feature flag rolled back"
-  end
-
-  def incident_report
-    incident = Incident.find(params[:incident_id])
-    time_range = (incident.started_at - 1.hour)..(incident.ended_at + 1.hour)
-
-    @flags_toggled = FeatureFlag.toggled_during(time_range)
-    @timeline = @flags_toggled.flat_map(&:audit_trail)
-                              .select { |e| time_range.cover?(e[:at]) }
-                              .sort_by { |e| e[:at] }
-  end
-end
-
-# Usage:
-flag = FeatureFlag.create!(
-  key: "new_checkout_flow",
-  enabled: false,
-  rollout_percentage: 0,
-  updated_by_id: developer.id,
-  updated_reason: "Initial flag setup"
-)
-
-# Enable for testing
-service = FeatureFlagService.new
-service.toggle(
-  flag,
-  enabled: true,
-  toggled_by: developer,
-  reason: "Enable for QA testing"
-)
-
-# Gradual rollout
-service.gradual_rollout(
-  flag,
-  target_percentage: 100,
-  rolled_out_by: product_manager
-)
-
-# View rollout history
-flag.rollout_history.each do |step|
-  puts "#{step[:date]}: #{step[:from_pct]}% → #{step[:to_pct]}%"
-  puts "By: #{step[:toggled_by].name}"
-  puts "Reason: #{step[:reason]}"
-end
-
-# Incident occurs - emergency rollback
-service.emergency_rollback(
-  flag,
-  rolled_back_by: on_call_engineer,
-  incident_id: incident.id
-)
-
-# Post-incident analysis
-time_range = (incident.started_at - 1.hour)..(incident.ended_at + 1.hour)
-flags_during_incident = FeatureFlag.toggled_during(time_range)
-
-flags_during_incident.each do |flag|
-  puts "Flag #{flag.key} was toggled during incident:"
-  flag.audit_trail
-      .select { |e| time_range.cover?(e[:at]) }
-      .each do |change|
-    puts "  #{change[:at]}: #{change[:changes]}"
-    puts "  By: #{User.find(change[:by]).name}"
-    puts "  Reason: #{change[:reason]}"
   end
 end
 ```
 
-## Controller Integration
+## Performance e Best Practices
 
-### Using Current.user Pattern
+### 31. Indici Corretti
 
-Automatically set `updated_by_id`:
+**Cosa fa**: Indici essenziali per query performanti su tabelle versions.
 
-```ruby
-# app/models/current.rb
-class Current < ActiveSupport::CurrentAttributes
-  attribute :user
-end
+**Quando usarlo**: Sempre, nella migration che crea la tabella versions.
 
-# app/controllers/application_controller.rb
-class ApplicationController < ActionController::Base
-  before_action :set_current_user
-
-  private
-
-  def set_current_user
-    Current.user = current_user
-  end
-end
-
-# app/models/article.rb
-class Article < ApplicationRecord
-  traceable do
-    track :title, :content, :status
-  end
-
-  before_save :set_updated_by
-
-  private
-
-  def set_updated_by
-    self.updated_by_id = Current.user&.id if Current.user
-  end
-end
-
-# Now all updates automatically track user:
-article.update!(status: "published")
-# Creates version with updated_by_id = Current.user.id
-```
-
-### Strong Parameters with Metadata
-
-```ruby
-class ArticlesController < ApplicationController
-  def update
-    if @article.update(article_params_with_metadata)
-      redirect_to @article, notice: "Article updated"
-    else
-      render :edit
-    end
-  end
-
-  private
-
-  def article_params_with_metadata
-    params.require(:article)
-          .permit(:title, :content, :status)
-          .merge(
-            updated_by_id: current_user.id,
-            updated_reason: params[:change_reason] || "Article updated"
-          )
-  end
-end
-```
-
-## Best Practices
-
-### ✅ Do
-
-1. **Track Meaningful Fields Only**
-   ```ruby
-   # Good - track business-critical data
-   track :status, :price, :approval_status
-
-   # Bad - don't track everything
-   track :view_count, :last_viewed_at, :cached_slug
-   ```
-
-2. **Always Include User Attribution**
-   ```ruby
-   # Add to migration
-   t.bigint :updated_by_id
-
-   # Add to model
-   before_save :set_updated_by
-   ```
-
-3. **Provide Change Reasons**
-   ```ruby
-   article.update!(
-     status: "published",
-     updated_by_id: current_user.id,
-     updated_reason: "Approved after editorial review"
-   )
-   ```
-
-4. **Index Properly**
-   ```ruby
-   add_index :article_versions, [:item_type, :item_id]
-   add_index :article_versions, :updated_by_id
-   add_index :article_versions, :created_at
-
-   # PostgreSQL: GIN index for JSONB
-   add_index :article_versions, :object_changes, using: :gin
-   ```
-
-5. **Plan for Data Volume**
-   ```ruby
-   # Archive old versions periodically
-   class ArchiveOldVersionsJob < ApplicationJob
-     def perform
-       cutoff = 2.years.ago
-       ArticleVersion.where("created_at < ?", cutoff)
-                     .find_in_batches { |batch| archive(batch) }
-     end
-   end
-   ```
-
-6. **Test Time Travel**
-   ```ruby
-   test "time travel reconstructs correct state" do
-     article = Article.create!(title: "V1", status: "draft")
-     timestamp = Time.current
-     article.update!(title: "V2", status: "published")
-
-     past = article.as_of(timestamp)
-     assert_equal "V1", past.title
-     assert_equal "draft", past.status
-   end
-   ```
-
-7. **Use Transactions for Rollback**
-   ```ruby
-   ActiveRecord::Base.transaction do
-     article.rollback_to(version, updated_by_id: user.id)
-     # Other related updates
-   end
-   ```
-
-8. **Document Tracked Fields**
-   ```ruby
-   # In model or README
-   # Tracked fields: status, title, content, published_at
-   # Sensitive fields: None
-   # Retention policy: 2 years
-   ```
-
-### ❌ Don't
-
-1. **Don't Track Sensitive Data Without Protection**
-   ```ruby
-   # Bad
-   track :password_digest
-
-   # Good
-   track :password_digest, sensitive: :full
-   ```
-
-2. **Don't Track Computed Fields**
-   ```ruby
-   # Bad - derived from other fields
-   track :full_name  # computed from first_name + last_name
-
-   # Good - track source data
-   track :first_name, :last_name
-   ```
-
-3. **Don't Version Large Binary Data**
-   ```ruby
-   # Bad - huge version table
-   track :avatar_blob
-
-   # Good - track reference only
-   track :avatar_blob_id
-   ```
-
-4. **Don't Ignore Performance**
-   ```ruby
-   # Bad - N+1 queries
-   articles.each { |a| puts a.versions.count }
-
-   # Good - eager load
-   articles.includes(:versions).each { |a| puts a.versions.count }
-   ```
-
-5. **Don't Skip Indexes**
-   ```ruby
-   # Will cause slow queries on large tables
-   # Always add recommended indexes
-   ```
-
-6. **Don't Forget Retention Policies**
-   ```ruby
-   # Versions table grows indefinitely without cleanup
-   # Implement archival/deletion strategy
-   ```
-
-7. **Don't Mix Table Strategies**
-   ```ruby
-   # Bad - inconsistent approach
-   # Some models use shared table, others use per-model
-
-   # Good - choose one strategy project-wide
-   ```
-
-## Database-Specific Behavior
-
-### PostgreSQL
-
-Use `jsonb` for better performance and querying:
-
-```ruby
-create_table :article_versions do |t|
-  t.jsonb :object_changes  # Use jsonb not json
-end
-
-# Add GIN index
-add_index :article_versions, :object_changes, using: :gin
-
-# Query JSON fields
-Article.changed_by(123)
-       .joins(:versions)
-       .where("object_changes->>'status' = ?", "published")
-```
-
-**Advantages**:
-- Indexable with GIN indexes
-- Better query performance
-- Compression support
-- Binary storage
-
-### MySQL
-
-Use `json` type (5.7+):
-
-```ruby
-create_table :article_versions do |t|
-  t.json :object_changes
-end
-
-# Query JSON fields
-Article.joins(:versions)
-       .where("JSON_EXTRACT(object_changes, '$.status') = ?", "published")
-```
-
-**Considerations**:
-- Good performance with proper indexes
-- `max_allowed_packet` setting for large changes
-- Consider archive strategy
-
-### SQLite
-
-Stores JSON as text:
-
-```ruby
-create_table :article_versions do |t|
-  t.text :object_changes  # JSON stored as text
-end
-```
-
-**Limitations**:
-- Limited JSON query capabilities
-- Text storage (no binary compression)
-- Consider periodic archival
-
-## Thread Safety
-
-**Guaranteed thread-safe**:
-- Configuration frozen at class load time
-- Immutable `traceable_config` hash
-- Version class registry uses mutex
-- Safe for concurrent requests
-
-## Performance Considerations
-
-### Indexing Strategy
-
+**Esempio**:
 ```ruby
 # Essential indexes (required)
 add_index :versions, [:item_type, :item_id]
 add_index :versions, :created_at
-
-# User tracking (if using updated_by_id)
 add_index :versions, :updated_by_id
 
 # PostgreSQL: JSONB indexes
 add_index :versions, :object_changes, using: :gin
 
-# Composite indexes for common queries
+# Composite per query comuni
 add_index :versions, [:item_type, :item_id, :created_at]
 add_index :versions, [:updated_by_id, :created_at]
-```
 
-### Query Optimization
-
-```ruby
-# Eager load versions
+# Query optimization
 @articles = Article.includes(:versions).limit(10)
-
-# Limit version queries
 article.versions.limit(10).order(created_at: :desc)
-
-# Select only needed fields
-article.versions.select(:id, :event, :created_at, :updated_by_id)
-
-# Use count cache
-has_many :versions, counter_cache: true
 ```
 
-### Data Volume Management
+### 32. Archiviazione Versioni Vecchie
 
+**Cosa fa**: Archivia o elimina versioni vecchie per gestire crescita tabella.
+
+**Quando usarlo**: Retention policy per evitare crescita infinita della tabella versions.
+
+**Esempio**:
 ```ruby
-# Archive old versions
-class ArchiveOldVersions
-  def call
+# Job periodico
+class ArchiveOldVersionsJob < ApplicationJob
+  def perform
     cutoff = 2.years.ago
 
     ArticleVersion.where("created_at < ?", cutoff)
                   .find_in_batches(batch_size: 1000) do |batch|
-      # Move to archive or S3
-      archive_versions(batch)
+      # Archivia su S3/storage esterno
+      archive_to_s3(batch)
+      # Poi elimina
       batch.each(&:destroy)
     end
   end
 end
 
-# Delete empty changes
-class CleanupEmptyVersions < ApplicationJob
+# Cleanup versioni vuote
+class CleanupEmptyVersionsJob < ApplicationJob
   def perform
     Version.where("created_at < ?", 1.year.ago)
            .where(event: "updated")
@@ -2479,46 +982,204 @@ class CleanupEmptyVersions < ApplicationJob
 end
 ```
 
-**Recommendations**:
-- Monitor version table size
-- Implement retention policies
-- Archive old versions to separate storage
-- Consider partitioning for very large tables (PostgreSQL)
+### 33. Query JSON Ottimizzate (PostgreSQL)
+
+**Cosa fa**: Sfrutta operatori JSONB di PostgreSQL per query efficienti.
+
+**Quando usarlo**: PostgreSQL con colonna jsonb per query su campi specifici nelle versions.
+
+**Esempio**:
+```ruby
+# Query su valori specifici in object_changes
+Article.joins(:versions)
+       .where("object_changes->>'status' = ?", "published")
+
+# Query con casting per numeri
+Product.joins(:versions)
+       .where("(object_changes->>'price')::numeric > ?", 100)
+
+# Array contains (PostgreSQL)
+Article.joins(:versions)
+       .where("object_changes @> ?",
+              { status: ["draft", "published"] }.to_json)
+
+# Existance check
+Article.joins(:versions)
+       .where("object_changes ? :key", key: "status")
+```
+
+### 34. Introspection Configuration
+
+**Cosa fa**: Verifica configurazione Traceable a runtime.
+
+**Quando usarlo**: Per debug, testing, o UI che mostra campi tracciati.
+
+**Esempio**:
+```ruby
+User.traceable_enabled?
+# => true
+
+User.traceable_sensitive_fields
+# => {
+#   password_digest: :full,
+#   ssn: :partial,
+#   api_token: :hash
+# }
+
+User.traceable_config
+# => {
+#   tracked_fields: [:email, :name, :password_digest, :ssn],
+#   sensitive_fields: {...},
+#   versions_table: :user_versions
+# }
+```
+
+## Best Practices
+
+### ✅ Do
+
+1. **Track solo campi meaningful**: Track dati business-critical, non computed fields o cache
+2. **User attribution sempre**: Sempre track updated_by_id e updated_reason
+3. **Proteggi dati sensibili**: Usa `:full`, `:partial`, `:hash` appropriatamente
+4. **Indici corretti**: Sempre add required indexes alla tabella versions
+5. **Retention policy**: Implementa archiviazione/cleanup di versioni vecchie
+6. **Test time travel**: Test che as_of ricostruisca stato correttamente
+7. **Transactions per rollback**: Wrap rollback in transaction con altre update
+8. **Documenta tracked fields**: Documenta quali campi sono tracciati e perché
+
+### ❌ Don't
+
+1. **Non trackare senza protezione**: Mai track password/secrets senza `sensitive:`
+2. **Non trackare computed fields**: Non tracciare campi derivati da altri
+3. **Non versionare binary data**: Non tracciare blob, track solo reference IDs
+4. **Non ignorare performance**: N+1 queries, eager load versions quando serve
+5. **Non skip indexes**: Causa slow queries su tabelle grandi
+6. **Non dimenticare retention**: Tabella cresce infinitamente senza cleanup
+7. **Non mix table strategies**: Scegli one strategy (per-model/shared) project-wide
+8. **Non rollback sensitive fields**: Di default sono skipped, usa `allow_sensitive` con cautela
+
+## Errori Comuni
+
+### Errore: Schema Columns Mancanti
+
+```ruby
+# ❌ Errore se mancano colonne nella tabella
+class Article < ApplicationRecord
+  traceable do
+    track :status
+  end
+end
+
+# Fallisce se la tabella versions non ha:
+# - item_type (required)
+# - item_id (required)
+# - object_changes (required)
+# - event (required)
+
+# ✅ Verifica schema
+rails db:migrate:status
+# Assicurati migration versions table sia eseguita
+```
+
+### Errore: Rollback a Versione di Altro Record
+
+```ruby
+# ❌ Rollback con versione di altro record
+article1 = Article.find(1)
+article2 = Article.find(2)
+
+article1.rollback_to(article2.versions.first)
+# Errore: version non appartiene a article1
+
+# ✅ Usa solo versioni del record stesso
+article1.rollback_to(article1.versions.first,
+  updated_by_id: user.id
+)
+```
+
+## Integrazione con Altri Features
+
+### Con Archivable
+
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  archivable
+  traceable do
+    track :status, :title, :archived_at, :archived_by_id
+  end
+end
+
+# Archive tracked nella history
+article.archive!(by: user, reason: "Outdated")
+article.changes_for(:archived_at)
+# => [{before: nil, after: 2025-01-15, by: 123}]
+```
+
+### Con Stateable
+
+```ruby
+class Order < ApplicationRecord
+  include BetterModel
+
+  stateable do
+    state :pending, initial: true
+    state :shipped
+    event :ship do
+      transition from: :pending, to: :shipped
+    end
+  end
+
+  traceable do
+    track :state, :shipped_at
+  end
+end
+
+# State transitions tracked
+order.ship!
+order.changes_for(:state)
+# => [{before: "pending", after: "shipped"}]
+```
+
+### Con Statusable
+
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  statusable do
+    status :featured, -> { published_at.present? }
+  end
+
+  traceable do
+    track :published_at  # Tracked, featured? è computed
+  end
+end
+
+# Track field che influenza status, non status stesso
+```
 
 ## Key Takeaways
 
-1. **Opt-In**: Traceable is NOT active by default - must explicitly enable with `traceable do...end`
+1. **Opt-In**: Traceable NON è attivo di default, deve essere abilitato esplicitamente
+2. **Explicit Tracking**: Solo campi specificati sono tracciati, gli altri no
+3. **Correct Schema**: Usa `item_type`/`item_id`, `updated_by_id`, `object_changes`
+4. **Sensitive Protection**: 3 livelli - `:full`, `:partial`, `:hash`
+5. **User Attribution**: Sempre track chi e perché con updated_by_id/reason
+6. **Time Travel**: `as_of(timestamp)` ricostruisce stato passato (readonly)
+7. **Rollback Safety**: Campi sensitivi skipped di default
+8. **Rich Query API**: `changed_by`, `changed_between`, `field_changed_from().to()`
+9. **Table Strategies**: Per-model, shared, o custom tables
+10. **Database Optimization**: JSONB per PostgreSQL, GIN indexes, plan for growth
+11. **Compliance Ready**: HIPAA, GDPR, SOX con mandatory user/reason
+12. **Performance**: Index properly, eager load, retention policies
+13. **Thread Safe**: Immutable config, safe per concurrent requests
+14. **Integration**: Funziona con Archivable, Stateable, Statusable
+15. **Testing**: Test time travel e rollback functionality
 
-2. **Explicit Tracking**: Only specified fields are tracked - untracked fields don't create versions
+---
 
-3. **Correct Schema**: Use `item_type`/`item_id` (NOT `trackable_type`/`trackable_id`), `updated_by_id` (NOT `whodunnit`), `object_changes` (NOT `changes`)
-
-4. **Sensitive Data Protection**: Three levels - `:full` (redacted), `:partial` (masked), `:hash` (SHA256)
-
-5. **User Attribution**: Always track who made changes with `updated_by_id`
-
-6. **Change Context**: Use `updated_reason` to explain why changes were made
-
-7. **Time Travel**: Reconstruct object state at any point with `as_of(timestamp)`
-
-8. **Rollback Safety**: Sensitive fields skipped by default, use `allow_sensitive: true` carefully
-
-9. **Rich Query API**: `changed_by`, `changed_between`, `field_changed_from().to()` for powerful queries
-
-10. **Table Strategies**: Choose per-model, shared, or custom tables based on needs
-
-11. **Database Optimization**: Use `jsonb` for PostgreSQL, add GIN indexes, plan for growth
-
-12. **Compliance Ready**: Perfect for HIPAA, GDPR, SOX with mandatory user/reason tracking
-
-13. **Performance**: Index properly, eager load versions, implement retention policies
-
-14. **Thread Safe**: Immutable configuration, safe for concurrent requests
-
-15. **Integration**: Works seamlessly with Archivable, Stateable, Statusable
-
-16. **Testing**: Always test time travel and rollback functionality
-
-17. **Documentation**: Document tracked fields, sensitive settings, retention policies
-
-18. **Monitoring**: Track version table growth, query performance, and storage usage
+**Compatibile con**: Rails 8.0+, Ruby 3.0+, PostgreSQL (recommended), MySQL, SQLite
+**Thread-safe**: Sì
+**Opt-in**: Sì (richiede `traceable do...end`)

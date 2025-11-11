@@ -1,2206 +1,901 @@
-# Stateable - State Machine with Guards, Validations, and History
+# Stateable - State Machine with Guards and History
 
-## Overview
+State machine implementation with explicit states, typed transitions, guards, validations, callbacks, and optional transition history tracking.
 
-Stateable provides a powerful state machine implementation for ActiveRecord models with:
+**Requirements**: Rails 8.0+, Ruby 3.0+, `state` string column
+**Installation**: `rails generate better_model:stateable Model`
 
-- **Explicit State Definitions**: Define allowed states with one marked as initial
-- **Typed Transitions**: Named events that move between states with validation
-- **Guards**: Conditional checks that prevent invalid transitions (`check`)
-- **Custom Validations**: Transition-specific validations with error messages
-- **Callbacks**: `before_transition`, `after_transition`, `around` hooks
-- **State History**: Optional tracking of all state changes with metadata
-- **Dynamic Methods**: Auto-generated predicate and event methods
-- **Error Handling**: Comprehensive validation and guard failures
-- **Integration**: Works with Statusable for conditional guards
+**⚠️ Version 3.0.0 Compatible**: All error handling in this document uses standard Ruby exception patterns.
 
-## Requirements
+---
 
-- Rails 8.0+
-- Ruby 3.0+
-- ActiveRecord model
+## Database Setup
 
-## Installation
+### Basic State Column
 
-Generate the migration for the model with state fields:
+**Cosa fa**: Adds state column to model
 
+**Quando usarlo**: For state machine functionality
+
+**Esempio**:
 ```bash
 rails generate better_model:stateable Order
 rails db:migrate
 ```
 
-This adds to your model:
 ```ruby
-# Migration adds:
-t.string :state, null: false, default: 'pending'
-```
-
-For transition history tracking, generate the history table:
-
-```bash
-rails generate better_model:stateable_history Order
-rails db:migrate
-```
-
-This creates:
-```ruby
-create_table :order_state_transitions do |t|
-  t.references :order, null: false, foreign_key: true
-  t.string :from_state, null: false
-  t.string :to_state, null: false
-  t.string :event, null: false
-  t.bigint :triggered_by_id
-  t.jsonb :metadata
-  t.timestamps
-end
-```
-
-## Basic Configuration
-
-```ruby
-class Order < ApplicationRecord
-  include BetterModel
-
-  stateable do
-    # Define states - exactly one must be initial: true
-    state :pending, initial: true
-    state :confirmed
-    state :paid
-    state :shipped
-    state :delivered
-    state :cancelled
-
-    # Define transitions with events
-    transition :confirm, from: :pending, to: :confirmed
-    transition :pay, from: :confirmed, to: :paid
-    transition :ship, from: :paid, to: :shipped
-    transition :deliver, from: :shipped, to: :delivered
-    transition :cancel, from: [:pending, :confirmed], to: :cancelled
+# Generated migration
+class AddStateToOrders < ActiveRecord::Migration[8.1]
+  def change
+    add_column :orders, :state, :string, null: false, default: 'pending'
+    add_index :orders, :state
   end
-end
-
-# Usage
-order = Order.create!(total: 100.00)
-order.pending?           # => true
-order.state              # => "pending"
-
-order.confirm!           # Execute transition
-order.confirmed?         # => true
-
-order.can_pay?          # => true (check if transition allowed)
-order.pay!
-order.paid?             # => true
-
-# Invalid transitions raise errors
-order.confirm!          # => BetterModel::Stateable::InvalidTransition
-```
-
-## Generated Methods
-
-For each state defined:
-- `state?` - Predicate method (e.g., `pending?`, `confirmed?`)
-
-For each transition defined:
-- `event!` - Execute transition (e.g., `confirm!`, `pay!`, `cancel!`)
-- `can_event?` - Check if transition is allowed (e.g., `can_confirm?`, `can_pay?`)
-
-```ruby
-stateable do
-  state :draft, initial: true
-  state :published
-
-  transition :publish, from: :draft, to: :published
-end
-
-# Generated methods:
-article.draft?           # State predicate
-article.published?       # State predicate
-article.publish!         # Execute transition
-article.can_publish?     # Check if allowed
-```
-
-## Guards (Conditional Checks)
-
-Guards prevent transitions unless conditions are met. They're evaluated before validations.
-
-### Block Guards
-
-```ruby
-stateable do
-  state :pending, initial: true
-  state :confirmed
-
-  transition :confirm, from: :pending, to: :confirmed do
-    check { total >= 10.00 }
-    check { items.any? }
-    check { customer.verified? }
-  end
-end
-
-order = Order.create!(total: 5.00)
-order.can_confirm?       # => false (total < 10)
-order.confirm!           # => raises InvalidTransition
-
-order.update!(total: 15.00)
-order.can_confirm?       # => true
-order.confirm!           # => success
-```
-
-### Method Guards
-
-```ruby
-stateable do
-  transition :ship, from: :paid, to: :shipped do
-    check :has_shipping_address
-    check :inventory_available
-  end
-end
-
-private
-
-def has_shipping_address
-  shipping_address.present?
-end
-
-def inventory_available
-  items.all? { |item| item.stock > 0 }
-end
-```
-
-### Predicate Guards (Statusable Integration)
-
-```ruby
-class Order < ApplicationRecord
-  include BetterModel
-
-  is :verified, -> { verification_status == "verified" }
-  is :fraudulent, -> { fraud_score > 80 }
-
-  stateable do
-    state :pending, initial: true
-    state :processing
-
-    transition :process, from: :pending, to: :processing do
-      check if: :verified?          # Uses Statusable predicate
-      check unless: :fraudulent?    # Negative check
-    end
-  end
-end
-
-order = Order.create!
-order.can_process?       # => false (not verified)
-
-order.mark_as_verified!
-order.can_process?       # => true
-```
-
-### Multiple Guard Types
-
-```ruby
-transition :approve, from: :submitted, to: :approved do
-  # Block guards
-  check { amount <= 10_000 }
-  check { approver.present? }
-
-  # Method guards
-  check :valid_budget_code
-  check :department_approved
-
-  # Predicate guards
-  check if: :compliant?
-  check unless: :expired?
-end
-```
-
-## Validations
-
-Custom validations run after guards pass and add errors to the model.
-
-```ruby
-stateable do
-  state :draft, initial: true
-  state :published
-
-  transition :publish, from: :draft, to: :published do
-    # Guards run first
-    check { author.present? }
-
-    # Validations run after guards pass
-    validate do
-      errors.add(:title, "must be present") if title.blank?
-      errors.add(:content, "must be at least 100 characters") if content.length < 100
-      errors.add(:category, "must be selected") if category.blank?
-    end
-
-    validate do
-      if images.none?
-        errors.add(:images, "must include at least one image")
-      end
-    end
-  end
-end
-
-article = Article.create!(author: User.first)
-result = article.publish!
-# => false (validation failed)
-
-article.errors.full_messages
-# => ["Title must be present", "Content must be at least 100 characters", ...]
-
-article.update!(title: "My Article", content: "..." * 50, category: "Tech")
-article.publish!
-# => true
-```
-
-### Difference: Guards vs Validations
-
-**Guards** (`check`):
-- Run first, before validations
-- Boolean checks that prevent transition
-- Don't add errors to the model
-- Use for business logic conditions
-- Failure raises `InvalidTransition`
-
-**Validations** (`validate`):
-- Run after guards pass
-- Add detailed error messages
-- Allow checking validity without raising
-- Use for data validation
-- Failure makes event method return `false`
-
-```ruby
-transition :submit, from: :draft, to: :pending_review do
-  # Guard: Business rule
-  check { user.can_submit? }
-
-  # Validation: Data requirements
-  validate do
-    errors.add(:base, "Must have content") if content.blank?
-  end
-end
-
-# Guard failure - raises immediately
-document.submit!  # => InvalidTransition (if user.can_submit? is false)
-
-# Validation failure - returns false, sets errors
-document.submit!  # => false (if content blank)
-document.errors.full_messages  # => ["Must have content"]
-```
-
-## Callbacks
-
-Execute code before, after, or around transitions.
-
-### Before Transition
-
-```ruby
-stateable do
-  state :pending, initial: true
-  state :confirmed
-
-  transition :confirm, from: :pending, to: :confirmed do
-    before_transition do
-      self.confirmed_at = Time.current
-      self.confirmation_number = SecureRandom.hex(8)
-    end
-
-    before_transition do
-      OrderMailer.confirmation_email(self).deliver_later
-    end
-  end
-end
-```
-
-### After Transition
-
-```ruby
-stateable do
-  transition :ship, from: :paid, to: :shipped do
-    after_transition do
-      TrackingService.create_shipment(self)
-      NotificationService.notify_customer(self, :shipped)
-    end
-
-    after_transition do
-      InventoryService.reserve_items(self.items)
-    end
-  end
-end
-```
-
-### Around Transition
-
-```ruby
-stateable do
-  transition :pay, from: :confirmed, to: :paid do
-    around do |transition|
-      PaymentService.start_transaction(self)
-
-      begin
-        transition.call  # Execute the state change
-        PaymentService.commit_transaction(self)
-      rescue => e
-        PaymentService.rollback_transaction(self)
-        raise
-      end
-    end
-  end
-end
-```
-
-### Multiple Callbacks
-
-```ruby
-transition :complete, from: :in_progress, to: :completed do
-  before_transition do
-    self.completed_at = Time.current
-  end
-
-  before_transition do
-    validate_all_tasks_done
-  end
-
-  after_transition do
-    send_completion_notifications
-  end
-
-  after_transition do
-    update_statistics
-  end
-
-  around do |t|
-    ActiveRecord::Base.transaction do
-      t.call
-      finalize_billing
-    end
-  end
-end
-```
-
-## Transition History
-
-Track all state changes with metadata.
-
-### Basic History
-
-```ruby
-class Order < ApplicationRecord
-  include BetterModel
-
-  # Association is auto-created if history table exists
-  # has_many :state_transitions, class_name: 'OrderStateTransition'
-
-  stateable do
-    state :pending, initial: true
-    state :confirmed
-    state :paid
-
-    transition :confirm, from: :pending, to: :confirmed
-    transition :pay, from: :confirmed, to: :paid
-  end
-end
-
-order = Order.create!
-order.confirm!
-order.pay!
-
-# Access history
-order.state_transitions.count  # => 2
-order.state_transitions.last
-# => #<OrderStateTransition
-#      from_state: "confirmed",
-#      to_state: "paid",
-#      event: "pay",
-#      created_at: ...>
-
-# Formatted history
-order.transition_history
-# => [
-#   {
-#     from_state: "pending",
-#     to_state: "confirmed",
-#     event: "confirm",
-#     triggered_by: nil,
-#     metadata: {},
-#     transitioned_at: 2025-01-15 10:30:00 UTC
-#   },
-#   {
-#     from_state: "confirmed",
-#     to_state: "paid",
-#     event: "pay",
-#     triggered_by: nil,
-#     metadata: {},
-#     transitioned_at: 2025-01-15 10:35:00 UTC
-#   }
-# ]
-```
-
-### With Metadata and User Tracking
-
-```ruby
-# Track who triggered the transition
-order.ship!(triggered_by: current_user.id)
-
-# Add metadata
-order.cancel!(
-  triggered_by: admin.id,
-  metadata: {
-    reason: "Customer request",
-    refund_amount: 99.99,
-    notes: "Processed via support ticket #12345"
-  }
-)
-
-# Query history
-last_transition = order.state_transitions.last
-last_transition.triggered_by_id  # => admin.id
-last_transition.metadata
-# => {
-#   "reason" => "Customer request",
-#   "refund_amount" => 99.99,
-#   "notes" => "Processed via support ticket #12345"
-# }
-```
-
-### Include in JSON Responses
-
-```ruby
-class Order < ApplicationRecord
-  include BetterModel
-
-  stateable do
-    # ... states and transitions
-  end
-
-  def as_json(options = {})
-    super(options).tap do |json|
-      if options[:include_transition_history]
-        json['transition_history'] = transition_history
-      end
-    end
-  end
-end
-
-# API response
-order.as_json(include_transition_history: true)
-# => {
-#   "id" => 1,
-#   "state" => "shipped",
-#   "total" => 99.99,
-#   "transition_history" => [
-#     { "from_state" => "pending", "to_state" => "confirmed", ... },
-#     { "from_state" => "confirmed", "to_state" => "paid", ... },
-#     { "from_state" => "paid", "to_state" => "shipped", ... }
-#   ]
-# }
-```
-
-## Error Handling
-
-```ruby
-class Order < ApplicationRecord
-  include BetterModel
-
-  stateable do
-    state :pending, initial: true
-    state :confirmed
-
-    transition :confirm, from: :pending, to: :confirmed do
-      check { total >= 10.00 }
-
-      validate do
-        errors.add(:customer, "must be verified") unless customer.verified?
-      end
-    end
-  end
-end
-
-order = Order.create!(total: 5.00)
-
-# Guard failure - raises exception
-begin
-  order.confirm!
-rescue BetterModel::Stateable::InvalidTransition => e
-  puts e.message  # => "Cannot transition from pending to confirmed"
-end
-
-# Check before attempting
-if order.can_confirm?
-  order.confirm!
-else
-  # Handle inability to transition
-  Rails.logger.warn "Order #{order.id} cannot be confirmed"
-end
-
-# Validation failure - returns false
-order.update!(total: 15.00)
-result = order.confirm!  # => false (customer not verified)
-
-if result
-  redirect_to order, notice: "Order confirmed"
-else
-  flash.now[:alert] = order.errors.full_messages.join(", ")
-  render :show
 end
 ```
 
 ---
 
-## Example 1: E-commerce Order Management
+### With Transition History
 
-Complete order lifecycle with payment processing, inventory management, and shipping.
+**Cosa fa**: Adds table to track state transitions
+
+**Quando usarlo**: For audit trail of state changes
+
+**Esempio**:
+```bash
+rails generate better_model:stateable_history Order
+rails db:migrate
+```
 
 ```ruby
-# db/migrate/YYYYMMDDHHMMSS_add_stateable_to_orders.rb
-class AddStateableToOrders < ActiveRecord::Migration[8.0]
-  def change
-    add_column :orders, :state, :string, null: false, default: 'cart'
-    add_column :orders, :confirmed_at, :datetime
-    add_column :orders, :paid_at, :datetime
-    add_column :orders, :shipped_at, :datetime
-    add_column :orders, :delivered_at, :datetime
-    add_column :orders, :cancelled_at, :datetime
-    add_column :orders, :cancellation_reason, :text
-
-    add_index :orders, :state
-  end
-end
-
-# db/migrate/YYYYMMDDHHMMSS_create_order_state_transitions.rb
-class CreateOrderStateTransitions < ActiveRecord::Migration[8.0]
+# Generated migration
+class CreateOrderStateTransitions < ActiveRecord::Migration[8.1]
   def change
     create_table :order_state_transitions do |t|
       t.references :order, null: false, foreign_key: true
       t.string :from_state, null: false
       t.string :to_state, null: false
       t.string :event, null: false
-      t.bigint :triggered_by_id
       t.jsonb :metadata, default: {}
       t.timestamps
     end
 
     add_index :order_state_transitions, [:order_id, :created_at]
-    add_index :order_state_transitions, :triggered_by_id
-  end
-end
-
-# app/models/order.rb
-class Order < ApplicationRecord
-  include BetterModel
-
-  belongs_to :customer, class_name: 'User'
-  has_many :line_items, dependent: :destroy
-  has_many :products, through: :line_items
-  belongs_to :shipping_address, class_name: 'Address', optional: true
-
-  is :payment_verified, -> { payment_verification_code.present? }
-  is :fraud_check_passed, -> { fraud_check_status == "passed" }
-  is :inventory_reserved, -> { inventory_reservation_id.present? }
-
-  stateable do
-    # States
-    state :cart, initial: true
-    state :pending_payment
-    state :payment_processing
-    state :paid
-    state :preparing
-    state :shipped
-    state :delivered
-    state :cancelled
-    state :refunded
-
-    # Checkout: Cart -> Pending Payment
-    transition :checkout, from: :cart, to: :pending_payment do
-      check { line_items.any? }
-      check { shipping_address.present? }
-      check { customer.email.present? }
-
-      validate do
-        errors.add(:base, "Cart is empty") if line_items.empty?
-        errors.add(:shipping_address, "is required") if shipping_address.blank?
-        errors.add(:customer, "email is required") if customer.email.blank?
-      end
-
-      before_transition do
-        self.confirmed_at = Time.current
-        calculate_totals
-      end
-
-      after_transition do
-        OrderMailer.checkout_confirmation(self).deliver_later
-      end
-    end
-
-    # Process Payment: Pending -> Processing
-    transition :process_payment, from: :pending_payment, to: :payment_processing do
-      check { total > 0 }
-
-      before_transition do
-        # Initiate payment processing
-        self.payment_started_at = Time.current
-      end
-
-      around do |t|
-        PaymentGateway.start_transaction(self) do
-          t.call
-        end
-      end
-    end
-
-    # Payment Success: Processing -> Paid
-    transition :confirm_payment, from: :payment_processing, to: :paid do
-      check if: :payment_verified?
-      check unless: :fraud_check_failed?
-
-      validate do
-        unless payment_verification_code.present?
-          errors.add(:payment, "verification code missing")
-        end
-      end
-
-      before_transition do
-        self.paid_at = Time.current
-      end
-
-      after_transition do
-        mark_as_payment_verified!
-        mark_as_fraud_check_passed!
-        OrderMailer.payment_received(self).deliver_later
-        reserve_inventory
-      end
-    end
-
-    # Start Preparation: Paid -> Preparing
-    transition :start_preparation, from: :paid, to: :preparing do
-      check if: :inventory_reserved?
-      check { warehouse_assigned? }
-
-      after_transition do
-        WarehouseService.create_pick_list(self)
-        update_estimated_ship_date
-      end
-    end
-
-    # Ship Order: Preparing -> Shipped
-    transition :ship, from: :preparing, to: :shipped do
-      check { tracking_number.present? }
-      check { all_items_packed? }
-
-      validate do
-        errors.add(:tracking_number, "is required") if tracking_number.blank?
-
-        unpacked = line_items.reject(&:packed?)
-        if unpacked.any?
-          errors.add(:base, "Items not packed: #{unpacked.map(&:product_name).join(', ')}")
-        end
-      end
-
-      before_transition do
-        self.shipped_at = Time.current
-      end
-
-      after_transition do
-        deduct_inventory
-        ShippingService.notify_carrier(self)
-        OrderMailer.shipment_notification(self).deliver_later
-        TrackingUpdateJob.perform_later(self.id)
-      end
-    end
-
-    # Deliver: Shipped -> Delivered
-    transition :deliver, from: :shipped, to: :delivered do
-      before_transition do
-        self.delivered_at = Time.current
-      end
-
-      after_transition do
-        OrderMailer.delivery_confirmation(self).deliver_later
-        ReviewRequestJob.set(wait: 2.days).perform_later(self.id)
-      end
-    end
-
-    # Cancel: Multiple states -> Cancelled
-    transition :cancel, from: [:cart, :pending_payment, :payment_processing, :paid, :preparing], to: :cancelled do
-      validate do
-        if cancellation_reason.blank?
-          errors.add(:cancellation_reason, "must be provided")
-        end
-      end
-
-      before_transition do
-        self.cancelled_at = Time.current
-      end
-
-      after_transition do
-        release_inventory if inventory_reserved?
-
-        if paid?
-          RefundService.process_refund(self)
-        end
-
-        OrderMailer.cancellation_notice(self).deliver_later
-      end
-    end
-
-    # Refund: Paid/Delivered -> Refunded
-    transition :refund, from: [:paid, :preparing, :shipped, :delivered], to: :refunded do
-      check { refundable? }
-
-      validate do
-        if refund_reason.blank?
-          errors.add(:refund_reason, "is required")
-        end
-
-        if delivered_at && delivered_at < 30.days.ago
-          errors.add(:base, "Refund period expired (30 days)")
-        end
-      end
-
-      around do |t|
-        RefundService.start_refund(self) do
-          t.call
-          RefundService.process_payment_refund(self)
-        end
-      end
-
-      after_transition do
-        release_inventory if inventory_reserved?
-        OrderMailer.refund_processed(self).deliver_later
-      end
-    end
-  end
-
-  # Helper methods
-  def calculate_totals
-    self.subtotal = line_items.sum(&:total)
-    self.tax = subtotal * 0.08
-    self.shipping_cost = calculate_shipping
-    self.total = subtotal + tax + shipping_cost
-  end
-
-  def warehouse_assigned?
-    warehouse_id.present?
-  end
-
-  def all_items_packed?
-    line_items.all?(&:packed?)
-  end
-
-  def refundable?
-    paid? || preparing? || shipped? || delivered?
-  end
-
-  def reserve_inventory
-    line_items.each do |item|
-      InventoryService.reserve(item.product, item.quantity)
-    end
-    mark_as_inventory_reserved!
-  end
-
-  def release_inventory
-    line_items.each do |item|
-      InventoryService.release(item.product, item.quantity)
-    end
-    unmark_as_inventory_reserved!
-  end
-
-  def deduct_inventory
-    line_items.each do |item|
-      InventoryService.deduct(item.product, item.quantity)
-    end
-  end
-end
-
-# Usage Examples
-
-# 1. Normal order flow
-order = Order.create!(customer: customer, shipping_address: address)
-order.line_items.create!(product: product, quantity: 2, price: 29.99)
-
-order.cart?  # => true
-
-# Checkout
-order.checkout!
-order.pending_payment?  # => true
-# Email sent, totals calculated
-
-# Process payment
-order.process_payment!
-order.payment_processing?  # => true
-
-# Payment confirmed by gateway webhook
-order.confirm_payment!(
-  triggered_by: system_user.id,
-  metadata: {
-    payment_id: "ch_abc123",
-    payment_method: "credit_card",
-    last4: "4242"
-  }
-)
-order.paid?  # => true
-# Inventory reserved, email sent
-
-# Start preparing
-order.start_preparation!
-order.preparing?  # => true
-# Pick list created
-
-# Ship
-order.update!(tracking_number: "1Z999AA10123456784")
-order.line_items.each { |item| item.update!(packed: true) }
-order.ship!(
-  triggered_by: warehouse_user.id,
-  metadata: {
-    carrier: "UPS",
-    service: "Ground",
-    weight: "2.5 lbs"
-  }
-)
-order.shipped?  # => true
-# Inventory deducted, tracking started
-
-# Deliver
-order.deliver!(
-  triggered_by: system_user.id,
-  metadata: {
-    signature: "J. Doe",
-    delivered_to: "Front porch"
-  }
-)
-order.delivered?  # => true
-
-# 2. Cancellation scenarios
-order = Order.create!(customer: customer)
-order.line_items.create!(product: product, quantity: 1)
-order.checkout!
-
-# Customer cancels before payment
-order.cancellation_reason = "Changed mind"
-order.cancel!(triggered_by: customer.id)
-order.cancelled?  # => true
-
-# Cancel after payment (refund processed)
-paid_order = Order.find(123)
-paid_order.paid?  # => true
-paid_order.cancellation_reason = "Out of stock"
-paid_order.cancel!(triggered_by: admin.id)
-# Inventory released, refund initiated
-
-# 3. Refund after delivery
-delivered_order = Order.find(456)
-delivered_order.delivered?  # => true
-delivered_order.refund_reason = "Damaged on arrival"
-delivered_order.refund!(
-  triggered_by: support_user.id,
-  metadata: {
-    damage_photos: ["photo1.jpg", "photo2.jpg"],
-    support_ticket: "#SUP-789"
-  }
-)
-delivered_order.refunded?  # => true
-
-# 4. Check transition history
-order.transition_history
-# => [
-#   { from_state: "cart", to_state: "pending_payment", event: "checkout", ... },
-#   { from_state: "pending_payment", to_state: "payment_processing", ... },
-#   { from_state: "payment_processing", to_state: "paid", ... },
-#   { from_state: "paid", to_state: "preparing", ... },
-#   { from_state: "preparing", to_state: "shipped", ... },
-#   { from_state: "shipped", to_state: "delivered", ... }
-# ]
-
-# 5. Error handling
-order = Order.create!(customer: customer)
-# No line items, no address
-
-order.can_checkout?  # => false (guards fail)
-
-begin
-  order.checkout!
-rescue BetterModel::Stateable::InvalidTransition => e
-  puts e.message  # => "Cannot transition from cart to pending_payment"
-end
-
-# Add items and address
-order.line_items.create!(product: product, quantity: 1)
-order.shipping_address = address
-order.save!
-
-order.can_checkout?  # => true
-order.checkout!  # => success
-```
-
----
-
-## Example 2: Document Approval Workflow
-
-Multi-level approval system with role-based transitions and rejection handling.
-
-```ruby
-# db/migrate/YYYYMMDDHHMMSS_add_stateable_to_documents.rb
-class AddStateableToDocuments < ActiveRecord::Migration[8.0]
-  def change
-    add_column :documents, :state, :string, null: false, default: 'draft'
-    add_column :documents, :submitted_at, :datetime
-    add_column :documents, :manager_approved_at, :datetime
-    add_column :documents, :director_approved_at, :datetime
-    add_column :documents, :published_at, :datetime
-    add_column :documents, :rejected_at, :datetime
-    add_column :documents, :rejection_reason, :text
-    add_column :documents, :current_approver_id, :bigint
-
-    add_index :documents, :state
-    add_index :documents, :current_approver_id
-  end
-end
-
-# app/models/document.rb
-class Document < ApplicationRecord
-  include BetterModel
-
-  belongs_to :author, class_name: 'User'
-  belongs_to :current_approver, class_name: 'User', optional: true
-  has_many :approvals, dependent: :destroy
-
-  is :legal_reviewed, -> { legal_reviewed_at.present? }
-  is :compliance_checked, -> { compliance_checked_at.present? }
-  is :final_review_required, -> { document_value > 100_000 || sensitive_category? }
-
-  stateable do
-    # States
-    state :draft, initial: true
-    state :submitted
-    state :manager_review
-    state :director_review
-    state :final_review
-    state :approved
-    state :published
-    state :rejected
-    state :archived
-
-    # Submit: Draft -> Submitted
-    transition :submit, from: :draft, to: :submitted do
-      check { content.present? }
-      check { title.present? }
-
-      validate do
-        errors.add(:title, "must be at least 10 characters") if title.length < 10
-        errors.add(:content, "must be at least 100 characters") if content.length < 100
-        errors.add(:category, "must be selected") if category.blank?
-      end
-
-      before_transition do
-        self.submitted_at = Time.current
-        self.current_approver = find_manager_approver
-      end
-
-      after_transition do
-        NotificationService.notify_approver(current_approver, self)
-        create_approval_record(current_approver, 'manager')
-      end
-    end
-
-    # Manager Review: Submitted -> Manager Review
-    transition :start_manager_review, from: :submitted, to: :manager_review do
-      check { current_approver.present? }
-      check { current_approver.has_role?(:manager) }
-
-      after_transition do
-        update_approval_status(current_approver, 'in_review')
-      end
-    end
-
-    # Manager Approval: Manager Review -> Director Review
-    transition :approve_by_manager, from: :manager_review, to: :director_review do
-      check { can_be_approved_by?(current_user) }
-      check { current_user.has_role?(:manager) }
-
-      validate do
-        if approval_comments.blank?
-          errors.add(:approval_comments, "are required")
-        end
-      end
-
-      before_transition do
-        self.manager_approved_at = Time.current
-        self.current_approver = find_director_approver
-      end
-
-      after_transition do
-        complete_approval_record(current_user, 'approved')
-        create_approval_record(current_approver, 'director')
-        NotificationService.notify_approver(current_approver, self)
-        NotificationService.notify_author(author, :manager_approved)
-      end
-    end
-
-    # Director Approval: Director Review -> Final Review or Approved
-    transition :approve_by_director, from: :director_review, to: :final_review do
-      check { current_user.has_role?(:director) }
-      check if: :final_review_required?
-
-      before_transition do
-        self.director_approved_at = Time.current
-        self.current_approver = find_executive_approver
-      end
-
-      after_transition do
-        complete_approval_record(current_user, 'approved')
-        create_approval_record(current_approver, 'executive')
-        NotificationService.notify_approver(current_approver, self)
-      end
-    end
-
-    transition :approve_by_director_final, from: :director_review, to: :approved do
-      check { current_user.has_role?(:director) }
-      check unless: :final_review_required?
-
-      before_transition do
-        self.director_approved_at = Time.current
-      end
-
-      after_transition do
-        complete_approval_record(current_user, 'approved')
-        NotificationService.notify_author(author, :fully_approved)
-        prepare_for_publication
-      end
-    end
-
-    # Final Approval: Final Review -> Approved
-    transition :approve_final, from: :final_review, to: :approved do
-      check { current_user.has_role?(:executive) }
-      check if: :legal_reviewed?
-      check if: :compliance_checked?
-
-      validate do
-        errors.add(:base, "Legal review incomplete") unless legal_reviewed?
-        errors.add(:base, "Compliance check incomplete") unless compliance_checked?
-      end
-
-      after_transition do
-        complete_approval_record(current_user, 'approved')
-        NotificationService.notify_all_stakeholders(self, :approved)
-        prepare_for_publication
-      end
-    end
-
-    # Publish: Approved -> Published
-    transition :publish, from: :approved, to: :published do
-      check { can_be_published? }
-      check { publication_date.present? }
-
-      before_transition do
-        self.published_at = Time.current
-      end
-
-      after_transition do
-        DocumentPublisher.publish(self)
-        SearchIndex.index_document(self)
-        NotificationService.broadcast_publication(self)
-      end
-    end
-
-    # Rejection: Any review state -> Rejected
-    transition :reject, from: [:submitted, :manager_review, :director_review, :final_review], to: :rejected do
-      validate do
-        errors.add(:rejection_reason, "must be provided") if rejection_reason.blank?
-      end
-
-      before_transition do
-        self.rejected_at = Time.current
-        self.current_approver = nil
-      end
-
-      after_transition do
-        complete_approval_record(current_user, 'rejected', rejection_reason)
-        NotificationService.notify_author(author, :rejected)
-      end
-    end
-
-    # Resubmit: Rejected -> Submitted
-    transition :resubmit, from: :rejected, to: :submitted do
-      check { author == current_user }
-      check { content_modified_since_rejection? }
-
-      validate do
-        errors.add(:base, "Must address rejection feedback") unless addressed_feedback?
-      end
-
-      before_transition do
-        self.submitted_at = Time.current
-        self.rejected_at = nil
-        self.rejection_reason = nil
-        self.current_approver = find_manager_approver
-      end
-
-      after_transition do
-        create_approval_record(current_approver, 'manager')
-        NotificationService.notify_approver(current_approver, self)
-      end
-    end
-
-    # Archive: Published -> Archived
-    transition :archive, from: :published, to: :archived do
-      check { current_user.has_role?(:admin, :manager) }
-
-      validate do
-        if archive_reason.blank?
-          errors.add(:archive_reason, "must be provided")
-        end
-      end
-
-      after_transition do
-        SearchIndex.remove_document(self)
-        NotificationService.notify_subscribers(self, :archived)
-      end
-    end
-  end
-
-  # Helper methods
-  def find_manager_approver
-    User.where(role: 'manager', department: author.department).first
-  end
-
-  def find_director_approver
-    User.where(role: 'director', department: author.department).first
-  end
-
-  def find_executive_approver
-    User.where(role: 'executive').first
-  end
-
-  def can_be_approved_by?(user)
-    current_approver == user
-  end
-
-  def can_be_published?
-    approved? && all_approvals_complete?
-  end
-
-  def content_modified_since_rejection?
-    updated_at > rejected_at
-  end
-
-  def addressed_feedback?
-    # Custom logic to check if author addressed feedback
-    rejection_feedback_addressed == true
-  end
-
-  def all_approvals_complete?
-    required_approvals = ['manager', 'director']
-    required_approvals << 'executive' if final_review_required?
-
-    required_approvals.all? do |level|
-      approvals.exists?(level: level, status: 'approved')
-    end
-  end
-
-  def create_approval_record(approver, level)
-    approvals.create!(
-      approver: approver,
-      level: level,
-      status: 'pending'
-    )
-  end
-
-  def update_approval_status(approver, status)
-    approvals.find_by(approver: approver)&.update!(status: status)
-  end
-
-  def complete_approval_record(approver, status, comments = nil)
-    approval = approvals.find_by(approver: approver)
-    approval&.update!(
-      status: status,
-      comments: comments,
-      approved_at: Time.current
-    )
-  end
-
-  def prepare_for_publication
-    # Set publication date if not set
-    self.publication_date ||= Time.current + 1.day
-    save!
-  end
-end
-
-# Usage Examples
-
-# 1. Normal approval flow
-doc = Document.create!(
-  title: "New Marketing Strategy 2025",
-  content: "..." * 100,
-  category: "Marketing",
-  author: employee
-)
-
-doc.draft?  # => true
-
-# Submit for review
-doc.submit!(triggered_by: employee.id)
-doc.submitted?  # => true
-doc.current_approver  # => manager
-
-# Manager reviews
-doc.start_manager_review!(triggered_by: manager.id)
-doc.approval_comments = "Looks good, minor typo on page 3"
-doc.approve_by_manager!(
-  triggered_by: manager.id,
-  metadata: { reviewed_pages: "all", rating: "excellent" }
-)
-doc.director_review?  # => true
-
-# Director approves (no final review needed)
-doc.approve_by_director_final!(triggered_by: director.id)
-doc.approved?  # => true
-
-# Publish
-doc.publication_date = 1.week.from_now
-doc.publish!(triggered_by: admin.id)
-doc.published?  # => true
-
-# 2. Rejection and resubmit
-doc = Document.create!(title: "Proposal", content: "...", author: employee)
-doc.submit!
-doc.start_manager_review!(triggered_by: manager.id)
-
-# Manager rejects
-doc.rejection_reason = "Insufficient data analysis in section 3"
-doc.reject!(
-  triggered_by: manager.id,
-  metadata: { sections_needing_work: [3, 5] }
-)
-doc.rejected?  # => true
-
-# Author revises and resubmits
-doc.update!(content: "... revised content ...")
-doc.rejection_feedback_addressed = true
-doc.resubmit!(triggered_by: employee.id)
-doc.submitted?  # => true
-
-# 3. Final review path (high-value doc)
-doc = Document.create!(
-  title: "Company Restructuring Plan",
-  content: "...",
-  author: director,
-  value: 1_000_000
-)
-doc.mark_as_final_review_required!
-doc.submit!
-doc.start_manager_review!(triggered_by: manager.id)
-doc.approve_by_manager!(triggered_by: manager.id)
-doc.approve_by_director!(triggered_by: director.id)
-doc.final_review?  # => true
-
-# Executive reviews
-doc.mark_as_legal_reviewed!
-doc.mark_as_compliance_checked!
-doc.approve_final!(triggered_by: ceo.id)
-doc.approved?  # => true
-
-# 4. Archive published document
-published_doc = Document.find(123)
-published_doc.published?  # => true
-published_doc.archive_reason = "Outdated information"
-published_doc.archive!(triggered_by: manager.id)
-published_doc.archived?  # => true
-
-# 5. View approval history
-doc.transition_history
-# => [
-#   {
-#     from_state: "draft",
-#     to_state: "submitted",
-#     event: "submit",
-#     triggered_by: employee.id,
-#     transitioned_at: ...
-#   },
-#   {
-#     from_state: "submitted",
-#     to_state: "manager_review",
-#     event: "start_manager_review",
-#     ...
-#   },
-#   ...
-# ]
-
-doc.approvals.map(&:summary)
-# => [
-#   { level: "manager", approver: "John Smith", status: "approved", approved_at: ... },
-#   { level: "director", approver: "Jane Doe", status: "approved", approved_at: ... },
-#   { level: "executive", approver: "Bob Johnson", status: "approved", approved_at: ... }
-# ]
-```
-
----
-
-## Example 3: Support Ticket Lifecycle
-
-Customer support ticket system with SLA tracking, escalation, and resolution.
-
-```ruby
-# db/migrate/YYYYMMDDHHMMSS_add_stateable_to_tickets.rb
-class AddStateableToTickets < ActiveRecord::Migration[8.0]
-  def change
-    add_column :tickets, :state, :string, null: false, default: 'open'
-    add_column :tickets, :assigned_at, :datetime
-    add_column :tickets, :in_progress_at, :datetime
-    add_column :tickets, :resolved_at, :datetime
-    add_column :tickets, :closed_at, :datetime
-    add_column :tickets, :escalated_at, :datetime
-    add_column :tickets, :escalation_reason, :text
-    add_column :tickets, :resolution_notes, :text
-    add_column :tickets, :sla_breached, :boolean, default: false
-
-    add_index :tickets, :state
-    add_index :tickets, [:state, :priority]
-  end
-end
-
-# app/models/ticket.rb
-class Ticket < ApplicationRecord
-  include BetterModel
-
-  belongs_to :customer, class_name: 'User'
-  belongs_to :assigned_agent, class_name: 'User', optional: true
-  belongs_to :escalated_to, class_name: 'User', optional: true
-  has_many :comments, dependent: :destroy
-
-  enum priority: { low: 0, medium: 1, high: 2, critical: 3 }
-
-  is :first_response_sent, -> { first_response_at.present? }
-  is :customer_responded, -> { last_customer_response_at.present? }
-  is :waiting_on_engineering, -> { state == "waiting_internal" }
-  is :waiting_on_customer, -> { state == "waiting_customer" }
-
-  stateable do
-    # States
-    state :open, initial: true
-    state :assigned
-    state :in_progress
-    state :waiting_customer
-    state :waiting_internal
-    state :escalated
-    state :resolved
-    state :closed
-    state :reopened
-
-    # Assign: Open -> Assigned
-    transition :assign, from: [:open, :reopened], to: :assigned do
-      check { assigned_agent.present? }
-      check { assigned_agent.available? }
-
-      validate do
-        if assigned_agent.current_ticket_count >= assigned_agent.max_tickets
-          errors.add(:assigned_agent, "has reached maximum ticket capacity")
-        end
-      end
-
-      before_transition do
-        self.assigned_at = Time.current
-        calculate_sla_deadline
-      end
-
-      after_transition do
-        NotificationService.notify_agent(assigned_agent, self)
-        update_agent_workload(assigned_agent, :increment)
-      end
-    end
-
-    # Start Work: Assigned -> In Progress
-    transition :start_work, from: :assigned, to: :in_progress do
-      check { assigned_agent == current_user }
-
-      before_transition do
-        self.in_progress_at = Time.current
-      end
-
-      after_transition do
-        check_sla_compliance
-      end
-    end
-
-    # Customer Waiting: In Progress -> Waiting Customer
-    transition :request_customer_info, from: :in_progress, to: :waiting_customer do
-      check { assigned_agent == current_user }
-
-      validate do
-        errors.add(:base, "Must specify what information is needed") if info_request.blank?
-      end
-
-      before_transition do
-        mark_as_waiting_on_customer!
-      end
-
-      after_transition do
-        NotificationService.request_info_from_customer(customer, self, info_request)
-        pause_sla_timer
-      end
-    end
-
-    # Customer Responds: Waiting Customer -> In Progress
-    transition :receive_customer_response, from: :waiting_customer, to: :in_progress do
-      before_transition do
-        unmark_as_waiting_on_customer!
-        mark_as_customer_responded!
-      end
-
-      after_transition do
-        resume_sla_timer
-        NotificationService.notify_agent(assigned_agent, :customer_responded)
-      end
-    end
-
-    # Internal Waiting: In Progress -> Waiting Internal
-    transition :escalate_to_engineering, from: :in_progress, to: :waiting_internal do
-      check { assigned_agent == current_user }
-
-      validate do
-        errors.add(:engineering_details, "must be provided") if engineering_details.blank?
-      end
-
-      before_transition do
-        mark_as_waiting_on_engineering!
-      end
-
-      after_transition do
-        EngineeringTicket.create_from_support(self)
-        NotificationService.notify_engineering_team(self)
-        pause_sla_timer
-      end
-    end
-
-    # Engineering Responds: Waiting Internal -> In Progress
-    transition :receive_internal_response, from: :waiting_internal, to: :in_progress do
-      before_transition do
-        unmark_as_waiting_on_engineering!
-      end
-
-      after_transition do
-        resume_sla_timer
-        NotificationService.notify_agent(assigned_agent, :engineering_responded)
-      end
-    end
-
-    # Escalate: Any active state -> Escalated
-    transition :escalate, from: [:assigned, :in_progress, :waiting_customer, :waiting_internal], to: :escalated do
-      check { can_escalate? }
-
-      validate do
-        errors.add(:escalation_reason, "is required") if escalation_reason.blank?
-        errors.add(:escalated_to, "must be a senior agent") unless escalated_to&.senior?
-      end
-
-      before_transition do
-        self.escalated_at = Time.current
-        self.previous_agent = assigned_agent
-        self.assigned_agent = escalated_to
-      end
-
-      after_transition do
-        NotificationService.notify_escalation(escalated_to, self)
-        NotificationService.notify_manager(:ticket_escalated, self)
-        increase_priority if can_increase_priority?
-      end
-    end
-
-    # De-escalate: Escalated -> In Progress
-    transition :deescalate, from: :escalated, to: :in_progress do
-      check { escalated_to == current_user }
-
-      after_transition do
-        # Keeps current assigned_agent (the senior agent)
-        self.escalated_to = nil
-        save!
-      end
-    end
-
-    # Resolve: Active states -> Resolved
-    transition :resolve, from: [:in_progress, :escalated], to: :resolved do
-      check { assigned_agent == current_user }
-
-      validate do
-        errors.add(:resolution_notes, "are required") if resolution_notes.blank?
-
-        if resolution_notes.length < 20
-          errors.add(:resolution_notes, "must be detailed (minimum 20 characters)")
-        end
-      end
-
-      before_transition do
-        self.resolved_at = Time.current
-        check_sla_compliance
-      end
-
-      after_transition do
-        NotificationService.notify_customer(customer, :ticket_resolved)
-        update_agent_workload(assigned_agent, :decrement)
-        schedule_auto_close
-        mark_as_first_response_sent! unless first_response_sent?
-      end
-    end
-
-    # Close: Resolved -> Closed
-    transition :close, from: :resolved, to: :closed do
-      before_transition do
-        self.closed_at = Time.current
-      end
-
-      after_transition do
-        SatisfactionSurvey.send_to_customer(customer, self)
-        update_agent_metrics(assigned_agent)
-      end
-    end
-
-    # Reopen: Closed -> Reopened
-    transition :reopen, from: :closed, to: :reopened do
-      check { can_reopen? }
-
-      validate do
-        if closed_at < 7.days.ago
-          errors.add(:base, "Cannot reopen tickets closed more than 7 days ago")
-        end
-      end
-
-      before_transition do
-        self.reopened_at = Time.current
-        self.resolved_at = nil
-        self.closed_at = nil
-      end
-
-      after_transition do
-        NotificationService.notify_agent(assigned_agent, :ticket_reopened)
-        NotificationService.notify_manager(:ticket_reopened, self)
-      end
-    end
-  end
-
-  # Helper methods
-  def calculate_sla_deadline
-    hours = case priority
-            when 'critical' then 4
-            when 'high' then 24
-            when 'medium' then 72
-            when 'low' then 168
-            end
-    self.sla_deadline = Time.current + hours.hours
-  end
-
-  def check_sla_compliance
-    if Time.current > sla_deadline
-      self.sla_breached = true
-      NotificationService.notify_manager(:sla_breach, self)
-    end
-  end
-
-  def pause_sla_timer
-    self.sla_paused_at = Time.current
-    save!
-  end
-
-  def resume_sla_timer
-    if sla_paused_at
-      pause_duration = Time.current - sla_paused_at
-      self.sla_deadline += pause_duration
-      self.sla_paused_at = nil
-      save!
-    end
-  end
-
-  def can_escalate?
-    critical? || high? || sla_breached? || escalation_requested_by_customer?
-  end
-
-  def can_increase_priority?
-    !critical?
-  end
-
-  def increase_priority
-    self.priority = (priority_before_type_cast + 1).clamp(0, 3)
-    save!
-  end
-
-  def can_reopen?
-    closed_at && closed_at > 7.days.ago
-  end
-
-  def schedule_auto_close
-    AutoCloseTicketJob.set(wait: 48.hours).perform_later(id)
-  end
-
-  def update_agent_workload(agent, operation)
-    case operation
-    when :increment
-      agent.increment!(:current_ticket_count)
-    when :decrement
-      agent.decrement!(:current_ticket_count)
-    end
-  end
-
-  def update_agent_metrics(agent)
-    agent_metric = agent.metrics.find_or_create_by(date: Date.current)
-    agent_metric.increment!(:tickets_resolved)
-    agent_metric.update!(average_resolution_time: calculate_average_resolution_time)
-  end
-
-  def calculate_average_resolution_time
-    return 0 unless resolved_at && created_at
-
-    total_time = resolved_at - created_at
-    paused_time = calculate_total_paused_time
-    total_time - paused_time
-  end
-
-  def calculate_total_paused_time
-    # Calculate time spent in waiting_customer and waiting_internal states
-    transitions = state_transitions.where(to_state: ['waiting_customer', 'waiting_internal'])
-    # Implementation details...
-    0
-  end
-end
-
-# Usage Examples
-
-# 1. Normal ticket flow
-ticket = Ticket.create!(
-  customer: customer,
-  subject: "Cannot login to account",
-  description: "Getting error message when trying to login",
-  priority: :high
-)
-
-ticket.open?  # => true
-
-# Assign to agent
-ticket.assigned_agent = agent
-ticket.assign!(triggered_by: manager.id)
-ticket.assigned?  # => true
-# SLA deadline calculated
-
-# Agent starts work
-ticket.start_work!(triggered_by: agent.id)
-ticket.in_progress?  # => true
-# First response timer checked
-
-# Need info from customer
-ticket.info_request = "Please provide your username and last successful login date"
-ticket.request_customer_info!(triggered_by: agent.id)
-ticket.waiting_customer?  # => true
-# Email sent to customer, SLA timer paused
-
-# Customer responds
-ticket.comments.create!(author: customer, content: "Username: john.doe, last login: 2025-01-10")
-ticket.receive_customer_response!(triggered_by: system_user.id)
-ticket.in_progress?  # => true
-# SLA timer resumed
-
-# Resolve ticket
-ticket.resolution_notes = "Reset password and verified login successful. Issue was due to account lockout after multiple failed attempts."
-ticket.resolve!(
-  triggered_by: agent.id,
-  metadata: {
-    resolution_type: "password_reset",
-    time_spent: 15,
-    tools_used: ["admin_panel", "password_reset_tool"]
-  }
-)
-ticket.resolved?  # => true
-# Customer notified, auto-close scheduled
-
-# Auto-close after 48 hours
-ticket.close!(triggered_by: system_user.id)
-ticket.closed?  # => true
-# Survey sent
-
-# 2. Escalation scenario
-ticket = Ticket.create!(
-  customer: vip_customer,
-  subject: "Data loss in recent sync",
-  priority: :critical
-)
-ticket.assigned_agent = junior_agent
-ticket.assign!
-ticket.start_work!(triggered_by: junior_agent.id)
-
-# Escalate to senior agent
-ticket.escalation_reason = "Critical data loss requires senior engineer review"
-ticket.escalated_to = senior_agent
-ticket.escalate!(
-  triggered_by: junior_agent.id,
-  metadata: {
-    data_affected: "customer_records",
-    estimated_records: 1500
-  }
-)
-ticket.escalated?  # => true
-# Priority possibly increased, manager notified
-
-# Senior agent works on it
-ticket.deescalate!(triggered_by: senior_agent.id)
-ticket.in_progress?  # => true
-
-ticket.resolution_notes = "Recovered data from backup. Implemented additional safeguards."
-ticket.resolve!(triggered_by: senior_agent.id)
-
-# 3. Engineering escalation
-ticket = Ticket.create!(
-  customer: customer,
-  subject: "Feature not working as expected",
-  priority: :medium
-)
-ticket.assigned_agent = agent
-ticket.assign!
-ticket.start_work!(triggered_by: agent.id)
-
-# Needs engineering input
-ticket.engineering_details = "Customer reports export feature fails for datasets > 10,000 rows. Possible memory issue."
-ticket.escalate_to_engineering!(
-  triggered_by: agent.id,
-  metadata: {
-    feature: "data_export",
-    error_logs: ["error1.log", "error2.log"]
-  }
-)
-ticket.waiting_internal?  # => true
-# Engineering ticket created, SLA paused
-
-# Engineering responds
-ticket.comments.create!(
-  author: engineering_user,
-  content: "Fixed memory issue in export service. Deployed to production."
-)
-ticket.receive_internal_response!(triggered_by: system_user.id)
-ticket.in_progress?  # => true
-
-# Agent verifies fix and resolves
-ticket.resolution_notes = "Engineering fixed the export issue. Verified with customer that exports now work for large datasets."
-ticket.resolve!(triggered_by: agent.id)
-
-# 4. Reopen scenario
-closed_ticket = Ticket.find(789)
-closed_ticket.closed?  # => true
-closed_ticket.closed_at  # => 2 days ago
-
-# Customer reports issue persists
-closed_ticket.comments.create!(
-  author: customer,
-  content: "The issue is happening again"
-)
-closed_ticket.reopen!(
-  triggered_by: customer.id,
-  metadata: { reason: "Issue recurred" }
-)
-closed_ticket.reopened?  # => true
-# Agent and manager notified
-
-# 5. SLA tracking
-ticket.state_transitions.where(to_state: 'resolved').first&.created_at
-# => Resolution timestamp
-
-ticket.sla_breached?  # => true/false
-ticket.calculate_total_paused_time  # => Time paused while waiting
-
-# View complete history
-ticket.transition_history
-# => [
-#   { from_state: "open", to_state: "assigned", event: "assign", ... },
-#   { from_state: "assigned", to_state: "in_progress", event: "start_work", ... },
-#   { from_state: "in_progress", to_state: "waiting_customer", ... },
-#   { from_state: "waiting_customer", to_state: "in_progress", ... },
-#   { from_state: "in_progress", to_state: "resolved", ... },
-#   { from_state: "resolved", to_state: "closed", ... }
-# ]
-```
-
----
-
-## Example 4: Project Task Management
-
-Agile task board with sprint workflow, dependencies, and team collaboration.
-
-```ruby
-# app/models/task.rb
-class Task < ApplicationRecord
-  include BetterModel
-
-  belongs_to :project
-  belongs_to :sprint, optional: true
-  belongs_to :assignee, class_name: 'User', optional: true
-  belongs_to :creator, class_name: 'User'
-  has_many :dependencies, class_name: 'TaskDependency', foreign_key: :task_id
-  has_many :blocking_tasks, through: :dependencies, source: :depends_on_task
-
-  enum task_type: { feature: 0, bug: 1, chore: 2, spike: 3 }
-
-  is :blocked, -> { blocking_tasks.exists? }
-  is :ready_for_review, -> { pull_request_url.present? && tests_passing? }
-  is :approved, -> { approval_count >= required_approvals }
-
-  stateable do
-    state :backlog, initial: true
-    state :todo
-    state :in_progress
-    state :code_review
-    state :testing
-    state :done
-    state :archived
-
-    # Add to Sprint: Backlog -> Todo
-    transition :add_to_sprint, from: :backlog, to: :todo do
-      check { sprint.present? }
-      check { sprint.active? }
-      check { assignee.present? }
-
-      validate do
-        errors.add(:sprint, "is full") if sprint.tasks.count >= sprint.capacity
-        errors.add(:story_points, "must be estimated") if story_points.nil?
-      end
-
-      after_transition do
-        NotificationService.notify_assignee(assignee, :task_assigned)
-        sprint.recalculate_metrics
-      end
-    end
-
-    # Start Work: Todo -> In Progress
-    transition :start, from: :todo, to: :in_progress do
-      check { assignee == current_user }
-      check unless: :blocked?
-      check { all_dependencies_complete? }
-
-      before_transition do
-        self.started_at = Time.current
-      end
-
-      after_transition do
-        create_branch_if_needed
-      end
-    end
-
-    # Submit for Review: In Progress -> Code Review
-    transition :submit_for_review, from: :in_progress, to: :code_review do
-      check { assignee == current_user }
-      check { pull_request_url.present? }
-
-      validate do
-        errors.add(:pull_request, "must be open") unless pull_request_open?
-        errors.add(:tests, "must pass") unless tests_passing?
-      end
-
-      before_transition do
-        mark_as_ready_for_review!
-      end
-
-      after_transition do
-        assign_reviewers
-        NotificationService.notify_reviewers(reviewers, self)
-      end
-    end
-
-    # Move to Testing: Code Review -> Testing
-    transition :move_to_testing, from: :code_review, to: :testing do
-      check if: :approved?
-      check { pull_request_merged? }
-
-      after_transition do
-        deploy_to_staging
-        NotificationService.notify_qa_team(self)
-      end
-    end
-
-    # Complete: Testing -> Done
-    transition :complete, from: :testing, to: :done do
-      check { qa_approved? }
-
-      before_transition do
-        self.completed_at = Time.current
-      end
-
-      after_transition do
-        sprint.recalculate_metrics
-        update_related_tasks
-        NotificationService.notify_stakeholders(self, :completed)
-      end
-    end
-
-    # Block: Any active state -> remains same but marks as blocked
-    # This uses Statusable instead
-
-    # Archive: Done -> Archived
-    transition :archive, from: :done, to: :archived do
-      check { completed_at < 30.days.ago }
-
-      after_transition do
-        cleanup_resources
-      end
-    end
-  end
-
-  def all_dependencies_complete?
-    blocking_tasks.all?(&:done?)
   end
 end
 ```
 
 ---
 
-## Example 5: Content Publishing Pipeline
+## Basic State Machine
 
-Multi-stage content workflow with SEO optimization, editorial review, and scheduled publishing.
+### Simple States and Transitions
 
-```ruby
-# app/models/article.rb
-class Article < ApplicationRecord
-  include BetterModel
+**Cosa fa**: Defines states and transitions between them
 
-  belongs_to :author, class_name: 'User'
-  belongs_to :editor, class_name: 'User', optional: true
-  belongs_to :seo_specialist, class_name: 'User', optional: true
-  has_many :revisions, dependent: :destroy
+**Quando usarlo**: For workflow management
 
-  is :seo_optimized, -> { seo_score >= 80 }
-  is :images_uploaded, -> { images.any? }
-  is :legal_cleared, -> { legal_clearance_at.present? }
-  is :featured, -> { featured_at.present? && featured_until > Time.current }
-
-  stateable do
-    state :draft, initial: true
-    state :editorial_review
-    state :seo_review
-    state :scheduled
-    state :published
-    state :unpublished
-
-    transition :submit_for_review, from: :draft, to: :editorial_review do
-      check { content.present? }
-      check { title.present? }
-      check if: :images_uploaded?
-
-      validate do
-        errors.add(:word_count, "must be at least 300 words") if word_count < 300
-        errors.add(:images, "at least one required") unless images.any?
-      end
-
-      after_transition do
-        assign_editor
-        NotificationService.notify_editor(editor, self)
-      end
-    end
-
-    transition :approve_editorial, from: :editorial_review, to: :seo_review do
-      check { editor == current_user }
-
-      after_transition do
-        assign_seo_specialist
-        NotificationService.notify_seo(seo_specialist, self)
-      end
-    end
-
-    transition :approve_seo, from: :seo_review, to: :scheduled do
-      check if: :seo_optimized?
-      check { publish_at.present? }
-
-      after_transition do
-        schedule_publication
-      end
-    end
-
-    transition :publish, from: [:scheduled, :unpublished], to: :published do
-      before_transition do
-        self.published_at = Time.current
-      end
-
-      after_transition do
-        notify_subscribers
-        update_sitemap
-      end
-    end
-
-    transition :unpublish, from: :published, to: :unpublished do
-      after_transition do
-        remove_from_sitemap
-      end
-    end
-  end
-end
-```
-
----
-
-## Integration with Other Features
-
-### With Statusable
-
-Use Statusable predicates in guards:
-
+**Esempio**:
 ```ruby
 class Order < ApplicationRecord
   include BetterModel
-
-  statusable do
-    status :verified
-    status :high_risk
-  end
 
   stateable do
     state :pending, initial: true
-    state :processing
+    state :confirmed
+    state :shipped
+    state :delivered
+    state :cancelled
 
-    transition :process, from: :pending, to: :processing do
-      check if: :verified?           # Statusable predicate
-      check unless: :high_risk?      # Statusable predicate
+    event :confirm do
+      transition from: :pending, to: :confirmed
     end
+
+    event :ship do
+      transition from: :confirmed, to: :shipped
+    end
+
+    event :deliver do
+      transition from: :shipped, to: :delivered
+    end
+
+    event :cancel do
+      transition from: [:pending, :confirmed], to: :cancelled
+    end
+  end
+end
+
+# Usage
+order = Order.create!  # state: "pending"
+order.confirm!         # state: "confirmed"
+order.ship!            # state: "shipped"
+order.deliver!         # state: "delivered"
+```
+
+---
+
+## State Predicates
+
+### Checking Current State
+
+**Cosa fa**: Boolean methods to check current state
+
+**Quando usarlo**: For conditional logic based on state
+
+**Esempio**:
+```ruby
+class Order < ApplicationRecord
+  include BetterModel
+
+  stateable do
+    state :pending, initial: true
+    state :confirmed
+    state :shipped
   end
 end
 
 order = Order.create!
-order.can_process?  # => false (not verified)
 
-order.mark_as_verified!
-order.can_process?  # => true
+# Auto-generated predicate methods
+order.pending?    # => true
+order.confirmed?  # => false
+order.shipped?    # => false
 
-order.mark_as_high_risk!
-order.can_process?  # => false (high risk)
+# Useful in conditionals
+if order.pending?
+  puts "Waiting for confirmation"
+elsif order.shipped?
+  puts "On its way!"
+end
 ```
 
-### With Searchable/Predicable
+---
 
-Query by state:
+## Guards
 
-```ruby
-# Using Predicable
-Order.where_state_eq('pending')
-Order.where_state_in(['pending', 'confirmed'])
-Order.where_state_not_eq('cancelled')
+### Preventing Invalid Transitions
 
-# Using Search
-Order.search({ state_eq: 'pending' })
-Order.search({
-  state_in: ['pending', 'confirmed'],
-  created_at_gteq: 1.week.ago
-})
-```
+**Cosa fa**: Conditional checks that block transitions
 
-### With Archivable
+**Quando usarlo**: To enforce business rules
 
-Archive completed state machines:
-
+**Esempio**:
 ```ruby
 class Order < ApplicationRecord
   include BetterModel
-  include BetterModel::Archivable
+  belongs_to :user
 
   stateable do
     state :pending, initial: true
-    state :completed
+    state :confirmed
+    state :shipped
 
-    transition :complete, from: :pending, to: :completed do
+    event :confirm do
+      transition from: :pending, to: :confirmed
+
+      # Guard: blocks transition if condition fails
+      check -> { payment_received? }, "Payment not received"
+      check -> { stock_available? }, "Items out of stock"
+    end
+
+    event :ship do
+      transition from: :confirmed, to: :shipped
+      check -> { shipping_address.present? }, "Shipping address required"
+    end
+  end
+
+  def payment_received?
+    payment_status == 'paid'
+  end
+
+  def stock_available?
+    order_items.all? { |item| item.product.stock > 0 }
+  end
+end
+
+# Usage
+order = Order.create!(payment_status: 'pending')
+order.confirm!  # Raises error: "Payment not received"
+
+order.update!(payment_status: 'paid')
+order.confirm!  # OK if stock available
+```
+
+---
+
+### Multiple Guards
+
+**Cosa fa**: Chains multiple guard conditions
+
+**Quando usarlo**: For complex validation logic
+
+**Esempio**:
+```ruby
+class Document < ApplicationRecord
+  include BetterModel
+
+  stateable do
+    state :draft, initial: true
+    state :review
+    state :published
+
+    event :submit_for_review do
+      transition from: :draft, to: :review
+
+      # All guards must pass
+      check -> { title.present? }, "Title is required"
+      check -> { content.present? }, "Content is required"
+      check -> { content.length >= 100 }, "Content too short (min 100 chars)"
+      check -> { author_id.present? }, "Author is required"
+    end
+
+    event :publish do
+      transition from: :review, to: :published
+      check -> { reviewer_approved? }, "Awaiting reviewer approval"
+      check -> { no_pending_changes? }, "Pending changes must be resolved"
+    end
+  end
+end
+```
+
+---
+
+## Transition Validations
+
+### Custom Validation Logic
+
+**Cosa fa**: Validates state transitions with custom rules
+
+**Quando usarlo**: For complex business validations
+
+**Esempio**:
+```ruby
+class Order < ApplicationRecord
+  include BetterModel
+  has_many :order_items
+
+  stateable do
+    state :pending, initial: true
+    state :confirmed
+
+    event :confirm do
+      transition from: :pending, to: :confirmed
+
+      validate_transition do
+        if order_items.empty?
+          errors.add(:base, "Cannot confirm empty order")
+        end
+
+        if total_amount < 10.00
+          errors.add(:base, "Minimum order amount is $10.00")
+        end
+
+        order_items.each do |item|
+          if item.quantity > item.product.stock
+            errors.add(:base, "Insufficient stock for #{item.product.name}")
+          end
+        end
+      end
+    end
+  end
+end
+
+# Usage
+order = Order.create!
+order.confirm!  # Raises error with validation messages
+```
+
+---
+
+## Callbacks
+
+### Before/After Transition
+
+**Cosa fa**: Executes logic before/after state changes
+
+**Quando usarlo**: For side effects of state changes
+
+**Esempio**:
+```ruby
+class Order < ApplicationRecord
+  include BetterModel
+
+  stateable do
+    state :pending, initial: true
+    state :confirmed
+    state :shipped
+    state :delivered
+
+    event :confirm do
+      transition from: :pending, to: :confirmed
+
+      before_transition do
+        # Reserve stock
+        order_items.each { |item| item.product.reserve_stock(item.quantity) }
+      end
+
       after_transition do
-        # Auto-archive after 90 days
-        ArchiveOrderJob.set(wait: 90.days).perform_later(id)
+        # Send confirmation email
+        OrderMailer.confirmation(self).deliver_later
+        # Log event
+        Rails.logger.info "Order ##{id} confirmed at #{Time.current}"
+      end
+    end
+
+    event :ship do
+      transition from: :confirmed, to: :shipped
+
+      after_transition do
+        # Send shipping notification
+        OrderMailer.shipped(self).deliver_later
+        # Update inventory
+        order_items.each { |item| item.product.decrement_stock!(item.quantity) }
       end
     end
   end
 end
 ```
 
-## Best Practices
+---
 
-### 1. Keep State Count Manageable
+### Around Callbacks
 
+**Cosa fa**: Wraps transition with custom logic
+
+**Quando usarlo**: For transaction-like behavior
+
+**Esempio**:
 ```ruby
-# Good: Clear, essential states
-stateable do
-  state :draft, initial: true
-  state :review
-  state :published
-end
+class Payment < ApplicationRecord
+  include BetterModel
 
-# Avoid: Too granular
-stateable do
-  state :draft, initial: true
-  state :spell_check
-  state :grammar_check
-  state :seo_check
-  state :image_check
-  # ... use Statusable for these checks instead
-end
-```
+  stateable do
+    state :pending, initial: true
+    state :processing
+    state :completed
+    state :failed
 
-### 2. Use Guards for Business Logic
+    event :process do
+      transition from: :pending, to: :processing
 
-```ruby
-# Good: Guards for conditions
-transition :approve, from: :pending, to: :approved do
-  check { amount <= user.approval_limit }
-  check { department_budget_available? }
-end
+      around_transition do |transition_proc|
+        Rails.logger.info "Starting payment processing..."
+        start_time = Time.current
 
-# Avoid: Checking in controller
-def approve
-  if @document.amount <= current_user.approval_limit
-    @document.approve!
+        begin
+          transition_proc.call  # Execute the transition
+          duration = Time.current - start_time
+          Rails.logger.info "Payment processed in #{duration}s"
+        rescue => e
+          Rails.logger.error "Payment failed: #{e.message}"
+          raise
+        end
+      end
+    end
   end
 end
 ```
 
-### 3. Validations for Data Requirements
+---
 
+## Transition History
+
+### Enabling History Tracking
+
+**Cosa fa**: Tracks all state transitions
+
+**Quando usarlo**: For audit trails
+
+**Esempio**:
 ```ruby
-transition :submit, from: :draft, to: :submitted do
-  # Guard for business rule
-  check { user.can_submit? }
+# After running: rails g better_model:stateable_history Order
 
-  # Validation for data completeness
-  validate do
-    errors.add(:title, "required") if title.blank?
-    errors.add(:content, "too short") if content.length < 100
+class Order < ApplicationRecord
+  include BetterModel
+  has_many :state_transitions, class_name: 'OrderStateTransition', dependent: :destroy
+
+  stateable do
+    track_transitions true  # Enable history
+
+    state :pending, initial: true
+    state :confirmed
+    state :shipped
+    state :delivered
+
+    event :confirm do
+      transition from: :pending, to: :confirmed
+    end
+
+    event :ship do
+      transition from: :confirmed, to: :shipped
+    end
   end
 end
+
+# Usage
+order = Order.create!
+order.confirm!
+order.ship!
+
+# View history
+order.state_transitions
+# => [
+#   { from_state: "pending", to_state: "confirmed", event: "confirm", created_at: ... },
+#   { from_state: "confirmed", to_state: "shipped", event: "ship", created_at: ... }
+# ]
 ```
 
-### 4. Use Callbacks for Side Effects
+---
 
-```ruby
-transition :publish, from: :approved, to: :published do
-  before_transition do
-    self.published_at = Time.current
-  end
+### Transition Metadata
 
-  after_transition do
-    notify_subscribers
-    update_search_index
-    clear_caches
-  end
-end
-```
+**Cosa fa**: Stores additional data with transitions
 
-### 5. Track Important Transitions
+**Quando usarlo**: For detailed audit information
 
-```ruby
-# Always track critical workflows
-order.ship!(
-  triggered_by: warehouse_user.id,
-  metadata: {
-    tracking_number: "1Z999...",
-    carrier: "UPS",
-    weight: "2.5 lbs"
-  }
-)
-
-# Review history for auditing
-order.transition_history.select { |t| t[:event] == 'ship' }
-```
-
-### 6. Use Predicate Guards for Complex Logic
-
+**Esempio**:
 ```ruby
 class Order < ApplicationRecord
+  include BetterModel
+
   stateable do
-    transition :charge, from: :pending, to: :paid do
-      check :payment_method_valid?
-      check :inventory_available?
-      check :not_fraudulent?
+    track_transitions true
+
+    state :pending, initial: true
+    state :confirmed
+
+    event :confirm do
+      transition from: :pending, to: :confirmed
+
+      after_transition do |transition|
+        # Store metadata
+        transition.update(metadata: {
+          user_id: Current.user&.id,
+          ip_address: Current.ip,
+          confirmed_at: Time.current,
+          payment_method: payment_method
+        })
+      end
+    end
+  end
+end
+
+# Query history with metadata
+order.state_transitions.find_by(event: 'confirm').metadata
+# => { user_id: 123, ip_address: "192.168.1.1", confirmed_at: "2025-11-11 10:30:00", ... }
+```
+
+---
+
+## Integration with Statusable
+
+### Using Statusable Guards
+
+**Cosa fa**: Uses Statusable predicates in guards
+
+**Quando usarlo**: For cross-feature conditions
+
+**Esempio**:
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  # Statusable predicates
+  is :ready_for_publish, -> { title.present? && content.present? && author_id.present? }
+  is :reviewed, -> { reviewer_id.present? && review_notes.present? }
+
+  stateable do
+    state :draft, initial: true
+    state :published
+
+    event :publish do
+      transition from: :draft, to: :published
+
+      # Use Statusable predicates as guards
+      check :is_ready_for_publish?, "Article not ready for publication"
+      check :is_reviewed?, "Article must be reviewed first"
+    end
+  end
+end
+
+# Usage
+article = Article.create!(title: "Test", content: "...")
+article.is_ready_for_publish?  # => false (no author)
+article.publish!  # Raises error
+
+article.update!(author_id: 1, reviewer_id: 2, review_notes: "LGTM")
+article.publish!  # OK
+```
+
+---
+
+## Real-World Use Cases
+
+### E-commerce Order Workflow
+
+**Cosa fa**: Complete order processing state machine
+
+**Quando usarlo**: Online stores
+
+**Esempio**:
+```ruby
+class Order < ApplicationRecord
+  include BetterModel
+  belongs_to :user
+  has_many :order_items
+
+  stateable do
+    track_transitions true
+
+    state :cart, initial: true
+    state :pending_payment
+    state :paid
+    state :processing
+    state :shipped
+    state :delivered
+    state :returned
+    state :refunded
+    state :cancelled
+
+    event :checkout do
+      transition from: :cart, to: :pending_payment
+      check -> { order_items.any? }, "Cart is empty"
+      check -> { shipping_address.present? }, "Shipping address required"
+    end
+
+    event :pay do
+      transition from: :pending_payment, to: :paid
+
+      validate_transition do
+        if payment_token.blank?
+          errors.add(:base, "Payment information required")
+        end
+      end
+
+      after_transition do
+        ProcessPaymentJob.perform_later(id)
+        OrderMailer.payment_received(self).deliver_later
+      end
+    end
+
+    event :process do
+      transition from: :paid, to: :processing
+      check -> { all_items_in_stock? }, "Some items out of stock"
+
+      after_transition do
+        reserve_inventory
+      end
+    end
+
+    event :ship do
+      transition from: :processing, to: :shipped
+
+      validate_transition do
+        if tracking_number.blank?
+          errors.add(:base, "Tracking number required")
+        end
+      end
+
+      after_transition do
+        OrderMailer.shipped(self).deliver_later
+      end
+    end
+
+    event :deliver do
+      transition from: :shipped, to: :delivered
+      after_transition do
+        OrderMailer.delivered(self).deliver_later
+      end
+    end
+
+    event :request_return do
+      transition from: :delivered, to: :returned
+      check -> { within_return_window? }, "Return window expired"
+    end
+
+    event :refund do
+      transition from: :returned, to: :refunded
+      after_transition do
+        process_refund
+        OrderMailer.refunded(self).deliver_later
+      end
+    end
+
+    event :cancel do
+      transition from: [:cart, :pending_payment, :paid], to: :cancelled
+
+      after_transition do
+        if paid?
+          process_refund
+        end
+        release_inventory if processing?
+      end
+    end
+  end
+
+  private
+
+  def all_items_in_stock?
+    order_items.all? { |item| item.product.stock >= item.quantity }
+  end
+
+  def within_return_window?
+    delivered_at.present? && delivered_at >= 30.days.ago
+  end
+end
+```
+
+---
+
+### Document Approval Workflow
+
+**Cosa fa**: Multi-step document approval
+
+**Quando usarlo**: Content management, document systems
+
+**Esempio**:
+```ruby
+class Document < ApplicationRecord
+  include BetterModel
+  belongs_to :author, class_name: 'User'
+  belongs_to :reviewer, class_name: 'User', optional: true
+  belongs_to :approver, class_name: 'User', optional: true
+
+  stateable do
+    track_transitions true
+
+    state :draft, initial: true
+    state :in_review
+    state :approved
+    state :published
+    state :archived
+
+    event :submit_for_review do
+      transition from: :draft, to: :in_review
+
+      validate_transition do
+        errors.add(:title, "required") if title.blank?
+        errors.add(:content, "required") if content.blank?
+        errors.add(:content, "too short") if content.length < 100
+      end
+
+      after_transition do
+        assign_reviewer
+        DocumentMailer.review_requested(self).deliver_later
+      end
+    end
+
+    event :approve do
+      transition from: :in_review, to: :approved
+      check -> { reviewer_id.present? }, "Reviewer required"
+
+      after_transition do
+        self.reviewed_at = Time.current
+        save!
+        DocumentMailer.approved(self).deliver_later
+      end
+    end
+
+    event :reject do
+      transition from: :in_review, to: :draft
+
+      after_transition do |transition|
+        transition.update(metadata: {
+          rejection_reason: rejection_reason,
+          reviewer_id: reviewer_id
+        })
+        DocumentMailer.rejected(self, rejection_reason).deliver_later
+      end
+    end
+
+    event :publish do
+      transition from: :approved, to: :published
+      check -> { approver_id.present? }, "Final approval required"
+
+      after_transition do
+        self.published_at = Time.current
+        save!
+        DocumentMailer.published(self).deliver_later
+      end
+    end
+
+    event :archive do
+      transition from: :published, to: :archived
+
+      after_transition do
+        self.archived_at = Time.current
+        save!
+      end
+    end
+  end
+
+  private
+
+  def assign_reviewer
+    self.reviewer = User.reviewers.where.not(id: author_id).sample
+    save!
+  end
+end
+```
+
+---
+
+### Task Management
+
+**Cosa fa**: Task lifecycle with assignments
+
+**Quando usarlo**: Project management, issue tracking
+
+**Esempio**:
+```ruby
+class Task < ApplicationRecord
+  include BetterModel
+  belongs_to :assignee, class_name: 'User', optional: true
+
+  stateable do
+    track_transitions true
+
+    state :todo, initial: true
+    state :in_progress
+    state :blocked
+    state :in_review
+    state :done
+    state :closed
+
+    event :start do
+      transition from: :todo, to: :in_progress
+      check -> { assignee_id.present? }, "Task must be assigned"
+
+      after_transition do
+        self.started_at = Time.current
+        save!
+      end
+    end
+
+    event :block do
+      transition from: :in_progress, to: :blocked
+
+      validate_transition do
+        if blocker_reason.blank?
+          errors.add(:base, "Blocker reason required")
+        end
+      end
+    end
+
+    event :unblock do
+      transition from: :blocked, to: :in_progress
+
+      after_transition do
+        self.blocker_reason = nil
+        save!
+      end
+    end
+
+    event :submit_for_review do
+      transition from: :in_progress, to: :in_review
+
+      after_transition do
+        TaskMailer.review_requested(self).deliver_later
+      end
+    end
+
+    event :complete do
+      transition from: :in_review, to: :done
+
+      after_transition do
+        self.completed_at = Time.current
+        save!
+        TaskMailer.completed(self).deliver_later
+      end
+    end
+
+    event :reopen do
+      transition from: [:done, :closed], to: :todo
+
+      after_transition do
+        self.completed_at = nil
+        self.closed_at = nil
+        save!
+      end
+    end
+
+    event :close do
+      transition from: :done, to: :closed
+
+      after_transition do
+        self.closed_at = Time.current
+        save!
+      end
+    end
+  end
+end
+```
+
+---
+
+### Subscription Management
+
+**Cosa fa**: Subscription lifecycle management
+
+**Quando usarlo**: SaaS applications
+
+**Esempio**:
+```ruby
+class Subscription < ApplicationRecord
+  include BetterModel
+  belongs_to :user
+
+  stateable do
+    track_transitions true
+
+    state :trial, initial: true
+    state :active
+    state :past_due
+    state :suspended
+    state :cancelled
+
+    event :activate do
+      transition from: :trial, to: :active
+      check -> { payment_method_valid? }, "Valid payment method required"
+
+      after_transition do
+        self.activated_at = Time.current
+        self.next_billing_date = 1.month.from_now
+        save!
+        SubscriptionMailer.activated(self).deliver_later
+      end
+    end
+
+    event :payment_failed do
+      transition from: :active, to: :past_due
+
+      after_transition do
+        self.past_due_since = Time.current
+        save!
+        SubscriptionMailer.payment_failed(self).deliver_later
+      end
+    end
+
+    event :payment_received do
+      transition from: :past_due, to: :active
+
+      after_transition do
+        self.past_due_since = nil
+        self.next_billing_date = 1.month.from_now
+        save!
+      end
+    end
+
+    event :suspend do
+      transition from: [:active, :past_due], to: :suspended
+
+      after_transition do
+        self.suspended_at = Time.current
+        save!
+        revoke_access
+      end
+    end
+
+    event :resume do
+      transition from: :suspended, to: :active
+      check -> { payment_method_valid? }, "Valid payment method required"
+
+      after_transition do
+        self.suspended_at = nil
+        save!
+        restore_access
+      end
+    end
+
+    event :cancel do
+      transition from: [:trial, :active, :past_due, :suspended], to: :cancelled
+
+      after_transition do
+        self.cancelled_at = Time.current
+        save!
+        revoke_access
+        SubscriptionMailer.cancelled(self).deliver_later
+      end
     end
   end
 
@@ -2210,174 +905,266 @@ class Order < ApplicationRecord
     payment_method.present? && !payment_method.expired?
   end
 
-  def inventory_available?
-    items.all? { |item| item.in_stock? }
+  def revoke_access
+    user.update!(premium: false)
   end
 
-  def not_fraudulent?
-    FraudService.check(self).safe?
+  def restore_access
+    user.update!(premium: true)
   end
 end
 ```
 
-### 7. Handle Errors Gracefully
+---
 
+## Error Handling
+
+### InvalidTransitionError
+
+**Cosa fa**: Raised when transition not allowed
+
+**Quando usarlo**: Catches invalid state changes
+
+**Esempio**:
 ```ruby
-# Controller
-def transition_to_next_state
-  if @order.can_process?
-    if @order.process!(triggered_by: current_user.id)
-      redirect_to @order, notice: "Order processed successfully"
-    else
-      flash.now[:alert] = @order.errors.full_messages.join(", ")
-      render :show
+class Order < ApplicationRecord
+  include BetterModel
+
+  stateable do
+    state :pending, initial: true
+    state :shipped
+
+    event :ship do
+      transition from: :confirmed, to: :shipped
     end
-  else
-    flash[:alert] = "Order cannot be processed at this time"
-    redirect_to @order
   end
-rescue BetterModel::Stateable::InvalidTransition => e
-  flash[:alert] = "Invalid state transition: #{e.message}"
-  redirect_to @order
+end
+
+order = Order.create!  # state: pending
+order.ship!  # No transition from pending to shipped
+# Raises: BetterModel::Errors::Stateable::InvalidTransitionError
+# Message: "Cannot transition from 'pending' to 'shipped' via 'ship' event"
+
+rescue BetterModel::Errors::Stateable::InvalidTransitionError => e
+  Rails.logger.error "Invalid transition: #{e.message}"
 end
 ```
 
-### 8. Document Complex Workflows
+---
 
+### GuardFailedError
+
+**Cosa fa**: Raised when guard condition fails
+
+**Quando usarlo**: Business rule violations
+
+**Esempio**:
 ```ruby
-stateable do
-  # Order Lifecycle:
-  # 1. Customer checkout: cart -> pending
-  # 2. Payment processing: pending -> processing -> paid
-  # 3. Fulfillment: paid -> preparing -> shipped
-  # 4. Completion: shipped -> delivered
-  # 5. Exceptions: any -> cancelled/refunded
+class Order < ApplicationRecord
+  include BetterModel
 
-  state :cart, initial: true
-  state :pending
-  # ... rest of configuration
-end
-```
+  stateable do
+    state :pending, initial: true
+    state :confirmed
 
-## Common Patterns
-
-### Pattern 1: Multi-Approval Workflow
-
-```ruby
-stateable do
-  state :draft, initial: true
-  state :manager_review
-  state :director_review
-  state :approved
-
-  transition :submit, from: :draft, to: :manager_review
-  transition :manager_approve, from: :manager_review, to: :director_review
-  transition :director_approve, from: :director_review, to: :approved
-
-  # Rejection returns to previous state
-  transition :manager_reject, from: :manager_review, to: :draft
-  transition :director_reject, from: :director_review, to: :manager_review
-end
-```
-
-### Pattern 2: Parallel States with Statusable
-
-```ruby
-# Use Stateable for primary workflow state
-# Use Statusable for parallel concerns
-
-stateable do
-  state :active, initial: true
-  state :completed
-end
-
-statusable do
-  status :verified      # Can happen while active
-  status :featured      # Can happen while active
-  status :flagged       # Can happen while active
-end
-```
-
-### Pattern 3: Scheduled Transitions
-
-```ruby
-transition :publish, from: :scheduled, to: :published do
-  before_transition do
-    self.published_at = Time.current
+    event :confirm do
+      transition from: :pending, to: :confirmed
+      check -> { payment_received? }, "Payment not received"
+    end
   end
+end
+
+order = Order.create!(payment_status: 'pending')
+order.confirm!
+# Raises: BetterModel::Errors::Stateable::GuardFailedError
+# Message: "Payment not received"
+
+rescue BetterModel::Errors::Stateable::GuardFailedError => e
+  render json: { error: e.message }, status: :unprocessable_entity
+end
+```
+
+---
+
+## Best Practices
+
+### Use Descriptive State Names
+
+**Cosa fa**: Clear, domain-specific state names
+
+**Quando usarlo**: Always
+
+**Esempio**:
+```ruby
+# Good - clear business meaning
+stateable do
+  state :pending_review
+  state :approved_by_manager
+  state :in_production
+  state :delivered_to_customer
+end
+
+# Bad - ambiguous
+stateable do
+  state :state1
+  state :state2
+  state :processing
+end
+```
+
+---
+
+### Guard Complex Business Rules
+
+**Cosa fa**: Uses guards for business validation
+
+**Quando usarlo**: To prevent invalid state changes
+
+**Esempio**:
+```ruby
+# Good - enforces business rules
+event :publish do
+  transition from: :draft, to: :published
+  check -> { content_approved? }, "Content not approved"
+  check -> { seo_optimized? }, "SEO optimization required"
+  check -> { images_uploaded? }, "Featured image required"
+end
+
+# Bad - allows invalid transitions
+event :publish do
+  transition from: :draft, to: :published
+  # No guards - can publish incomplete content
+end
+```
+
+---
+
+### Use Callbacks for Side Effects
+
+**Cosa fa**: Executes related operations in callbacks
+
+**Quando usarlo**: For actions triggered by state changes
+
+**Esempio**:
+```ruby
+# Good - side effects in callbacks
+event :ship do
+  transition from: :confirmed, to: :shipped
 
   after_transition do
-    # Schedule unpublish if expiration set
-    if expires_at.present?
-      UnpublishJob.set(wait_until: expires_at).perform_later(id)
+    send_shipping_notification
+    update_inventory
+    log_shipment
+  end
+end
+
+# Bad - manual side effects
+order.ship!
+send_shipping_notification(order)
+update_inventory(order)
+log_shipment(order)
+```
+
+---
+
+### Track History for Audit Trails
+
+**Cosa fa**: Enables transition tracking
+
+**Quando usarlo**: For compliance and debugging
+
+**Esempio**:
+```ruby
+# Good - track important state changes
+stateable do
+  track_transitions true
+
+  state :pending, initial: true
+  state :approved
+  state :rejected
+
+  event :approve do
+    transition from: :pending, to: :approved
+
+    after_transition do |transition|
+      transition.update(metadata: {
+        approver_id: Current.user.id,
+        approval_notes: approval_notes,
+        approved_at: Time.current
+      })
     end
   end
 end
+
+# Query history
+document.state_transitions.where(event: 'approve').last
 ```
 
-## Troubleshooting
+---
 
-### "Cannot transition" Error
+### Use validate_transition for Complex Checks
 
+**Cosa fa**: Groups related validations
+
+**Quando usarlo**: For multi-field validations
+
+**Esempio**:
 ```ruby
-# Check guards and validations
-order.can_confirm?  # => false
+# Good - grouped validations
+event :submit do
+  transition from: :draft, to: :submitted
 
-# Inspect why
-order.confirm!  # => shows specific error
+  validate_transition do
+    errors.add(:title, "required") if title.blank?
+    errors.add(:content, "too short") if content.length < 100
+    errors.add(:category, "required") if category_id.blank?
 
-# Fix and retry
-order.update!(required_field: value)
-order.confirm!  # => success
-```
+    if contains_profanity?(content)
+      errors.add(:content, "contains inappropriate language")
+    end
+  end
+end
 
-### State Not Changing
-
-```ruby
-# Ensure you're calling the event method
-order.confirm!  # Correct - executes transition
-
-order.state = 'confirmed'  # Wrong - bypasses state machine
-order.save!
-```
-
-### History Not Recording
-
-```ruby
-# Ensure migration was run
-rails generate better_model:stateable_history Order
-rails db:migrate
-
-# Verify table exists
-OrderStateTransition.table_exists?  # => true
-```
-
-## Performance Considerations
-
-### Eager Load History
-
-```ruby
-# Avoid N+1 queries
-orders = Order.includes(:state_transitions).where(state: 'completed')
-
-orders.each do |order|
-  puts order.transition_history  # No additional queries
+# Bad - scattered checks
+event :submit do
+  transition from: :draft, to: :submitted
+  check -> { title.present? }, "Title required"
+  check -> { content.length >= 100 }, "Content too short"
+  check -> { category_id.present? }, "Category required"
+  # Profanity check missing
 end
 ```
 
-### Index State Column
+---
 
-```ruby
-# Migration
-add_index :orders, :state
-add_index :orders, [:state, :created_at]
-```
+## Summary
 
-### Batch Transitions
+**Core Features**:
+- **State Definitions**: Explicit state declarations with initial state
+- **Events**: Named transitions between states
+- **Guards**: Conditional checks (`check`) that prevent transitions
+- **Validations**: Custom transition validation logic
+- **Callbacks**: before_transition, after_transition, around_transition
+- **History**: Optional transition tracking with metadata
+- **Predicates**: Auto-generated state checking methods
+- **Integration**: Works with Statusable for conditional guards
 
-```ruby
-# When transitioning many records
-Order.where(state: 'pending').find_each do |order|
-  order.confirm! if order.can_confirm?
-end
-```
+**Key Methods**:
+- `Model.stateable do...end` - Configure state machine
+- `state :name, initial: true` - Define states
+- `event :name do...end` - Define transitions
+- `transition from:, to:` - Specify state changes
+- `check condition, message` - Add guards
+- `validate_transition do...end` - Custom validations
+- `before_transition / after_transition` - Callbacks
+- `instance.state_name?` - Check current state
+- `instance.event_name!` - Trigger transition
+
+**Configuration**:
+- `track_transitions true` - Enable history tracking
+
+**Database Columns**:
+- `state` (string) - Required, stores current state
+- Separate transitions table for history (optional)
+
+**Thread-safe**, **opt-in**, **integrated with Statusable**.

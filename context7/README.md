@@ -2,6 +2,8 @@
 
 This folder contains curated, practical code examples for each BetterModel feature, specifically designed for AI assistants and developers using Context7.
 
+> **ℹ️ Version 3.0.0**: These examples reflect BetterModel v3.0.0+, which simplified the error system to use standard Ruby exceptions. See `12_errors.md` for details on the streamlined error handling.
+
 ## Structure
 
 Each file demonstrates a complete, working implementation of a specific feature:
@@ -25,7 +27,7 @@ Each file demonstrates a complete, working implementation of a specific feature:
 
 ### System Features
 
-12. **12_errors.md** - Comprehensive error handling with Sentry integration, structured error data, and production-ready patterns
+12. **12_errors.md** - Simple, idiomatic error handling (v3.0.0+) with standard Ruby exceptions and Sentry integration
 
 ## Quick Start
 
@@ -55,7 +57,7 @@ end
 Add to your Gemfile:
 
 ```ruby
-gem 'better_model', '~> 2.1.0'
+gem 'better_model', '~> 3.0.0'
 ```
 
 Run:

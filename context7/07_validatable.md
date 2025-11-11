@@ -1,185 +1,227 @@
 # Validatable - Declarative Validation System
 
-## Overview
+Simplified declarative validation for Rails models with three core features: basic validations (`check`), complex validations for cross-field logic, and validation groups for multi-step forms.
 
-Validatable provides a simplified declarative validation system for Rails models with three core features:
+**Requirements**: Rails 8.0+, Ruby 3.0+, ActiveRecord model
+**Installation**: No migration required - include BetterModel and activate with `validatable do...end`
 
-- **Opt-in Activation**: Not active by default - must enable with `validatable do...end`
-- **Declarative DSL**: Clean, readable syntax with `check` method
-- **Complex Validations**: Reusable validation blocks for any complex logic including cross-field comparisons
-- **Validation Groups**: Partial validation for multi-step forms and wizards
-- **Full Rails Compatibility**: Works seamlessly with ActiveModel validations and contexts
-- **Thread-safe**: Immutable configuration and registry
-
-## Requirements
-
-- Rails 8.0+
-- Ruby 3.0+
-- ActiveRecord model
-
-## Installation
-
-No migration required - Validatable works with existing models.
-
-Simply include BetterModel and activate with the DSL:
-
-```ruby
-class Article < ApplicationRecord
-  include BetterModel
-
-  validatable do
-    # Your validations here
-  end
-end
-```
-
-## Core Features
-
-Validatable offers exactly **3 core features**:
-
-1. **Basic Validations** (`check`) - Standard Rails validations with declarative syntax
-2. **Complex Validations** (`register_complex_validation` + `check_complex`) - Reusable validation blocks
-3. **Validation Groups** (`validation_group`) - Partial validation for multi-step forms
+**⚠️ Version 3.0.0 Compatible**: All error handling in this document uses standard Ruby exception patterns.
 
 ---
 
-## 1. Basic Validations
+## Basic Validations
 
-### API Reference: check
+### Single Field Validation
 
-**Method Signature:**
-```ruby
-check(*fields, **options)
-```
+**Cosa fa**: Validates presence of a single field using declarative syntax
 
-**Parameters:**
-- `fields` (Array<Symbol>): One or more field names
-- `options` (Hash): Standard Rails validation options (presence, format, length, etc.)
+**Quando usarlo**: For simple field validations instead of Rails' validates method
 
-**Behavior:**
-- Delegates directly to Rails' `validates` method
-- Supports all ActiveModel validation options
-- Supports Rails conditional options (`if`, `unless`, `on`)
-
-### Usage Examples
-
+**Esempio**:
 ```ruby
 class Article < ApplicationRecord
   include BetterModel
 
   validatable do
-    # Single field
     check :title, presence: true
-
-    # Multiple fields with same validation
-    check :title, :content, presence: true
-
-    # Multiple validation types
-    check :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
-
-    # Length validations
-    check :title, length: { minimum: 5, maximum: 200 }
-
-    # Numericality
-    check :view_count, numericality: { greater_than_or_equal_to: 0 }
-
-    # Inclusion
-    check :status, inclusion: { in: %w[draft published archived] }
-
-    # Conditional using Rails options
-    check :published_at, presence: true, if: :published?
-    check :author_id, presence: true, if: -> { status == "published" }
-
-    # Context-specific
-    check :reviewer_id, presence: true, on: :publish
   end
 end
+
+article = Article.new
+article.valid?  # => false
+article.errors[:title]  # => ["can't be blank"]
 ```
-
-### Supported Rails Options
-
-All standard ActiveModel validation options are supported:
-- `presence`, `absence`
-- `format` (with regex)
-- `length` (minimum, maximum, in, is)
-- `numericality` (greater_than, less_than, equal_to, etc.)
-- `inclusion`, `exclusion`
-- `uniqueness`
-- `acceptance`
-- `confirmation`
-
-Plus Rails conditional/context options:
-- `if`, `unless` (method name or lambda)
-- `on` (:create, :update, or custom context)
-- `message` (custom error message)
-- `allow_nil`, `allow_blank`
 
 ---
 
-## 2. Complex Validations
+### Multiple Fields Same Validation
 
-Complex validations allow you to register reusable validation logic that can:
-- Combine multiple fields
-- Implement cross-field comparisons (date/number ranges)
-- Execute custom business logic
-- Add multiple errors to different fields
+**Cosa fa**: Applies the same validation rule to multiple fields at once
 
-They follow the same pattern as `complex_predicates` and `complex_sorts`.
+**Quando usarlo**: When several fields need identical validation rules
 
-### API Reference: register_complex_validation
-
-**Method Signature:**
+**Esempio**:
 ```ruby
-register_complex_validation(name, &block)
+class Article < ApplicationRecord
+  include BetterModel
+
+  validatable do
+    check :title, :content, :author, presence: true
+  end
+end
+
+article = Article.new
+article.valid?  # => false
+article.errors.keys  # => [:title, :content, :author]
 ```
 
-**Parameters:**
-- `name` (Symbol): The name of the validation (required)
-- `block` (Proc): Validation logic that runs in the instance context (required)
+---
 
-**Returns:** Registers the validation in `complex_validations_registry` (frozen Hash)
+### Multiple Validation Types
 
-**Thread Safety:** Registry is frozen, validations defined at class load time
+**Cosa fa**: Applies multiple validation rules to a single field
 
-**Behavior:**
-- Block executes in the instance context (access to all attributes and methods)
-- Can add multiple errors to different fields
-- Can access associations and other model methods
-- Registry is inherited by subclasses
-- Must use `check_complex` in `validatable` block to activate
+**Quando usarlo**: When a field needs several validation checks
 
-### API Reference: check_complex
-
-**Method Signature:**
+**Esempio**:
 ```ruby
-check_complex(name)
+class User < ApplicationRecord
+  include BetterModel
+
+  validatable do
+    check :email,
+          presence: true,
+          format: { with: URI::MailTo::EMAIL_REGEXP },
+          uniqueness: true
+  end
+end
+
+user = User.new(email: "invalid")
+user.valid?  # => false
+user.errors[:email]  # => ["is invalid"]
 ```
 
-**Parameters:**
-- `name` (Symbol): Name of registered complex validation
+---
 
-**Behavior:**
-- Validates that the complex validation exists (raises ArgumentError if not)
-- Adds the validation to the model's validation chain
-- Runs during normal validation (`valid?` call)
+### Length Validations
 
-### Helper Method: complex_validation?
+**Cosa fa**: Validates string length with minimum, maximum, or exact requirements
 
+**Quando usarlo**: To enforce character limits on text fields
+
+**Esempio**:
 ```ruby
-Model.complex_validation?(:name)  # => true/false
+class Article < ApplicationRecord
+  include BetterModel
+
+  validatable do
+    check :title, length: { minimum: 5, maximum: 200 }
+    check :slug, length: { in: 3..50 }
+    check :code, length: { is: 8 }
+  end
+end
+
+article = Article.new(title: "Hi")
+article.valid?  # => false
+article.errors[:title]  # => ["is too short (minimum is 5 characters)"]
 ```
 
-Checks if a complex validation is registered.
+---
 
-### Basic Usage
+### Numericality Validations
 
+**Cosa fa**: Validates numeric values with comparison operators
+
+**Quando usarlo**: For prices, counts, ratings, and numeric constraints
+
+**Esempio**:
 ```ruby
 class Product < ApplicationRecord
   include BetterModel
 
-  # Register complex validation
+  validatable do
+    check :price, numericality: { greater_than: 0 }
+    check :stock, numericality: { greater_than_or_equal_to: 0 }
+    check :rating, numericality: { in: 1..5 }
+  end
+end
+
+product = Product.new(price: -10)
+product.valid?  # => false
+product.errors[:price]  # => ["must be greater than 0"]
+```
+
+---
+
+### Inclusion and Exclusion
+
+**Cosa fa**: Validates that value is within (or outside) a specific set
+
+**Quando usarlo**: For enum-like fields with predefined allowed values
+
+**Esempio**:
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  validatable do
+    check :status, inclusion: { in: %w[draft published archived] }
+    check :content_type, exclusion: { in: %w[spam explicit] }
+  end
+end
+
+article = Article.new(status: "pending")
+article.valid?  # => false
+article.errors[:status]  # => ["is not included in the list"]
+```
+
+---
+
+### Conditional Validation with if/unless
+
+**Cosa fa**: Applies validation only when a condition is true/false
+
+**Quando usarlo**: For validations that depend on model state
+
+**Esempio**:
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  is :published, -> { status == "published" }
+
+  validatable do
+    check :title, presence: true
+    check :published_at, presence: true, if: :is_published?
+    check :author_id, presence: true, if: -> { status == "published" }
+    check :draft_notes, presence: true, unless: :is_published?
+  end
+end
+```
+
+---
+
+### Context-Specific Validations
+
+**Cosa fa**: Validates only in specific Rails contexts (create, update, custom)
+
+**Quando usarlo**: For validations that apply only to certain operations
+
+**Esempio**:
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  validatable do
+    check :title, presence: true
+    check :author_id, presence: true, on: :create
+    check :updated_reason, presence: true, on: :update
+    check :reviewer_id, presence: true, on: :publish
+  end
+end
+
+article = Article.new(title: "Test")
+article.valid?(:create)  # => false (missing author_id)
+article.valid?(:publish)  # => false (missing reviewer_id)
+```
+
+---
+
+## Complex Validations
+
+### Price Comparison Validation
+
+**Cosa fa**: Validates that sale price is less than regular price
+
+**Quando usarlo**: For cross-field comparisons that Rails validations can't express
+
+**Esempio**:
+```ruby
+class Product < ApplicationRecord
+  include BetterModel
+
   register_complex_validation :valid_pricing do
-    return if sale_price.blank?  # Nil handling
+    return if sale_price.blank?
 
     if sale_price >= price
       errors.add(:sale_price, "must be less than regular price")
@@ -192,21 +234,24 @@ class Product < ApplicationRecord
   end
 end
 
-# Usage
 product = Product.new(price: 100, sale_price: 120)
 product.valid?  # => false
 product.errors[:sale_price]  # => ["must be less than regular price"]
 ```
 
-### Cross-Field Validations
+---
 
-Complex validations are perfect for comparing fields:
+### Date Range Validation
 
+**Cosa fa**: Validates that start date is before end date
+
+**Quando usarlo**: For events, bookings, date ranges
+
+**Esempio**:
 ```ruby
 class Event < ApplicationRecord
   include BetterModel
 
-  # Date comparison
   register_complex_validation :valid_date_range do
     return if starts_at.blank? || ends_at.blank?
 
@@ -215,7 +260,29 @@ class Event < ApplicationRecord
     end
   end
 
-  # Numeric comparison
+  validatable do
+    check :title, :starts_at, :ends_at, presence: true
+    check_complex :valid_date_range
+  end
+end
+
+event = Event.new(starts_at: 2.days.from_now, ends_at: 1.day.from_now)
+event.valid?  # => false
+```
+
+---
+
+### Multiple Field Validation
+
+**Cosa fa**: Validates consistency across multiple related fields
+
+**Quando usarlo**: For capacity checks, quantity limits, and related constraints
+
+**Esempio**:
+```ruby
+class Event < ApplicationRecord
+  include BetterModel
+
   register_complex_validation :capacity_check do
     return if registered_count.blank? || max_attendees.blank?
 
@@ -224,65 +291,65 @@ class Event < ApplicationRecord
     end
   end
 
-  # Price range
-  register_complex_validation :valid_price_range do
-    return if min_price.blank? || max_price.blank?
+  validatable do
+    check :max_attendees, numericality: { greater_than: 0 }
+    check_complex :capacity_check
+  end
+end
+```
 
-    if min_price > max_price
-      errors.add(:min_price, "must be less than or equal to max price")
+---
+
+### Multiple Errors in One Validation
+
+**Cosa fa**: Adds multiple errors to different fields in a single validation
+
+**Quando usarlo**: For complex business rules checking multiple conditions
+
+**Esempio**:
+```ruby
+class Order < ApplicationRecord
+  include BetterModel
+
+  register_complex_validation :order_totals do
+    items_total = order_items.sum(&:total)
+
+    if discount_amount.present? && discount_amount > items_total
+      errors.add(:discount_amount, "cannot exceed items total")
+    end
+
+    if items_total < 10.00
+      errors.add(:base, "Order must be at least $10.00")
     end
   end
 
   validatable do
-    check_complex :valid_date_range
-    check_complex :capacity_check
-    check_complex :valid_price_range
+    check_complex :order_totals
   end
 end
 ```
 
-### Multiple Errors
-
-Complex validations can add multiple errors:
-
-```ruby
-register_complex_validation :order_totals do
-  # Calculate totals
-  items_total = order_items.sum(&:total)
-  calculated_total = items_total + shipping_cost - discount_amount
-
-  # Multiple validation checks
-  if total.present? && (calculated_total - total).abs > 0.01
-    errors.add(:total, "does not match calculated total (#{calculated_total})")
-  end
-
-  if discount_amount.present? && discount_amount > items_total
-    errors.add(:discount_amount, "cannot exceed items total")
-  end
-
-  if items_total < 10.00
-    errors.add(:base, "Order must be at least $10.00")
-  end
-end
-```
+---
 
 ### Integration with Statusable
 
-Complex validations can use Statusable predicates:
+**Cosa fa**: Uses Statusable predicates in complex validation logic
 
+**Quando usarlo**: To validate based on model status/state
+
+**Esempio**:
 ```ruby
 class Article < ApplicationRecord
   include BetterModel
 
   is :published, -> { status == "published" }
-  is :draft, -> { status == "draft" }
 
   register_complex_validation :publication_requirements do
     return unless is_published?
 
-    errors.add(:published_at, "required for published articles") if published_at.blank?
-    errors.add(:author_id, "required for published articles") if author_id.blank?
-    errors.add(:content, "must be at least 100 chars") if content && content.length < 100
+    errors.add(:published_at, "required") if published_at.blank?
+    errors.add(:author_id, "required") if author_id.blank?
+    errors.add(:content, "must be at least 100 chars") if content.length < 100
   end
 
   validatable do
@@ -292,201 +359,142 @@ class Article < ApplicationRecord
 end
 ```
 
-### Advanced Patterns
+---
 
-**Pattern 1: Conditional Logic Within Validation**
+### Association Validation
+
+**Cosa fa**: Validates presence and state of associated records
+
+**Quando usarlo**: For orders with items, documents with attachments, etc.
+
+**Esempio**:
 ```ruby
-register_complex_validation :pricing_rules do
-  # Different rules based on product type
-  case product_type
-  when "physical"
-    errors.add(:weight, "required for physical products") if weight.blank?
-    errors.add(:shipping_cost, "required") if shipping_cost.blank?
-  when "digital"
-    errors.add(:download_url, "required for digital products") if download_url.blank?
-  when "service"
-    errors.add(:duration, "required for services") if duration.blank?
-  end
-end
-```
+class Order < ApplicationRecord
+  include BetterModel
+  has_many :order_items
 
-**Pattern 2: Association Validation**
-```ruby
-register_complex_validation :valid_order_items do
-  if order_items.empty?
-    errors.add(:base, "Order must have at least one item")
-  end
+  register_complex_validation :valid_order_items do
+    if order_items.empty?
+      errors.add(:base, "Order must have at least one item")
+    end
 
-  order_items.each_with_index do |item, index|
-    if item.quantity <= 0
-      errors.add(:base, "Item #{index + 1} must have positive quantity")
+    order_items.each_with_index do |item, index|
+      if item.quantity <= 0
+        errors.add(:base, "Item #{index + 1} must have positive quantity")
+      end
     end
   end
-end
-```
 
-**Pattern 3: Calculated Field Validation**
-```ruby
-register_complex_validation :profit_margin do
-  return if cost.blank? || price.blank?
-
-  margin = ((price - cost) / price.to_f) * 100
-
-  if margin < 10
-    errors.add(:price, "profit margin (#{margin.round(1)}%) must be at least 10%")
-  elsif margin > 80
-    errors.add(:price, "profit margin (#{margin.round(1)}%) seems too high")
+  validatable do
+    check_complex :valid_order_items
   end
 end
 ```
-
-### Class Methods
-
-```ruby
-# Check if validation is registered
-Product.complex_validation?(:valid_pricing)  # => true
-
-# Get all registered validations
-Product.complex_validations_registry
-# => {:valid_pricing => #<Proc>, :valid_stock => #<Proc>}
-```
-
-### Best Practices
-
-1. **Always handle nil values** - Use early returns
-   ```ruby
-   register_complex_validation :date_range do
-     return if starts_at.blank? || ends_at.blank?
-     # validation logic
-   end
-   ```
-
-2. **Keep validations focused** - One validation per concern
-   ```ruby
-   # Good - separate concerns
-   register_complex_validation :valid_dates do ... end
-   register_complex_validation :capacity_check do ... end
-
-   # Avoid - mixing concerns
-   register_complex_validation :validate_everything do ... end
-   ```
-
-3. **Use descriptive names**
-   ```ruby
-   # Good
-   register_complex_validation :publication_requirements
-   register_complex_validation :profit_margin_check
-
-   # Avoid
-   register_complex_validation :check1
-   register_complex_validation :validation
-   ```
-
-4. **Provide clear error messages**
-   ```ruby
-   errors.add(:field, "specific reason why it failed")
-   # Not just: errors.add(:field, "invalid")
-   ```
 
 ---
 
-## 3. Validation Groups
+### Calculated Field Validation
 
-Validation groups enable partial validation of specific fields, perfect for:
-- Multi-step forms
-- Wizard-style flows
-- Progressive data entry
-- Step-by-step validation
+**Cosa fa**: Validates derived values like profit margin or percentage
 
-### API Reference: validation_group
+**Quando usarlo**: For business rules based on calculations
 
-**Method Signature:**
+**Esempio**:
 ```ruby
-validation_group(group_name, fields)
+class Product < ApplicationRecord
+  include BetterModel
+
+  register_complex_validation :profit_margin do
+    return if cost.blank? || price.blank?
+
+    margin = ((price - cost) / price.to_f) * 100
+
+    if margin < 10
+      errors.add(:price, "profit margin (#{margin.round(1)}%) must be at least 10%")
+    elsif margin > 80
+      errors.add(:price, "profit margin (#{margin.round(1)}%) seems unrealistic")
+    end
+  end
+
+  validatable do
+    check :cost, :price, presence: true
+    check_complex :profit_margin
+  end
+end
 ```
 
-**Parameters:**
-- `group_name` (Symbol): Unique name for the group (required)
-- `fields` (Array<Symbol>): Array of field names to validate in this group (required)
+---
 
-**Raises:**
-- `ArgumentError` if group_name is not a Symbol
-- `ArgumentError` if fields is not an Array
-- `ArgumentError` if group is already defined
+### Conditional Logic in Complex Validation
 
-**Behavior:**
-- Groups are stored in `validatable_groups` (frozen Hash)
-- Groups define which fields to validate, not which validations to run
-- All validations defined in `validatable` block apply, but only errors for grouped fields are checked
+**Cosa fa**: Different validation rules based on product type or category
 
-### Basic Usage
+**Quando usarlo**: For polymorphic or type-specific validation rules
 
+**Esempio**:
+```ruby
+class Product < ApplicationRecord
+  include BetterModel
+
+  register_complex_validation :type_specific_rules do
+    case product_type
+    when "physical"
+      errors.add(:weight, "required") if weight.blank?
+      errors.add(:shipping_cost, "required") if shipping_cost.blank?
+    when "digital"
+      errors.add(:download_url, "required") if download_url.blank?
+    when "service"
+      errors.add(:duration, "required") if duration.blank?
+    end
+  end
+
+  validatable do
+    check :name, :product_type, presence: true
+    check_complex :type_specific_rules
+  end
+end
+```
+
+---
+
+## Validation Groups
+
+### Basic Validation Group
+
+**Cosa fa**: Defines a group of fields to validate together
+
+**Quando usarlo**: For multi-step forms and wizard flows
+
+**Esempio**:
 ```ruby
 class User < ApplicationRecord
   include BetterModel
 
   validatable do
-    # Define validations for all fields
-    check :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
-    check :password, presence: true, length: { minimum: 8 }
+    check :email, :password, presence: true
     check :first_name, :last_name, presence: true
     check :address, :city, :zip_code, presence: true
 
-    # Define validation groups
     validation_group :step1, [:email, :password]
     validation_group :step2, [:first_name, :last_name]
     validation_group :step3, [:address, :city, :zip_code]
   end
 end
 
-# Validate specific group
-user = User.new(email: "user@example.com")
-user.valid?(:step1)  # => false (missing password)
-
-user.password = "secure123"
-user.valid?(:step1)  # => true
-
-# Full validation validates all fields
-user.valid?  # => false (missing step2 and step3 fields)
+user = User.new(email: "user@example.com", password: "secret123")
+user.valid?(:step1)  # => true (only validates step1 fields)
+user.valid?  # => false (full validation)
 ```
 
-### Instance Methods
+---
 
-**valid?(context_or_group)**
+### Multi-step Form Controller
 
-Override of ActiveModel's `valid?` with group support:
+**Cosa fa**: Validates different groups in different controller actions
 
-```ruby
-user.valid?            # Full validation (all fields)
-user.valid?(:step1)    # Only validates fields in :step1 group
-user.valid?(:create)   # Rails context validation
-```
+**Quando usarlo**: For wizard-style registration or checkout flows
 
-**validate_group(group_name)**
-
-Explicitly validate only a specific group:
-
-```ruby
-user.validate_group(:step1)  # => true/false
-```
-
-Raises `BetterModel::ValidatableNotEnabledError` if Validatable not enabled.
-
-**errors_for_group(group_name)**
-
-Get errors filtered to a specific group:
-
-```ruby
-user.valid?  # Run full validation first
-errors = user.errors_for_group(:step1)
-errors[:email]      # => errors for email (in step1)
-errors[:first_name] # => [] (not in step1)
-```
-
-Raises `BetterModel::ValidatableNotEnabledError` if Validatable not enabled.
-
-### Multi-step Form Example
-
+**Esempio**:
 ```ruby
 class RegistrationController < ApplicationController
   def create_step1
@@ -496,7 +504,6 @@ class RegistrationController < ApplicationController
       session[:user_data] = @user.attributes
       redirect_to registration_step2_path
     else
-      @errors = @user.errors_for_group(:step1)
       render :step1
     end
   end
@@ -508,172 +515,204 @@ class RegistrationController < ApplicationController
       session[:user_data] = @user.attributes
       redirect_to registration_step3_path
     else
-      @errors = @user.errors_for_group(:step2)
       render :step2
     end
   end
-
-  def create_step3
-    @user = User.new(session[:user_data].merge(step3_params))
-
-    if @user.valid?  # Full validation on final step
-      @user.save!
-      session.delete(:user_data)
-      redirect_to dashboard_path
-    else
-      @errors = @user.errors_for_group(:step3)
-      render :step3
-    end
-  end
 end
-```
-
-### Semantic Group Names
-
-Use descriptive names that reflect the purpose:
-
-```ruby
-# Good - semantic names
-validation_group :account_setup, [:email, :password]
-validation_group :personal_info, [:first_name, :last_name, :date_of_birth]
-validation_group :contact_details, [:phone, :address, :city]
-
-# Avoid - generic names
-validation_group :step1, [:email, :password]
-validation_group :step2, [:first_name, :last_name]
-```
-
-### Groups with Different Contexts
-
-You can combine groups with Rails validation contexts:
-
-```ruby
-validatable do
-  # Basic fields
-  check :email, presence: true
-  check :password, presence: true
-
-  # Create-only validation
-  check :terms_accepted, acceptance: true, on: :create
-
-  # Publish-specific validation
-  check :reviewed_by_id, presence: true, on: :publish
-
-  # Groups for multi-step
-  validation_group :basics, [:email, :password]
-  validation_group :publishing, [:reviewed_by_id]
-end
-
-# Use contexts
-user.valid?(:create)   # Validates with :create context
-user.valid?(:publish)  # Validates with :publish context
-
-# Use groups
-user.valid?(:basics)     # Validates :basics group
-user.valid?(:publishing) # Validates :publishing group
 ```
 
 ---
 
-## Integration with Rails
+### Validate Group Method
 
-### Using Rails Conditional Options
+**Cosa fa**: Explicitly validates only fields in a specific group
 
-For conditional validations, use Rails' built-in `if` and `unless` options:
+**Quando usarlo**: When you need programmatic group validation
 
+**Esempio**:
+```ruby
+class User < ApplicationRecord
+  include BetterModel
+
+  validatable do
+    check :email, :password, presence: true
+    check :first_name, :last_name, presence: true
+
+    validation_group :account, [:email, :password]
+    validation_group :profile, [:first_name, :last_name]
+  end
+end
+
+user = User.new(email: "test@example.com", password: "secret")
+user.validate_group(:account)  # => true
+user.validate_group(:profile)  # => false
+```
+
+---
+
+### Errors for Group
+
+**Cosa fa**: Returns errors filtered to fields in a specific group
+
+**Quando usarlo**: To display only relevant errors for current step
+
+**Esempio**:
+```ruby
+class User < ApplicationRecord
+  include BetterModel
+
+  validatable do
+    check :email, :password, :first_name, :last_name, presence: true
+
+    validation_group :step1, [:email, :password]
+    validation_group :step2, [:first_name, :last_name]
+  end
+end
+
+user = User.new
+user.valid?  # Run full validation
+
+step1_errors = user.errors_for_group(:step1)
+step1_errors[:email]  # => ["can't be blank"]
+step1_errors[:first_name]  # => [] (not in step1)
+```
+
+---
+
+### Semantic Group Names
+
+**Cosa fa**: Uses descriptive group names that reflect purpose
+
+**Quando usarlo**: Always - makes code self-documenting
+
+**Esempio**:
+```ruby
+class User < ApplicationRecord
+  include BetterModel
+
+  validatable do
+    check :email, :password, presence: true
+    check :first_name, :last_name, :date_of_birth, presence: true
+    check :phone, :address, :city, presence: true
+
+    # Good - semantic names
+    validation_group :account_setup, [:email, :password]
+    validation_group :personal_info, [:first_name, :last_name, :date_of_birth]
+    validation_group :contact_details, [:phone, :address, :city]
+  end
+end
+
+user.valid?(:account_setup)  # Clear what's being validated
+```
+
+---
+
+## Rails Integration
+
+### With Conditional Options
+
+**Cosa fa**: Combines Validatable with Rails if/unless options
+
+**Quando usarlo**: For state-dependent validation rules
+
+**Esempio**:
 ```ruby
 class Article < ApplicationRecord
   include BetterModel
 
   is :published, -> { status == "published" }
+  is :draft, -> { status == "draft" }
 
   validatable do
-    # Always required
     check :title, :content, presence: true
-
-    # Conditional using Statusable predicate
     check :published_at, presence: true, if: :is_published?
     check :author_id, presence: true, if: :is_published?
-
-    # Conditional using lambda
-    check :featured_image_url, presence: true, if: -> { featured? }
-
-    # Unless condition
     check :category_id, presence: true, unless: :is_draft?
   end
 end
 ```
 
-### Using Rails Validation Contexts
+---
 
-Validatable works seamlessly with Rails validation contexts:
+### With Validation Contexts
 
+**Cosa fa**: Uses Rails validation contexts (create, update, custom)
+
+**Quando usarlo**: For operation-specific validations
+
+**Esempio**:
 ```ruby
-validatable do
-  # Always validated
-  check :title, presence: true
+class Article < ApplicationRecord
+  include BetterModel
 
-  # Only on create
-  check :author_id, presence: true, on: :create
-
-  # Only on update
-  check :updated_reason, presence: true, on: :update
-
-  # Custom context
-  check :published_at, presence: true, on: :publish
-  check :reviewer_id, presence: true, on: :publish
+  validatable do
+    check :title, presence: true
+    check :author_id, presence: true, on: :create
+    check :updated_reason, presence: true, on: :update
+    check :published_at, presence: true, on: :publish
+    check :reviewer_id, presence: true, on: :publish
+  end
 end
 
-# Use with contexts
-article.valid?(:create)   # Validates with :create context
-article.valid?(:update)   # Validates with :update context
-article.valid?(:publish)  # Validates with :publish context
-```
-
-### Combining Groups and Contexts
-
-You can use both validation groups and Rails contexts:
-
-```ruby
-validatable do
-  check :title, presence: true
-  check :author_id, presence: true, on: :create
-  check :published_at, presence: true, if: :published?
-
-  validation_group :basic_info, [:title]
-  validation_group :publishing_info, [:published_at, :author_id]
-end
-
-# Groups ignore contexts
-article.valid?(:basic_info)      # Only validates :title
-
-# Contexts ignore groups
-article.valid?(:create)          # Validates :title and :author_id
+article = Article.new(title: "Test")
+article.valid?(:create)  # Validates :create context
+article.valid?(:publish)  # Validates :publish context
 ```
 
 ---
 
-## Complete Examples
+### Combining Groups and Contexts
 
-### Example 1: E-commerce Product
+**Cosa fa**: Uses both validation groups and Rails contexts together
 
+**Quando usarlo**: For complex validation scenarios
+
+**Esempio**:
+```ruby
+class Article < ApplicationRecord
+  include BetterModel
+
+  validatable do
+    check :title, presence: true
+    check :author_id, presence: true, on: :create
+    check :published_at, presence: true, if: :published?
+
+    validation_group :basic_info, [:title]
+    validation_group :publishing_info, [:published_at, :author_id]
+  end
+end
+
+# Groups ignore contexts
+article.valid?(:basic_info)  # Only validates :title
+
+# Contexts ignore groups
+article.valid?(:create)  # Validates :title and :author_id
+```
+
+---
+
+## Complex Examples
+
+### E-commerce Product
+
+**Cosa fa**: Complete product validation with pricing and stock rules
+
+**Quando usarlo**: For real-world e-commerce applications
+
+**Esempio**:
 ```ruby
 class Product < ApplicationRecord
   include BetterModel
 
   is :on_sale, -> { sale_price.present? && sale_price < price }
-  is :low_stock, -> { stock > 0 && stock <= low_stock_threshold }
 
-  # Complex validations for business rules
   register_complex_validation :pricing_rules do
     return if price.blank?
 
-    # Sale price must be less than regular price
     if sale_price.present? && sale_price >= price
       errors.add(:sale_price, "must be less than regular price")
     end
 
-    # Ensure minimum profit margin
     if sale_price.present? && cost.present?
       margin = ((sale_price - cost) / sale_price.to_f) * 100
       if margin < 10
@@ -683,36 +722,31 @@ class Product < ApplicationRecord
   end
 
   register_complex_validation :stock_validation do
-    # Reserved stock cannot exceed total
     if reserved_stock.present? && stock.present? && reserved_stock > stock
       errors.add(:reserved_stock, "cannot exceed total stock")
-    end
-
-    # Low stock warning
-    if stock.present? && stock < reorder_level
-      errors.add(:stock, "is below reorder level (#{reorder_level})")
     end
   end
 
   validatable do
-    # Basic validations
     check :name, :sku, presence: true
     check :sku, uniqueness: true
     check :price, numericality: { greater_than: 0 }
     check :stock, numericality: { greater_than_or_equal_to: 0 }
-
-    # Complex validations
     check_complex :pricing_rules
     check_complex :stock_validation
-
-    # Conditional validations
-    check :sale_price, presence: true, if: :is_on_sale?
   end
 end
 ```
 
-### Example 2: Multi-step Registration
+---
 
+### Multi-step Registration
+
+**Cosa fa**: User registration with password strength and multi-step validation
+
+**Quando usarlo**: For complex registration flows
+
+**Esempio**:
 ```ruby
 class User < ApplicationRecord
   include BetterModel
@@ -720,43 +754,46 @@ class User < ApplicationRecord
   register_complex_validation :password_strength do
     return if password.blank?
 
-    errors.add(:password, "must include at least one number") unless password.match?(/\d/)
-    errors.add(:password, "must include at least one uppercase letter") unless password.match?(/[A-Z]/)
-    errors.add(:password, "must include at least one special character") unless password.match?(/[!@#$%^&*]/)
+    errors.add(:password, "must include number") unless password.match?(/\d/)
+    errors.add(:password, "must include uppercase") unless password.match?(/[A-Z]/)
+    errors.add(:password, "must include special char") unless password.match?(/[!@#$%^&*]/)
   end
 
   validatable do
     # Step 1: Account
-    check :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }, uniqueness: true
+    check :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
     check :password, presence: true, length: { minimum: 8 }
-    check :password_confirmation, presence: true
     check_complex :password_strength
 
     # Step 2: Profile
-    check :first_name, :last_name, presence: true
-    check :date_of_birth, presence: true
+    check :first_name, :last_name, :date_of_birth, presence: true
 
     # Step 3: Contact
     check :phone, presence: true, format: { with: /\A\d{10}\z/ }
     check :address, :city, :zip_code, presence: true
 
-    # Groups
-    validation_group :account, [:email, :password, :password_confirmation]
+    validation_group :account, [:email, :password]
     validation_group :profile, [:first_name, :last_name, :date_of_birth]
     validation_group :contact, [:phone, :address, :city, :zip_code]
   end
 end
 ```
 
-### Example 3: Event Management
+---
 
+### Event Management
+
+**Cosa fa**: Event validation with date consistency and capacity limits
+
+**Quando usarlo**: For booking systems and event platforms
+
+**Esempio**:
 ```ruby
 class Event < ApplicationRecord
   include BetterModel
+  belongs_to :venue
 
   is :upcoming, -> { starts_at > Time.current }
-  is :ongoing, -> { starts_at <= Time.current && ends_at >= Time.current }
-  is :past, -> { ends_at < Time.current }
 
   register_complex_validation :date_consistency do
     return if starts_at.blank? || ends_at.blank?
@@ -779,11 +816,11 @@ class Event < ApplicationRecord
     return if max_attendees.blank?
 
     if registered_count > max_attendees
-      errors.add(:registered_count, "exceeds capacity (#{max_attendees})")
+      errors.add(:registered_count, "exceeds capacity")
     end
 
-    if max_attendees > venue.capacity
-      errors.add(:max_attendees, "exceeds venue capacity (#{venue.capacity})")
+    if venue && max_attendees > venue.capacity
+      errors.add(:max_attendees, "exceeds venue capacity")
     end
   end
 
@@ -792,12 +829,9 @@ class Event < ApplicationRecord
     check :title, length: { minimum: 5, maximum: 255 }
     check :starts_at, :ends_at, presence: true
     check :max_attendees, numericality: { greater_than: 0 }
-
     check_complex :date_consistency
     check_complex :capacity_limits
-
-    # Published events need venue
-    check :venue_id, :address, :city, presence: true, if: :published?
+    check :venue_id, :address, presence: true, if: :published?
   end
 end
 ```
@@ -806,120 +840,108 @@ end
 
 ## Best Practices
 
-### 1. Enable Validatable Explicitly
+### Always Handle Nil Values
 
-Always use the `validatable do...end` block:
+**Cosa fa**: Prevents NoMethodError on nil in complex validations
 
-```ruby
-# Good
-validatable do
-  check :title, presence: true
-end
+**Quando usarlo**: In every complex validation with field access
 
-# Bad - Validatable not active
-validates :title, presence: true
-```
-
-### 2. Use Complex Validations for Cross-field Logic
-
-```ruby
-# Good - reusable and clear
-register_complex_validation :valid_date_range do
-  return if starts_at.blank? || ends_at.blank?
-  errors.add(:starts_at, "must be before end date") if starts_at >= ends_at
-end
-
-validatable do
-  check_complex :valid_date_range
-end
-```
-
-### 3. Always Handle Nil in Complex Validations
-
+**Esempio**:
 ```ruby
 # Good - explicit nil handling
 register_complex_validation :valid_dates do
   return if starts_at.blank? || ends_at.blank?
-  # validation logic
+  errors.add(:starts_at, "must be before end date") if starts_at >= ends_at
 end
 
-# Avoid - will crash on nil
+# Bad - will crash on nil
 register_complex_validation :valid_dates do
   errors.add(:starts_at, "invalid") if starts_at >= ends_at
 end
 ```
 
-### 4. Use Semantic Validation Group Names
+---
 
+### Keep Validations Focused
+
+**Cosa fa**: One validation per concern for maintainability
+
+**Quando usarlo**: Always - prefer multiple small validations over one large one
+
+**Esempio**:
 ```ruby
-# Good
-validation_group :account_setup, [:email, :password]
-validation_group :personal_info, [:first_name, :last_name]
+# Good - separate concerns
+register_complex_validation :valid_dates do
+  # Only date logic
+end
 
-# Avoid
-validation_group :step1, [:email, :password]
-validation_group :step2, [:first_name, :last_name]
-```
+register_complex_validation :capacity_check do
+  # Only capacity logic
+end
 
-### 5. Keep Complex Validations Focused
-
-```ruby
-# Good - single responsibility
-register_complex_validation :valid_dates do ... end
-register_complex_validation :capacity_check do ... end
-
-# Avoid - multiple responsibilities
+# Bad - mixing concerns
 register_complex_validation :validate_everything do
   # 50 lines of various checks
 end
 ```
 
-### 6. Use Rails Options for Simple Conditionals
+---
 
+### Use Descriptive Names
+
+**Cosa fa**: Names that clearly indicate what is being validated
+
+**Quando usarlo**: For all validations and groups
+
+**Esempio**:
+```ruby
+# Good - clear purpose
+register_complex_validation :publication_requirements
+register_complex_validation :profit_margin_check
+validation_group :account_setup, [:email, :password]
+
+# Bad - generic names
+register_complex_validation :check1
+register_complex_validation :validation
+validation_group :step1, [:email, :password]
+```
+
+---
+
+### Provide Clear Error Messages
+
+**Cosa fa**: Specific, actionable error messages for users
+
+**Quando usarlo**: In every error.add call
+
+**Esempio**:
+```ruby
+# Good - specific and actionable
+errors.add(:sale_price, "must be less than regular price ($#{price})")
+errors.add(:starts_at, "must be at least 24 hours from now")
+
+# Bad - vague messages
+errors.add(:sale_price, "invalid")
+errors.add(:starts_at, "wrong")
+```
+
+---
+
+### Use Rails Options for Simple Conditionals
+
+**Cosa fa**: Leverages Rails if/unless instead of complex validation
+
+**Quando usarlo**: When condition is simple and applies to single field
+
+**Esempio**:
 ```ruby
 # Good - simple conditional
 check :published_at, presence: true, if: :published?
 
-# Avoid - overly complex for simple case
+# Overkill - too complex for simple case
 register_complex_validation :published_at_check do
   return unless published?
   errors.add(:published_at, "can't be blank") if published_at.blank?
-end
-```
-
-### 7. Combine with Standard Rails Validations
-
-```ruby
-# You can mix standard Rails validations with Validatable
-validates :user, presence: true
-validates :title, uniqueness: { scope: :user_id }
-
-validatable do
-  check :content, presence: true, if: :published?
-  check_complex :content_quality
-end
-```
-
-### 8. Test Validations Thoroughly
-
-```ruby
-RSpec.describe Product, type: :model do
-  describe "validations" do
-    it "requires name and price" do
-      product = Product.new
-      expect(product).not_to be_valid
-      expect(product.errors[:name]).to include("can't be blank")
-      expect(product.errors[:price]).to include("can't be blank")
-    end
-
-    describe "pricing rules" do
-      it "requires sale_price < price" do
-        product = Product.new(price: 100, sale_price: 120)
-        expect(product).not_to be_valid
-        expect(product.errors[:sale_price]).to include("must be less than regular price")
-      end
-    end
-  end
 end
 ```
 
@@ -929,36 +951,73 @@ end
 
 ### ValidatableNotEnabledError
 
-Raised when calling validation group methods without enabling Validatable:
+**Cosa fa**: Raised when using group methods without enabling Validatable
 
+**Quando usarlo**: Catches configuration mistakes
+
+**Esempio**:
 ```ruby
+class User < ApplicationRecord
+  include BetterModel
+  # No validatable block!
+end
+
+user = User.new
 user.errors_for_group(:step1)
-# => BetterModel::ValidatableNotEnabledError: Validatable is not enabled. Add 'validatable do...end' to your model.
+# Raises: BetterModel::ValidatableNotEnabledError
+# Message: "Validatable is not enabled. Add 'validatable do...end' to your model."
+
+rescue BetterModel::ValidatableNotEnabledError => e
+  Rails.logger.error "Configuration error: #{e.message}"
+end
 ```
+
+---
 
 ### ArgumentError for Unknown Complex Validation
 
+**Cosa fa**: Raised when referencing undefined complex validation
+
+**Quando usarlo**: Catches typos and missing registrations
+
+**Esempio**:
 ```ruby
-validatable do
-  check_complex :nonexistent
+class Product < ApplicationRecord
+  include BetterModel
+
+  validatable do
+    check_complex :nonexistent  # Not registered!
+  end
 end
-# => ArgumentError: Unknown complex validation: nonexistent. Use register_complex_validation to define it first.
+# Raises: ArgumentError
+# Message: "Unknown complex validation: nonexistent. Use register_complex_validation to define it first."
+
+# Fix: register first
+register_complex_validation :nonexistent do
+  # validation logic
+end
 ```
 
 ---
 
 ## Summary
 
-Validatable provides **3 core features**:
+**Three Core Features**:
 
-1. **`check`** - Basic validations with declarative syntax
-2. **`register_complex_validation` + `check_complex`** - Reusable validation blocks for complex logic
+1. **`check`** - Basic validations with declarative syntax (all Rails validation options)
+2. **`register_complex_validation` + `check_complex`** - Reusable validation blocks for cross-field logic
 3. **`validation_group`** - Partial validation for multi-step forms
 
-All features work seamlessly with:
+**Works seamlessly with**:
 - Rails conditional options (`if`, `unless`)
-- Rails validation contexts (`on: :create`, `on: :update`, custom contexts)
+- Rails validation contexts (`on: :create`, `on: :update`, custom)
 - Statusable predicates
 - Standard Rails validations
 
-**Thread-safe**, **opt-in**, and **fully compatible** with ActiveModel validations.
+**Thread-safe**, **opt-in** (requires `validatable do...end`), and **fully compatible** with ActiveModel.
+
+**Key Methods**:
+- `Model.complex_validation?(:name)` - Check if validation is registered
+- `instance.valid?(group_or_context)` - Validate group or context
+- `instance.validate_group(:name)` - Validate specific group
+- `instance.errors_for_group(:name)` - Get errors for group

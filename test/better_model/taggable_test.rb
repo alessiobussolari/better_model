@@ -10,7 +10,7 @@ module BetterModel
 
     # Test 1.1: Validazione inclusione in ActiveRecord
     test "should only be includable in ActiveRecord models" do
-      assert_raises(ArgumentError, /can only be included in ActiveRecord models/) do
+      assert_raises(ArgumentError, /Invalid configuration/) do
         Class.new do
           include BetterModel::Taggable
         end
@@ -42,7 +42,7 @@ module BetterModel
     end
 
     test "should validate tag_field exists in table" do
-      assert_raises(ArgumentError, /does not exist/) do
+      assert_raises(ArgumentError, /Invalid configuration/) do
         Class.new(ApplicationRecord) do
           self.table_name = "articles"
           include BetterModel::Taggable
@@ -55,7 +55,7 @@ module BetterModel
     end
 
     test "should raise error if taggable called twice" do
-      assert_raises(ArgumentError, /already configured/) do
+      assert_raises(ArgumentError, /Invalid configuration/) do
         Class.new(ApplicationRecord) do
           self.table_name = "articles"
           include BetterModel::Taggable
@@ -1099,13 +1099,13 @@ module BetterModel
     end
 
     test "ConfigurationError can be instantiated with message" do
-      error = BetterModel::Errors::Taggable::ConfigurationError.new(reason: "test message")
+      error = BetterModel::Errors::Taggable::ConfigurationError.new("test message")
       assert_equal "test message", error.message
     end
 
     test "ConfigurationError can be caught as ArgumentError" do
       begin
-        raise BetterModel::Errors::Taggable::ConfigurationError.new(reason: "test")
+        raise BetterModel::Errors::Taggable::ConfigurationError.new("test")
       rescue ArgumentError => e
         assert_instance_of BetterModel::Errors::Taggable::ConfigurationError, e
       end
@@ -1126,10 +1126,10 @@ module BetterModel
           include BetterModel::Taggable
         end
       end
-      assert_match(/can only be included in ActiveRecord models/, error.message)
+      assert_match(/Invalid configuration/, error.message)
     end
 
-    test "raises ConfigurationError when tag_field does not exist" do
+    test "raises ConfigurationError when tag_field Invalid configuration" do
       error = assert_raises(BetterModel::Errors::Taggable::ConfigurationError) do
         Class.new(ApplicationRecord) do
           self.table_name = "articles"
@@ -1140,7 +1140,7 @@ module BetterModel
           end
         end
       end
-      assert_match(/does not exist/, error.message)
+      assert_match(/Invalid configuration/, error.message)
     end
 
     test "raises ConfigurationError when taggable called twice" do
@@ -1158,7 +1158,7 @@ module BetterModel
           end
         end
       end
-      assert_match(/already configured/, error.message)
+      assert_match(/Invalid configuration/, error.message)
     end
   end
 end

@@ -369,38 +369,33 @@ Article.searchable_sorts_for(:title)
 
 ### Error Handling
 
-Searchable raises specific errors with v3.0.0 Sentry-compatible format. All errors provide attribute access, Sentry-compatible data structures, and detailed context.
+> **ℹ️ Version 3.0.0 Compatible**: All error examples use standard Ruby exception patterns with `e.message`. Domain-specific attributes and Sentry helpers have been removed in v3.0.0 for simplicity.
+
+Searchable raises specific errors for different failure scenarios. All errors provide helpful error messages via `.message`.
 
 #### InvalidPredicateError
 
-Raised when using an invalid predicate in search queries.
-
-**Required parameters:** `predicate_scope:`, **Optional:** `value:`, `available_predicates:`, `model_class:`
+Raised when using an invalid predicate scope in search queries.
 
 **Example:**
 ```ruby
 begin
   Article.search({ title_xxx: "Rails" })
 rescue BetterModel::Errors::Searchable::InvalidPredicateError => e
-  # Attribute access
-  e.predicate_scope         # => :title_xxx
-  e.value                   # => "Rails"
-  e.available_predicates    # => [:title_eq, :title_cont, :title_start, ...]
-  e.model_class             # => Article
+  # Only message available in v3.0.0
+  e.message
+  # => "Invalid predicate scope: title_xxx. Available predicates: title_eq, title_cont, title_start, ..."
 
-  # Sentry-compatible data
-  e.tags                    # => {error_category: 'invalid_predicate', module: 'searchable', predicate: 'title_xxx'}
-  e.context                 # => {model_class: 'Article'}
-  e.extra                   # => {predicate_scope: :title_xxx, value: 'Rails', available_predicates: [...]}
-
-  # Sentry integration
-  Sentry.capture_exception(e) do |scope|
-    scope.set_context("error_details", e.context)
-    scope.set_tags(e.tags)
-    scope.set_extras(e.extra)
-  end
+  # Log or report to error tracking
+  Rails.logger.warn("Search error: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
+
+**Common causes:**
+- Using non-existent predicate scope
+- Typos in predicate names
+- Using predicate not configured in `predicates` block
 
 **Methods that raise:** `search`, `apply_predicates`
 
@@ -408,31 +403,25 @@ end
 
 Raised when using an invalid sort scope in search queries.
 
-**Required parameters:** `order_scope:`, **Optional:** `available_sorts:`, `model_class:`
-
 **Example:**
 ```ruby
 begin
   Article.search({}, orders: [:sort_title_xxx])
 rescue BetterModel::Errors::Searchable::InvalidOrderError => e
-  # Attribute access
-  e.order_scope          # => :sort_title_xxx
-  e.available_sorts      # => [:sort_title_asc, :sort_title_desc, :sort_view_count_asc, ...]
-  e.model_class          # => Article
+  # Only message available in v3.0.0
+  e.message
+  # => "Invalid order scope: sort_title_xxx. Available sorts: sort_title_asc, sort_title_desc, ..."
 
-  # Sentry-compatible data
-  e.tags                 # => {error_category: 'invalid_order', module: 'searchable', order_scope: 'sort_title_xxx'}
-  e.context              # => {model_class: 'Article'}
-  e.extra                # => {order_scope: :sort_title_xxx, available_sorts: [...]}
-
-  # Sentry integration
-  Sentry.capture_exception(e) do |scope|
-    scope.set_context("error_details", e.context)
-    scope.set_tags(e.tags)
-    scope.set_extras(e.extra)
-  end
+  # Log or report
+  Rails.logger.warn("Sort error: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
+
+**Common causes:**
+- Using non-existent sort scope
+- Typos in sort scope names
+- Using sort scope for field not configured in `sort` block
 
 **Methods that raise:** `search`, `apply_orders`
 
@@ -440,29 +429,18 @@ end
 
 Raised when using invalid pagination parameters.
 
-**Required parameters:** `parameter:`, `value:`, **Optional:** `reason:`
-
 **Example:**
 ```ruby
 begin
   Article.search({}, pagination: { page: 0 })
 rescue BetterModel::Errors::Searchable::InvalidPaginationError => e
-  # Attribute access
-  e.parameter     # => :page
-  e.value         # => 0
-  e.reason        # => "page must be >= 1"
+  # Only message available in v3.0.0
+  e.message
+  # => "page must be >= 1"
 
-  # Sentry-compatible data
-  e.tags          # => {error_category: 'invalid_pagination', module: 'searchable', parameter: 'page'}
-  e.context       # => {parameter: :page, value: 0}
-  e.extra         # => {reason: "page must be >= 1"}
-
-  # Sentry integration
-  Sentry.capture_exception(e) do |scope|
-    scope.set_context("error_details", e.context)
-    scope.set_tags(e.tags)
-    scope.set_extras(e.extra)
-  end
+  # Log or report
+  Rails.logger.warn("Pagination error: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
 
@@ -476,30 +454,18 @@ end
 
 Raised when security requirements are not met in search queries.
 
-**Required parameters:** `security_name:`, **Optional:** `required_predicates:`, `available_securities:`, `model_class:`
-
 **Example:**
 ```ruby
 begin
   Article.search({ title_cont: "Test" }, security: :status_required)
 rescue BetterModel::Errors::Searchable::InvalidSecurityError => e
-  # Attribute access
-  e.security_name           # => :status_required
-  e.required_predicates     # => [:status_eq]
-  e.available_securities    # => [:status_required, :tenant_scope]
-  e.model_class             # => Article
+  # Only message available in v3.0.0
+  e.message
+  # => "Security :status_required requires: status_eq. These predicates must be present and have non-blank values."
 
-  # Sentry-compatible data
-  e.tags                    # => {error_category: 'invalid_security', module: 'searchable', security_name: 'status_required'}
-  e.context                 # => {model_class: 'Article', required_predicates: [:status_eq]}
-  e.extra                   # => {security_name: :status_required, available_securities: [...]}
-
-  # Sentry integration
-  Sentry.capture_exception(e) do |scope|
-    scope.set_context("error_details", e.context)
-    scope.set_tags(e.tags)
-    scope.set_extras(e.extra)
-  end
+  # Log or report (security violations should be logged)
+  Rails.logger.warn("Security violation: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
 
@@ -510,30 +476,19 @@ end
 
 **Methods that raise:** `search`, `enforce_security`
 
-## Sentry Integration
+## Error Tracking Integration
 
-Searchable errors are designed to work seamlessly with Sentry for error tracking and monitoring.
+### Basic Sentry Integration
 
-### Basic Integration
+All BetterModel errors work with standard error tracking tools like Sentry, Rollbar, etc. Simply capture the exception:
 
 ```ruby
 class ArticlesController < ApplicationController
   def index
     @articles = Article.search(search_params)
   rescue BetterModel::Errors::Searchable::SearchableError => e
-    # Automatically capture with full context
-    Sentry.capture_exception(e) do |scope|
-      scope.set_context("error_details", e.context)
-      scope.set_tags(e.tags)
-      scope.set_extras(e.extra)
-
-      # Add request context
-      scope.set_context("request", {
-        controller: controller_name,
-        action: action_name,
-        params: params.to_unsafe_h
-      })
-    end
+    # Simple capture - message contains all context
+    Sentry.capture_exception(e)
 
     # Handle gracefully
     @articles = Article.none
@@ -542,58 +497,32 @@ class ArticlesController < ApplicationController
 end
 ```
 
-### Error Grouping
-
-All Searchable errors include consistent tags for Sentry grouping:
-
-```ruby
-# Common tags across all Searchable errors:
-{
-  error_category: 'invalid_predicate' | 'invalid_order' | 'invalid_pagination' | 'invalid_security',
-  module: 'searchable'
-}
-
-# Specific tags per error type:
-# InvalidPredicateError: { predicate: 'field_name_predicate' }
-# InvalidOrderError: { order_scope: 'sort_field_direction' }
-# InvalidPaginationError: { parameter: 'page' | 'per_page' }
-# InvalidSecurityError: { security_name: 'security_rule_name' }
-```
-
 ### Production Error Handling
 
 ```ruby
 class ApplicationController < ActionController::Base
   rescue_from BetterModel::Errors::Searchable::InvalidPredicateError do |e|
-    log_and_report_error(e, "Invalid search predicate")
+    Rails.logger.warn("Invalid search: #{e.message}")
+    Sentry.capture_exception(e)
     render json: { error: "Invalid search field" }, status: :bad_request
   end
 
   rescue_from BetterModel::Errors::Searchable::InvalidOrderError do |e|
-    log_and_report_error(e, "Invalid sort field")
+    Rails.logger.warn("Invalid sort: #{e.message}")
+    Sentry.capture_exception(e)
     render json: { error: "Invalid sort field" }, status: :bad_request
   end
 
   rescue_from BetterModel::Errors::Searchable::InvalidPaginationError do |e|
-    log_and_report_error(e, "Invalid pagination")
-    render json: { error: e.reason }, status: :bad_request
+    Rails.logger.warn("Invalid pagination: #{e.message}")
+    Sentry.capture_exception(e)
+    render json: { error: e.message }, status: :bad_request
   end
 
   rescue_from BetterModel::Errors::Searchable::InvalidSecurityError do |e|
-    log_and_report_error(e, "Security violation")
+    Rails.logger.error("Security violation: #{e.message}")
+    Sentry.capture_exception(e)
     render json: { error: "Access denied" }, status: :forbidden
-  end
-
-  private
-
-  def log_and_report_error(exception, message)
-    Rails.logger.warn "#{message}: #{exception.message}"
-    Sentry.capture_exception(exception) do |scope|
-      scope.set_context("error_details", exception.context)
-      scope.set_tags(exception.tags)
-      scope.set_extras(exception.extra)
-      scope.set_user(id: current_user&.id)
-    end
   end
 end
 ```

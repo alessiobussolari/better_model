@@ -741,7 +741,9 @@ Product.archived_at_between(3.months.ago, Time.current)
 
 ## Error Handling
 
-Archivable raises specific errors for invalid operations, all compatible with Sentry for error tracking and monitoring.
+> **ℹ️ Version 3.0.0 Compatible**: All error examples use standard Ruby exception patterns with `e.message`. Domain-specific attributes and Sentry helpers have been removed in v3.0.0 for simplicity.
+
+Archivable raises specific errors for invalid operations. All errors provide helpful error messages via `.message`.
 
 ### AlreadyArchivedError
 
@@ -754,18 +756,13 @@ article.archive!(by: current_user)
 begin
   article.archive!(by: current_user)  # Trying to archive again
 rescue BetterModel::Errors::Archivable::AlreadyArchivedError => e
-  # Error attributes
-  e.archived_at    # => 2025-01-15 10:30:00 UTC (Time when first archived)
-  e.model_class    # => Article
-  e.model_id       # => 1
+  # Only message available in v3.0.0
+  e.message
+  # => "Record already archived at 2025-01-15T10:30:00Z"
 
-  # Sentry-compatible data
-  e.tags           # => {error_category: 'already_archived', module: 'archivable'}
-  e.context        # => {model_class: 'Article'}
-  e.extra          # => {archived_at: Time, model_id: 1}
-
-  # Error message
-  e.message        # => "Record is already archived (archived at: 2025-01-15 10:30:00 UTC)"
+  # Log or report
+  Rails.logger.warn("Archive error: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
 
@@ -779,17 +776,13 @@ article = Article.find(1)
 begin
   article.restore!  # Record is not archived
 rescue BetterModel::Errors::Archivable::NotArchivedError => e
-  # Error attributes
-  e.model_class    # => Article
-  e.model_id       # => 1
+  # Only message available in v3.0.0
+  e.message
+  # => "Record is not archived"
 
-  # Sentry-compatible data
-  e.tags           # => {error_category: 'not_archived', module: 'archivable'}
-  e.context        # => {model_class: 'Article'}
-  e.extra          # => {model_id: 1}
-
-  # Error message
-  e.message        # => "Record is not archived"
+  # Log or report
+  Rails.logger.warn("Restore error: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
 
@@ -808,34 +801,25 @@ comment = Comment.first
 begin
   comment.archive!
 rescue BetterModel::Errors::Archivable::NotEnabledError => e
-  # Error attributes
-  e.model_class    # => Comment
+  # Only message available in v3.0.0
+  e.message
+  # => "Archivable is not enabled for Comment"
 
-  # Sentry-compatible data
-  e.tags           # => {error_category: 'not_enabled', module: 'archivable'}
-  e.context        # => {model_class: 'Comment'}
-  e.extra          # => {}
-
-  # Error message
-  e.message        # => "Archivable is not enabled for Comment"
+  # Log or report
+  Rails.logger.error("Archivable not enabled: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
 
-### Integrating with Sentry
+### Error Tracking Integration
 
-All Archivable errors are compatible with Sentry's error tracking:
+All BetterModel errors work with standard error tracking tools like Sentry, Rollbar, etc. Simply capture the exception:
 
 ```ruby
 # In your ApplicationController or error handler
 rescue_from BetterModel::Errors::Archivable::ArchivableError do |error|
-  # Automatically captured by Sentry with structured data
-  Sentry.capture_exception(error, {
-    tags: error.tags,           # Indexed tags for filtering
-    contexts: {
-      archivable: error.context # Additional context
-    },
-    extra: error.extra          # Detailed error data
-  })
+  # Simple capture - message contains all context
+  Sentry.capture_exception(error)
 
   render json: { error: error.message }, status: :unprocessable_entity
 end
@@ -851,8 +835,11 @@ def archive
 
   redirect_to @article, notice: "Article archived successfully"
 rescue BetterModel::Errors::Archivable::AlreadyArchivedError => e
-  redirect_to @article, alert: "This article is already archived (archived at: #{e.archived_at})"
+  Rails.logger.warn(e.message)
+  redirect_to @article, alert: "This article is already archived"
 rescue BetterModel::Errors::Archivable::NotEnabledError => e
+  Rails.logger.error(e.message)
+  Sentry.capture_exception(e)
   redirect_to @article, alert: "Archiving is not available for this resource"
 end
 
@@ -862,8 +849,11 @@ class ArticleArchiver
     article.archive!(by: user, reason: reason)
     { success: true, article: article }
   rescue BetterModel::Errors::Archivable::AlreadyArchivedError => e
-    { success: false, error: :already_archived, message: e.message, archived_at: e.archived_at }
+    Rails.logger.warn(e.message)
+    { success: false, error: :already_archived, message: e.message }
   rescue BetterModel::Errors::Archivable::NotEnabledError => e
+    Rails.logger.error(e.message)
+    Sentry.capture_exception(e)
     { success: false, error: :not_enabled, message: e.message }
   end
 end

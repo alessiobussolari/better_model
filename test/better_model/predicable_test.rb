@@ -14,7 +14,7 @@ module BetterModel
 
     # Test validazione ActiveRecord
     test "should only be includable in ActiveRecord models" do
-      assert_raises(ArgumentError, /can only be included in ActiveRecord models/) do
+      assert_raises(ArgumentError, /Invalid configuration/) do
         Class.new do
           include BetterModel::Predicable
         end
@@ -1412,13 +1412,13 @@ module BetterModel
     end
 
     test "ConfigurationError can be instantiated with message" do
-      error = BetterModel::Errors::Predicable::ConfigurationError.new(reason: "test message")
+      error = BetterModel::Errors::Predicable::ConfigurationError.new("test message")
       assert_equal "test message", error.message
     end
 
     test "ConfigurationError can be caught as ArgumentError" do
       begin
-        raise BetterModel::Errors::Predicable::ConfigurationError.new(reason: "test")
+        raise BetterModel::Errors::Predicable::ConfigurationError.new("test")
       rescue ArgumentError => e
         assert_instance_of BetterModel::Errors::Predicable::ConfigurationError, e
       end

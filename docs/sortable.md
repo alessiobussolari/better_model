@@ -340,26 +340,22 @@ Sortable registries are thread-safe:
 
 ### Error Handling
 
-Sortable raises ConfigurationError for invalid configuration with full Sentry-compatible error data:
+> **ℹ️ Version 3.0.0 Compatible**: All error examples use standard Ruby exception patterns with `e.message`. Domain-specific attributes and Sentry helpers have been removed in v3.0.0 for simplicity.
+
+Sortable raises ConfigurationError for invalid configuration during class definition:
 
 ```ruby
 # Invalid field type
 begin
   sort :nonexistent_field
 rescue BetterModel::Errors::Sortable::ConfigurationError => e
-  # Error attributes
-  e.reason        # => "Field does not exist in model"
-  e.model_class   # => Article
-  e.expected      # => "Valid column name"
-  e.provided      # => :nonexistent_field
+  # Only message available in v3.0.0
+  e.message
+  # => "Field does not exist in model: nonexistent_field"
 
-  # Sentry-compatible data
-  e.tags     # => {error_category: 'configuration', module: 'sortable'}
-  e.context  # => {model_class: 'Article'}
-  e.extra    # => {reason: 'Field does not exist in model', expected: 'Valid column name', provided: :nonexistent_field}
-
-  # Error message
-  e.message  # => "Field does not exist in model (expected: \"Valid column name\") (provided: :nonexistent_field)"
+  # Log or report
+  Rails.logger.error("Sortable configuration error: #{e.message}")
+  Sentry.capture_exception(e)
 end
 ```
 
@@ -367,11 +363,9 @@ end
 
 ```ruby
 rescue_from BetterModel::Errors::Sortable::ConfigurationError do |error|
-  Sentry.capture_exception(error, {
-    tags: error.tags,
-    contexts: { sortable: error.context },
-    extra: error.extra
-  })
+  Rails.logger.error("Configuration error: #{error.message}")
+  Sentry.capture_exception(error)
+  render json: { error: "Server configuration error" }, status: :internal_server_error
 end
 ```
 

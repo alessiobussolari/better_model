@@ -850,13 +850,13 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
   end
 
   test "ConfigurationError can be instantiated with message" do
-    error = BetterModel::Errors::Stateable::ConfigurationError.new(reason: "test message")
+    error = BetterModel::Errors::Stateable::ConfigurationError.new("test message")
     assert_equal "test message", error.message
   end
 
   test "ConfigurationError can be caught as ArgumentError" do
     begin
-      raise BetterModel::Errors::Stateable::ConfigurationError.new(reason: "test")
+      raise BetterModel::Errors::Stateable::ConfigurationError.new("test")
     rescue ArgumentError => e
       assert_instance_of BetterModel::Errors::Stateable::ConfigurationError, e
     end
@@ -877,7 +877,7 @@ class BetterModel::StateableTest < ActiveSupport::TestCase
         include BetterModel::Stateable
       end
     end
-    assert_match(/can only be included in ActiveRecord models/, error.message)
+    assert_match(/Invalid configuration/, error.message)
   end
 
   test "raises ConfigurationError when unknown transition is used" do

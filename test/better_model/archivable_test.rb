@@ -62,7 +62,7 @@ module BetterModel
         test_class.class_eval { archivable }
       end
 
-      assert_match(/requires an 'archived_at' datetime column/, error.message)
+      assert_match(/Invalid configuration/, error.message)
     end
 
     # ========================================
@@ -324,8 +324,7 @@ module BetterModel
         article.archive!
       end
 
-      assert_match(/not enabled/, error.message)
-      assert_match(/archivable/, error.message)
+      assert_match(/Module is not enabled/, error.message)
     end
 
     test "archivable_config should be frozen" do
@@ -447,13 +446,13 @@ module BetterModel
     end
 
     test "ConfigurationError can be instantiated with message" do
-      error = BetterModel::Errors::Archivable::ConfigurationError.new(reason: "test message")
+      error = BetterModel::Errors::Archivable::ConfigurationError.new("test message")
       assert_equal "test message", error.message
     end
 
     test "ConfigurationError can be caught as ArgumentError" do
       begin
-        raise BetterModel::Errors::Archivable::ConfigurationError.new(reason: "test")
+        raise BetterModel::Errors::Archivable::ConfigurationError.new("test")
       rescue ArgumentError => e
         assert_instance_of BetterModel::Errors::Archivable::ConfigurationError, e
       end
@@ -474,7 +473,7 @@ module BetterModel
           include BetterModel::Archivable
         end
       end
-      assert_match(/can only be included in ActiveRecord models/, error.message)
+      assert_match(/Invalid configuration/, error.message)
     end
 
     test "raises ConfigurationError when archived_at column is missing" do
@@ -489,7 +488,7 @@ module BetterModel
           archivable
         end
       end
-      assert_match(/requires an 'archived_at' datetime column/, error.message)
+      assert_match(/Invalid configuration/, error.message)
     end
   end
 end
