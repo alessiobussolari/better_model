@@ -56,9 +56,7 @@ module BetterModel
     included do
       # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
-        raise BetterModel::Errors::Validatable::ConfigurationError.new(
-          reason: "BetterModel::Validatable can only be included in ActiveRecord models"
-        )
+        raise BetterModel::Errors::Validatable::ConfigurationError, "Invalid configuration"
       end
 
       # Configurazione validatable (opt-in)
@@ -133,10 +131,7 @@ module BetterModel
       #
       def register_complex_validation(name, &block)
         unless block_given?
-          raise BetterModel::Errors::Validatable::ConfigurationError.new(
-            reason: "Block required for complex validation",
-            model_class: self
-          )
+          raise BetterModel::Errors::Validatable::ConfigurationError, "Invalid configuration"
         end
 
         # Registra nel registry
@@ -195,11 +190,7 @@ module BetterModel
     # @return [Boolean]
     def validate_group(group_name)
       unless self.class.validatable_enabled?
-        raise BetterModel::Errors::Validatable::NotEnabledError.new(
-          module_name: "Validatable",
-          method_called: "validate_group",
-          model_class: self.class
-        )
+        raise BetterModel::Errors::Validatable::NotEnabledError, "Module is not enabled"
       end
 
       group = self.class.validatable_groups[group_name]
@@ -222,11 +213,7 @@ module BetterModel
     # @return [ActiveModel::Errors]
     def errors_for_group(group_name)
       unless self.class.validatable_enabled?
-        raise BetterModel::Errors::Validatable::NotEnabledError.new(
-          module_name: "Validatable",
-          method_called: "errors_for_group",
-          model_class: self.class
-        )
+        raise BetterModel::Errors::Validatable::NotEnabledError, "Module is not enabled"
       end
 
       group = self.class.validatable_groups[group_name]

@@ -28,9 +28,7 @@ module BetterModel
     included do
       # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
-        raise BetterModel::Errors::Sortable::ConfigurationError.new(
-          reason: "BetterModel::Sortable can only be included in ActiveRecord models"
-        )
+        raise BetterModel::Errors::Sortable::ConfigurationError, "BetterModel::Sortable can only be included in ActiveRecord models"
       end
 
       # Registry of sortable fields defined for this class
@@ -100,10 +98,7 @@ module BetterModel
       #   Article.sort_by_relevance('rails')
       def register_complex_sort(name, &block)
         unless block_given?
-          raise BetterModel::Errors::Sortable::ConfigurationError.new(
-            reason: "Block required for complex sort",
-            model_class: self
-          )
+          raise BetterModel::Errors::Sortable::ConfigurationError, "Block required for complex sort"
         end
 
         # Register in registry
@@ -152,12 +147,7 @@ module BetterModel
       # @api private
       def validate_sortable_field!(field_name)
         unless column_names.include?(field_name.to_s)
-          raise BetterModel::Errors::Sortable::ConfigurationError.new(
-            reason: "Invalid field name: #{field_name}. Field does not exist in #{table_name}",
-            model_class: self,
-            expected: "valid column name from #{table_name}",
-            provided: field_name
-          )
+          raise BetterModel::Errors::Sortable::ConfigurationError, "Invalid field name: #{field_name}. Field does not exist in #{table_name}"
         end
       end
 

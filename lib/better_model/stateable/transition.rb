@@ -75,13 +75,7 @@ module BetterModel
           check = Guard.new(@instance, check_config)  # Guard class handles the logic
 
           unless check.evaluate
-            raise BetterModel::Errors::Stateable::CheckFailedError.new(
-              event: @event.to_s,
-              check_description: check.description,
-              check_type: check_config[:type]&.to_s,
-              current_state: @from_state.to_s,
-              model_class: @instance.class
-            )
+            raise BetterModel::Errors::Stateable::CheckFailedError, "Check failed for transition #{@event}"
           end
         end
       end
@@ -102,13 +96,8 @@ module BetterModel
         end
 
         if @instance.errors.any?
-          raise BetterModel::Errors::Stateable::ValidationFailedError.new(
-            event: @event.to_s,
-            errors_object: @instance.errors,
-            current_state: @from_state.to_s,
-            target_state: @to_state.to_s,
-            model_class: @instance.class
-          )
+          error_messages = @instance.errors.full_messages.join(", ")
+          raise BetterModel::Errors::Stateable::ValidationFailedError, "Validation failed for transition #{@event}: #{error_messages}"
         end
       end
 

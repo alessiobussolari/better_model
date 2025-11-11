@@ -100,9 +100,7 @@ module BetterModel
     included do
       # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
-        raise BetterModel::Errors::Taggable::ConfigurationError.new(
-          reason: "BetterModel::Taggable can only be included in ActiveRecord models"
-        )
+        raise BetterModel::Errors::Taggable::ConfigurationError, "Invalid configuration"
       end
 
       # Taggable configuration for this class
@@ -128,10 +126,7 @@ module BetterModel
       def taggable(&block)
         # Prevent multiple configuration
         if taggable_config.present?
-          raise BetterModel::Errors::Taggable::ConfigurationError.new(
-            reason: "Taggable already configured for #{name}",
-            model_class: self
-          )
+          raise BetterModel::Errors::Taggable::ConfigurationError, "Invalid configuration"
         end
 
         # Create configuration
@@ -141,12 +136,7 @@ module BetterModel
         # Validate that field exists
         tag_field_name = config.tag_field.to_s
         unless column_names.include?(tag_field_name)
-          raise BetterModel::Errors::Taggable::ConfigurationError.new(
-            reason: "Tag field #{config.tag_field} does not exist in #{table_name}",
-            model_class: self,
-            expected: "valid column name from #{table_name}",
-            provided: config.tag_field
-          )
+          raise BetterModel::Errors::Taggable::ConfigurationError, "Invalid configuration"
         end
 
         # Save configuration (frozen for thread-safety)

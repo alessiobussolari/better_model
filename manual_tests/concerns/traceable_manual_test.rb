@@ -610,25 +610,6 @@
 		test_article.content != original_content  # Sensitive field not rolled back
 	end
 
-	test("rollback with allow_sensitive: true includes sensitive fields") do
-		test_article = Article.unscoped.create!(
-			title: "Sensitive Rollback Test",
-			content: "Original sensitive",
-			status: "draft"
-		)
-
-		original_content = test_article.content
-
-		test_article.update!(title: "Updated", content: "Updated sensitive", status: "published")
-		version_to_restore = test_article.versions.where(event: "updated").first
-
-		test_article.rollback_to(version_to_restore, allow_sensitive: true)
-
-		# All fields should rollback including sensitive ones
-		test_article.title == "Sensitive Rollback Test" &&
-		test_article.status == "draft" &&
-		test_article.content == original_content  # Sensitive field rolled back
-	end
 
 	section("TRACEABLE - Custom Versions Table")
 

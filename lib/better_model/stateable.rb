@@ -104,11 +104,7 @@ module BetterModel
     included do
       # Validazione ActiveRecord
       unless ancestors.include?(ActiveRecord::Base)
-        raise BetterModel::Errors::Stateable::ConfigurationError.new(
-          reason: "BetterModel::Stateable can only be included in ActiveRecord models",
-          expected: "ActiveRecord::Base ancestor",
-          provided: "non-ActiveRecord class"
-        )
+        raise BetterModel::Errors::Stateable::ConfigurationError, "Invalid configuration"
       end
 
       # Configurazione stateable (opt-in)
@@ -246,8 +242,11 @@ module BetterModel
         # Metodi per ogni transizione: confirm!, can_confirm?, etc.
         stateable_transitions.each do |event_name, transition_config|
           # event! - esegue transizione (raise se fallisce)
-          define_method "#{event_name}!" do |**metadata|
-            transition_to!(event_name, **metadata)
+          # Accepts both positional hash and keyword arguments for flexibility
+          define_method "#{event_name}!" do |metadata = {}, **kwargs|
+            # Convert positional hash to keyword args if provided
+            combined_metadata = metadata.merge(kwargs)
+            transition_to!(event_name, **combined_metadata)
           end
 
           # can_event? - controlla se transizione è possibile
@@ -286,20 +285,12 @@ module BetterModel
     #
     def transition_to!(event, **metadata)
       unless self.class.stateable_enabled?
-        raise BetterModel::Errors::Stateable::NotEnabledError.new(
-          module_name: "Stateable",
-          method_called: "transition_to!",
-          model_class: self.class.name
-        )
+        raise BetterModel::Errors::Stateable::NotEnabledError, "Module is not enabled"
       end
 
       transition_config = self.class.stateable_transitions[event.to_sym]
       unless transition_config
-        raise BetterModel::Errors::Stateable::ConfigurationError.new(
-          reason: "Unknown transition: #{event}",
-          model_class: self.class.name,
-          provided: event.to_s
-        )
+        raise BetterModel::Errors::Stateable::ConfigurationError, "Unknown transition: #{event}"
       end
 
       current_state = state.to_sym
@@ -307,12 +298,7 @@ module BetterModel
       # Verifica che from_state sia valido
       from_states = Array(transition_config[:from])
       unless from_states.include?(current_state)
-        raise BetterModel::Errors::Stateable::InvalidTransitionError.new(
-          event: event.to_s,
-          from_state: current_state.to_s,
-          to_state: transition_config[:to].to_s,
-          model_class: self.class
-        )
+        raise BetterModel::Errors::Stateable::InvalidTransitionError, "Cannot transition from #{current_state} to #{transition_config[:to]} via #{event}"
       end
 
       # Esegui la transizione usando Transition executor
@@ -350,11 +336,7 @@ module BetterModel
     #
     def transition_history
       unless self.class.stateable_enabled?
-        raise BetterModel::Errors::Stateable::NotEnabledError.new(
-          module_name: "Stateable",
-          method_called: "transition_history",
-          model_class: self.class.name
-        )
+        raise BetterModel::Errors::Stateable::NotEnabledError, "Module is not enabled"
       end
 
       state_transitions.map do |transition|
@@ -378,7 +360,10 @@ module BetterModel
       result = super
 
       if options[:include_transition_history] && self.class.stateable_enabled?
-        result["transition_history"] = transition_history
+        # Convert symbol keys to string keys for JSON compatibility
+        result["transition_history"] = transition_history.map do |item|
+          item.transform_keys(&:to_s)
+        end
       end
 
       result

@@ -89,8 +89,12 @@ test("search with pagination works") do
 end
 
 test("search respects max_per_page") do
-  result = Article.search({}, pagination: { page: 1, per_page: 200 })
-  result.limit_value <= 100
+  begin
+    Article.search({}, pagination: { page: 1, per_page: 200 })
+    false  # Should not reach here
+  rescue BetterModel::Errors::Searchable::InvalidPaginationError
+    true  # Error raised as expected
+  end
 end
 
 test("search without per_page doesn't apply LIMIT") do

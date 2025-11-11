@@ -63,28 +63,18 @@ module BetterModel
       def is(status_name, condition_proc = nil, &block)
         # Validate parameters before converting
         if status_name.blank?
-          raise BetterModel::Errors::Statusable::ConfigurationError.new(
-            reason: "Status name cannot be blank",
-            model_class: self
-          )
+          raise BetterModel::Errors::Statusable::ConfigurationError, "Status name cannot be blank"
         end
 
         status_name = status_name.to_sym
         condition = condition_proc || block
 
         unless condition
-          raise BetterModel::Errors::Statusable::ConfigurationError.new(
-            reason: "Condition proc or block is required",
-            model_class: self
-          )
+          raise BetterModel::Errors::Statusable::ConfigurationError, "Condition proc or block is required"
         end
 
         unless condition.respond_to?(:call)
-          raise BetterModel::Errors::Statusable::ConfigurationError.new(
-            reason: "Condition must respond to call",
-            model_class: self,
-            provided: condition.class
-          )
+          raise BetterModel::Errors::Statusable::ConfigurationError, "Condition must respond to call"
         end
 
         # Register status in registry

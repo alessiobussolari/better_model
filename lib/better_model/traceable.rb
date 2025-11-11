@@ -63,9 +63,7 @@ module BetterModel
     included do
       # Validazione ActiveRecord
       unless ancestors.include?(ActiveRecord::Base)
-        raise BetterModel::Errors::Traceable::ConfigurationError.new(
-          reason: "BetterModel::Traceable can only be included in ActiveRecord models"
-        )
+        raise BetterModel::Errors::Traceable::ConfigurationError, "Invalid configuration"
       end
 
       # Configurazione traceable (opt-in)
@@ -136,11 +134,7 @@ module BetterModel
       # @return [ActiveRecord::Relation]
       def changed_by(user_id)
         unless traceable_enabled?
-          raise BetterModel::Errors::Traceable::NotEnabledError.new(
-            module_name: "Traceable",
-            method_called: "changed_by",
-            model_class: self
-          )
+          raise BetterModel::Errors::Traceable::NotEnabledError, "Module is not enabled"
         end
 
         joins(:versions).where(traceable_table_name => { updated_by_id: user_id }).distinct
@@ -153,11 +147,7 @@ module BetterModel
       # @return [ActiveRecord::Relation]
       def changed_between(start_time, end_time)
         unless traceable_enabled?
-          raise BetterModel::Errors::Traceable::NotEnabledError.new(
-            module_name: "Traceable",
-            method_called: "changed_between",
-            model_class: self
-          )
+          raise BetterModel::Errors::Traceable::NotEnabledError, "Module is not enabled"
         end
 
         joins(:versions).where(traceable_table_name => { created_at: start_time..end_time }).distinct
@@ -169,11 +159,7 @@ module BetterModel
       # @return [ChangeQuery]
       def field_changed(field)
         unless traceable_enabled?
-          raise BetterModel::Errors::Traceable::NotEnabledError.new(
-            module_name: "Traceable",
-            method_called: "field_changed",
-            model_class: self
-          )
+          raise BetterModel::Errors::Traceable::NotEnabledError, "Module is not enabled"
         end
 
         ChangeQuery.new(self, field)
@@ -243,11 +229,7 @@ module BetterModel
     # @return [Array<Hash>] Array of changes with :before, :after, :at, :by
     def changes_for(field)
       unless self.class.traceable_enabled?
-        raise BetterModel::Errors::Traceable::NotEnabledError.new(
-          module_name: "Traceable",
-          method_called: "changes_for",
-          model_class: self.class
-        )
+        raise BetterModel::Errors::Traceable::NotEnabledError, "Module is not enabled"
       end
 
       versions.select { |v| v.changed?(field) }.map do |version|
@@ -267,11 +249,7 @@ module BetterModel
     # @return [Array<Hash>] Full audit trail
     def audit_trail
       unless self.class.traceable_enabled?
-        raise BetterModel::Errors::Traceable::NotEnabledError.new(
-          module_name: "Traceable",
-          method_called: "audit_trail",
-          model_class: self.class
-        )
+        raise BetterModel::Errors::Traceable::NotEnabledError, "Module is not enabled"
       end
 
       versions.map do |version|
@@ -291,11 +269,7 @@ module BetterModel
     # @return [self] Reconstructed object (not saved)
     def as_of(timestamp)
       unless self.class.traceable_enabled?
-        raise BetterModel::Errors::Traceable::NotEnabledError.new(
-          module_name: "Traceable",
-          method_called: "as_of",
-          model_class: self.class
-        )
+        raise BetterModel::Errors::Traceable::NotEnabledError, "Module is not enabled"
       end
 
       # Get all versions up to timestamp, ordered from oldest to newest
@@ -326,11 +300,7 @@ module BetterModel
     # @return [self]
     def rollback_to(version, updated_by_id: nil, updated_reason: nil, allow_sensitive: false)
       unless self.class.traceable_enabled?
-        raise BetterModel::Errors::Traceable::NotEnabledError.new(
-          module_name: "Traceable",
-          method_called: "rollback_to",
-          model_class: self.class
-        )
+        raise BetterModel::Errors::Traceable::NotEnabledError, "Module is not enabled"
       end
 
       version = versions.find(version) if version.is_a?(Integer)

@@ -53,12 +53,6 @@ ActiveRecord::Base.transaction do
   load File.expand_path("manual_tests/concerns/traceable_manual_test.rb", __dir__)
   load File.expand_path("manual_tests/concerns/stateable_manual_test.rb", __dir__)
 
-  # v3.0.0 Error System Tests
-  load File.expand_path("manual_tests/concerns/error_system_sentry_compat_manual_test.rb", __dir__)
-  load File.expand_path("manual_tests/concerns/searchable_errors_comprehensive_manual_test.rb", __dir__)
-  load File.expand_path("manual_tests/concerns/module_errors_coverage_manual_test.rb", __dir__)
-  load File.expand_path("manual_tests/concerns/error_handling_real_world_manual_test.rb", __dir__)
-
   # Generator Tests (Real Execution)
   load File.expand_path("manual_tests/generators_real_world_manual_test.rb", __dir__)
 

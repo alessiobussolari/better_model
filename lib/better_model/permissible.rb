@@ -60,28 +60,18 @@ module BetterModel
       def permit(permission_name, condition_proc = nil, &block)
         # Validate parameters before converting
         if permission_name.blank?
-          raise BetterModel::Errors::Permissible::ConfigurationError.new(
-            reason: "Permission name cannot be blank",
-            model_class: self
-          )
+          raise BetterModel::Errors::Permissible::ConfigurationError, "Permission name cannot be blank"
         end
 
         permission_name = permission_name.to_sym
         condition = condition_proc || block
 
         unless condition
-          raise BetterModel::Errors::Permissible::ConfigurationError.new(
-            reason: "Condition proc or block is required",
-            model_class: self
-          )
+          raise BetterModel::Errors::Permissible::ConfigurationError, "Condition proc or block is required"
         end
 
         unless condition.respond_to?(:call)
-          raise BetterModel::Errors::Permissible::ConfigurationError.new(
-            reason: "Condition must respond to call",
-            model_class: self,
-            provided: condition.class
-          )
+          raise BetterModel::Errors::Permissible::ConfigurationError, "Condition must respond to call"
         end
 
         # Register permission in registry

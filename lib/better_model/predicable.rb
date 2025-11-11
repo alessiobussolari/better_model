@@ -30,9 +30,7 @@ module BetterModel
     included do
       # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
-        raise BetterModel::Errors::Predicable::ConfigurationError.new(
-          reason: "BetterModel::Predicable can only be included in ActiveRecord models"
-        )
+        raise BetterModel::Errors::Predicable::ConfigurationError, "BetterModel::Predicable can only be included in ActiveRecord models"
       end
 
       # Registry of predicable fields defined for this class
@@ -109,10 +107,7 @@ module BetterModel
       #   Article.recent_popular(7, 100)
       def register_complex_predicate(name, &block)
         unless block_given?
-          raise BetterModel::Errors::Predicable::ConfigurationError.new(
-            reason: "Block required for complex predicate",
-            model_class: self
-          )
+          raise BetterModel::Errors::Predicable::ConfigurationError, "Block required for complex predicate"
         end
 
         # Register in registry
@@ -152,12 +147,7 @@ module BetterModel
       # @api private
       def validate_predicable_field!(field_name)
         unless column_names.include?(field_name.to_s)
-          raise BetterModel::Errors::Predicable::ConfigurationError.new(
-            reason: "Invalid field name: #{field_name}. Field does not exist in #{table_name}",
-            model_class: self,
-            expected: "valid column name from #{table_name}",
-            provided: field_name
-          )
+          raise BetterModel::Errors::Predicable::ConfigurationError, "Invalid field name: #{field_name}. Field does not exist in #{table_name}"
         end
       end
 
