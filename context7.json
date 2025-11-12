@@ -52,8 +52,16 @@
   ],
   "previousVersions": [
     {
+      "tag": "v3.0.1",
+      "title": "version 3.0.1 (current) - Minor updates"
+    },
+    {
+      "tag": "v3.0.0",
+      "title": "version 3.0.0 - Error system simplification"
+    },
+    {
       "tag": "v1.3.0",
-      "title": "version 1.3.0 (current) - Added Taggable concern"
+      "title": "version 1.3.0 - Added Taggable concern"
     },
     {
       "tag": "v1.2.0",

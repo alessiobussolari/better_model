@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BetterModel is a Rails engine gem (Rails 8.1+) that extends ActiveRecord model functionality. The gem is currently at version 3.0.0 and follows the standard Rails engine architecture.
+BetterModel is a Rails engine gem (Rails 8.1+) that extends ActiveRecord model functionality. The gem is currently at version 3.0.1 and follows the standard Rails engine architecture.
 
 ## Architecture
 
