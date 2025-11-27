@@ -2,6 +2,8 @@
   "$schema": "https://context7.com/schema/context7.json",
   "projectTitle": "BetterModel",
   "description": "BetterModel is a Rails engine gem (Rails 8.1+) that provides powerful extensions for ActiveRecord models, including declarative status management, permissions, state machines, validations, archiving, change tracking, sorting, filtering, and unified search capabilities.",
+  "url": "https://context7.com/alessiobussolari/better_model",
+  "public_key": "pk_B9nH6LdAbbONpo8kXlCON",
   "branch": "main",
   "folders": ["context7"],
   "excludeFolders": [
