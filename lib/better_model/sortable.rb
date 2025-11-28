@@ -56,6 +56,9 @@ module BetterModel
           validate_sortable_field!(field_name)
           register_sortable_field(field_name)
 
+          # Skip scope generation if table doesn't exist (allows eager loading before migrations)
+          next unless table_exists?
+
           # Auto-detect type and generate appropriate scopes
           column = columns_hash[field_name.to_s]
           next unless column
@@ -146,6 +149,9 @@ module BetterModel
       # @raise [BetterModel::Errors::Sortable::ConfigurationError] If field doesn't exist
       # @api private
       def validate_sortable_field!(field_name)
+        # Skip validation if table doesn't exist (allows eager loading before migrations)
+        return unless table_exists?
+
         unless column_names.include?(field_name.to_s)
           raise BetterModel::Errors::Sortable::ConfigurationError, "Invalid field name: #{field_name}. Field does not exist in #{table_name}"
         end

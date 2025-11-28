@@ -130,6 +130,8 @@ module BetterModel
       # @return [Boolean] True if the column exists
       def column_exists?(column_name)
         return false unless model_class.respond_to?(:column_names)
+        # Skip check if table doesn't exist (allows eager loading before migrations)
+        return false unless model_class.respond_to?(:table_exists?) && model_class.table_exists?
 
         model_class.column_names.include?(column_name.to_s)
       end

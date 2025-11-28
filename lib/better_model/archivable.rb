@@ -104,8 +104,8 @@ module BetterModel
       #     skip_archived_by_default true
       #   end
       def archivable(&block)
-        # Validate that archived_at exists
-        unless column_names.include?("archived_at")
+        # Validate that archived_at exists (only if table exists - allows eager loading before migrations)
+        if table_exists? && !column_names.include?("archived_at")
           raise BetterModel::Errors::Archivable::ConfigurationError, "Invalid configuration"
         end
 
