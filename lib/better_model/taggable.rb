@@ -141,9 +141,9 @@ module BetterModel
         config = Configuration.new
         config.instance_eval(&block) if block_given?
 
-        # Validate that field exists
+        # Validate that field exists (only if table exists - allows eager loading before migrations)
         tag_field_name = config.tag_field.to_s
-        unless column_names.include?(tag_field_name)
+        if table_exists? && !column_names.include?(tag_field_name)
           raise BetterModel::Errors::Taggable::ConfigurationError, "Invalid configuration"
         end
 

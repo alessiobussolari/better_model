@@ -10,8 +10,8 @@ Gem::Specification.new do |spec|
   spec.description = "BetterModel is a Rails engine gem (Rails 8.1+) that provides powerful extensions for ActiveRecord models including declarative status management and more."
   spec.license     = "MIT"
 
-  # Require Ruby 3.0 or higher
-  spec.required_ruby_version = ">= 3.0.0"
+  # Require Ruby 3.2 or higher (Rails 8.1+ requirement)
+  spec.required_ruby_version = ">= 3.2.0"
 
   # Prevent pushing this gem to RubyGems.org. To allow pushes either set the "allowed_push_host"
   # to allow pushing to a single host or delete this section to allow pushing to any host.
