@@ -1,5 +1,12 @@
 # BetterModel 🚀
 
+[![CI](https://github.com/alessiobussolari/better_model/actions/workflows/ci.yml/badge.svg)](https://github.com/alessiobussolari/better_model/actions/workflows/ci.yml)
+[![Gem Version](https://badge.fury.io/rb/better_model.svg)](https://badge.fury.io/rb/better_model)
+[![Ruby](https://img.shields.io/badge/ruby-%3E%3D%203.0-ruby.svg)](https://www.ruby-lang.org)
+[![Rails](https://img.shields.io/badge/rails-%3E%3D%208.1-red.svg)](https://rubyonrails.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Coverage](https://codecov.io/gh/alessiobussolari/better_model/branch/main/graph/badge.svg)](https://codecov.io/gh/alessiobussolari/better_model)
+
 BetterModel is a Rails engine gem (Rails 8.1+) that provides powerful extensions for ActiveRecord models, including declarative status management, permissions, state machines, validations, archiving, change tracking, sorting, filtering, and unified search capabilities.
 
 ## 📦 Installation
