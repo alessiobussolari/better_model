@@ -437,7 +437,7 @@ BetterModel provides ten powerful concerns that work seamlessly together:
 - **✅ Validatable** - Declarative validation DSL with conditional rules
 - **🔄 Stateable** - Declarative state machines with guards & callbacks
 - **⏰ Traceable** - Complete audit trail with time-travel and rollback
-- **🏷️ Taggable** 🆕 - Tag management with normalization, validation, and statistics
+- **🏷️ Taggable** - Tag management with normalization, validation, and statistics
 
 [See all features in detail →](#feature-details)
 
@@ -781,13 +781,13 @@ Detailed documentation for each BetterModel concern:
 - [**Statusable**](docs/statusable.md) - Status management with derived conditions
 - [**Permissible**](docs/permissible.md) - Permission system based on state
 - [**Archivable**](docs/archivable.md) - Soft delete with comprehensive tracking
-- [**Traceable**](docs/traceable.md) 🆕 - Audit trail, time-travel, and rollback
+- [**Traceable**](docs/traceable.md) - Audit trail, time-travel, and rollback
 - [**Sortable**](docs/sortable.md) - Type-aware sorting system
 - [**Predicable**](docs/predicable.md) - Advanced filtering and predicates
 - [**Searchable**](docs/searchable.md) - Unified search interface
 - [**Validatable**](docs/validatable.md) - Declarative validation system
-- [**Stateable**](docs/stateable.md) 🆕 - State machine with transitions
-- [**Taggable**](docs/taggable.md) 🆕 - Flexible tag management with normalization
+- [**Stateable**](docs/stateable.md) - State machine with transitions
+- [**Taggable**](docs/taggable.md) - Flexible tag management with normalization
 
 ### 💡 Quick Links
 
@@ -878,7 +878,7 @@ bundle exec rubocop
 
 ### 📊 Test Coverage Notes
 
-The test suite runs on **SQLite** for performance and portability. Current coverage: **92.57%** (1507 / 1628 lines).
+The test suite runs on **SQLite** for performance and portability. Current coverage: **94.5%** (1891 / 2001 lines).
 
 **Database-Specific Features Not Covered:**
 - **Predicable**: PostgreSQL array predicates (`_overlaps`, `_contains`, `_contained_by`) and JSONB predicates (`_has_key`, `_has_any_key`, `_has_all_keys`, `_jsonb_contains`)
