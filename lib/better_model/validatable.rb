@@ -54,38 +54,41 @@ module BetterModel
     extend ActiveSupport::Concern
 
     included do
+      # Include shared enabled check concern
+      include BetterModel::Concerns::EnabledCheck
+
       # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
         raise BetterModel::Errors::Validatable::ConfigurationError, "Invalid configuration"
       end
 
-      # Configurazione validatable (opt-in)
+      # Validatable configuration (opt-in)
       class_attribute :validatable_enabled, default: false
       class_attribute :validatable_config, default: {}.freeze
       class_attribute :validatable_groups, default: {}.freeze
       class_attribute :_validatable_setup_done, default: false
-      # Registry dei complex validations custom
+      # Registry for custom complex validations
       class_attribute :complex_validations_registry, default: {}.freeze
     end
 
     class_methods do
-      # DSL per attivare e configurare validatable (OPT-IN)
+      # DSL to enable and configure validatable (OPT-IN)
       #
-      # @example Attivazione base
+      # @example Basic activation
       #   validatable do
       #     check :title, presence: true
       #   end
       #
-      # @example Con validazioni condizionali
+      # @example With conditional validations
       #   validatable do
       #     check :published_at, presence: true, if: :is_published?
       #   end
       #
       def validatable(&block)
-        # Attiva validatable
+        # Enable validatable
         self.validatable_enabled = true
 
-        # Configura se passato un blocco
+        # Configure if block provided
         if block_given?
           configurator = Configurator.new(self)
           configurator.instance_eval(&block)
@@ -102,27 +105,27 @@ module BetterModel
         apply_validatable_config
       end
 
-      # Verifica se validatable è attivo
+      # Check if validatable is enabled
       #
       # @return [Boolean]
       def validatable_enabled? = validatable_enabled == true
 
-      # Registra una validazione complessa custom
+      # Register a custom complex validation
       #
-      # Permette di definire validazioni complesse riutilizzabili che possono combinare
-      # più campi o utilizzare logica custom non coperta dalle validazioni standard.
+      # Allows defining reusable complex validations that can combine
+      # multiple fields or use custom logic not covered by standard validations.
       #
-      # @param name [Symbol] il nome della validazione
-      # @param block [Proc] il blocco di validazione che verrà eseguito nel contesto dell'istanza
+      # @param name [Symbol] the validation name
+      # @param block [Proc] the validation block to be executed in the instance context
       #
-      # @example Validazione complessa base
+      # @example Basic complex validation
       #   register_complex_validation :valid_pricing do
       #     if sale_price.present? && sale_price >= price
       #       errors.add(:sale_price, "must be less than regular price")
       #     end
       #   end
       #
-      # @example Con logica multi-campo
+      # @example Multi-field logic
       #   register_complex_validation :valid_dates do
       #     if starts_at.present? && ends_at.present? && starts_at >= ends_at
       #       errors.add(:ends_at, "must be after start date")
@@ -134,19 +137,19 @@ module BetterModel
           raise BetterModel::Errors::Validatable::ConfigurationError, "Invalid configuration"
         end
 
-        # Registra nel registry
+        # Register in the registry
         self.complex_validations_registry = complex_validations_registry.merge(name.to_sym => block).freeze
       end
 
-      # Verifica se una validazione complessa è stata registrata
+      # Check if a complex validation has been registered
       #
-      # @param name [Symbol] il nome della validazione
+      # @param name [Symbol] the validation name
       # @return [Boolean]
       def complex_validation?(name) = complex_validations_registry.key?(name.to_sym)
 
       private
 
-      # Applica le configurazioni di validazione al modello
+      # Apply validation configurations to the model
       def apply_validatable_config
         return unless validatable_config.present?
 
@@ -156,42 +159,40 @@ module BetterModel
         end
       end
 
-      # Applica una validazione complessa
+      # Apply a complex validation
       def apply_complex_validation(name)
         block = complex_validations_registry[name]
         return unless block
 
-        # Crea un validator custom per questa validazione complessa
+        # Create a custom validator for this complex validation
         validate do
           instance_eval(&block)
         end
       end
     end
 
-    # Metodi di istanza
+    # Instance methods
 
-    # Override valid? per supportare validation groups
+    # Override valid? to support validation groups
     #
-    # @param context [Symbol, nil] Context o gruppo di validazione
+    # @param context [Symbol, nil] Context or validation group
     # @return [Boolean]
     def valid?(context = nil)
       if context && self.class.validatable_groups.key?(context)
-        # Valida solo il gruppo specificato
+        # Validate only the specified group
         validate_group(context)
       else
-        # Validazione standard Rails
+        # Standard Rails validation
         super(context)
       end
     end
 
-    # Valida solo un gruppo specifico
+    # Validate only a specific group
     #
-    # @param group_name [Symbol] Nome del gruppo
+    # @param group_name [Symbol] Group name
     # @return [Boolean]
     def validate_group(group_name)
-      unless self.class.validatable_enabled?
-        raise BetterModel::Errors::Validatable::NotEnabledError, "Module is not enabled"
-      end
+      ensure_module_enabled!(:validatable, BetterModel::Errors::Validatable::NotEnabledError)
 
       group = self.class.validatable_groups[group_name]
       return false unless group
@@ -207,14 +208,12 @@ module BetterModel
       errors.empty?
     end
 
-    # Ottieni gli errori per un gruppo specifico
+    # Get errors for a specific group
     #
-    # @param group_name [Symbol] Nome del gruppo
+    # @param group_name [Symbol] Group name
     # @return [ActiveModel::Errors]
     def errors_for_group(group_name)
-      unless self.class.validatable_enabled?
-        raise BetterModel::Errors::Validatable::NotEnabledError, "Module is not enabled"
-      end
+      ensure_module_enabled!(:validatable, BetterModel::Errors::Validatable::NotEnabledError)
 
       group = self.class.validatable_groups[group_name]
       return errors unless group

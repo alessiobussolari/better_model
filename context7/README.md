@@ -28,6 +28,9 @@ Each file demonstrates a complete, working implementation of a specific feature:
 ### System Features
 
 12. **12_errors.md** - Simple, idiomatic error handling (v3.0.0+) with standard Ruby exceptions and Sentry integration
+13. **13_configuration.md** - Global configuration system for defaults and strict mode
+14. **14_rails_integration.md** - Railtie, rake tasks, and generators
+15. **15_performance.md** - Performance tips, indexing, and optimization
 
 ## Quick Start
 

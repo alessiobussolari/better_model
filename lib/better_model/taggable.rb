@@ -98,6 +98,9 @@ module BetterModel
     end
 
     included do
+      # Include shared enabled check concern
+      include BetterModel::Concerns::EnabledCheck
+
       # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
         raise BetterModel::Errors::Taggable::ConfigurationError, "Invalid configuration"
@@ -108,6 +111,11 @@ module BetterModel
     end
 
     class_methods do
+      # Check if Taggable is enabled for this class.
+      #
+      # @return [Boolean] true if enabled
+      def taggable_enabled? = taggable_config.present?
+
       # DSL to configure Taggable.
       #
       # @yield [config] Configuration block
@@ -166,7 +174,7 @@ module BetterModel
         field = taggable_config.tag_field
         counts = Hash.new(0)
 
-        # Itera tutti i record e conta i tag
+        # Iterate through all records and count tags
         find_each do |record|
           tags = record.public_send(field) || []
           tags.each { |tag| counts[tag] += 1 }
@@ -431,7 +439,7 @@ module BetterModel
         tags = tag_string.split(delimiter).map { |tag| normalize_tag(tag) }.compact.uniq
       end
 
-      # Imposta tags
+      # Set tags
       public_send("#{field}=", tags)
       save if persisted?
     end
@@ -480,7 +488,7 @@ module BetterModel
     #
     # @return [Boolean] true if enabled
     # @api private
-    def taggable_enabled? = self.class.taggable_config.present?
+    def taggable_enabled? = self.class.taggable_enabled?
 
     # Normalize a tag according to configuration.
     #

@@ -39,6 +39,110 @@ Article.sort_published_at_newest
 
 ---
 
+## Complete Product Model Example
+
+### Product with Sortable Price and Name
+
+**Cosa fa**: Complete Product model setup with price and name sorting, demonstrating chained sort orders
+
+**Quando usarlo**: E-commerce, catalog management, inventory systems
+
+**Esempio**:
+```ruby
+class Product < ApplicationRecord
+  include BetterModel
+
+  # Declare sortable fields
+  sort :name, :price, :stock, :created_at, :rating
+
+  # Optional: register complex sorts
+  register_complex_sort :best_value do
+    order('rating / NULLIF(price, 0) DESC NULLS LAST')
+  end
+end
+
+# Basic sorting
+Product.sort_name_asc          # A-Z by name
+Product.sort_name_desc         # Z-A by name
+Product.sort_name_asc_i        # Case-insensitive A-Z
+Product.sort_price_asc         # Cheapest first
+Product.sort_price_desc        # Most expensive first
+
+# Chaining multiple sort orders
+# Primary: by price (cheapest first)
+# Secondary: by name (alphabetical for same price)
+Product.sort_price_asc.sort_name_asc_i
+# SQL: ORDER BY price ASC, LOWER(name) ASC
+
+# Three-level chain
+# Primary: by category (alphabetical)
+# Secondary: by price (cheapest)
+# Tertiary: by name (alphabetical)
+Product
+  .sort_category_asc_i
+  .sort_price_asc
+  .sort_name_asc_i
+# SQL: ORDER BY LOWER(category) ASC, price ASC, LOWER(name) ASC
+
+# With NULL handling for optional price
+Product.sort_price_asc_nulls_last.sort_name_asc_i
+# Items without price appear at the end
+
+# Combining with ActiveRecord conditions
+Product
+  .where('stock > 0')
+  .where(active: true)
+  .sort_price_asc
+  .sort_name_asc_i
+  .limit(50)
+```
+
+---
+
+### Controller with Multiple Sort Options
+
+**Cosa fa**: API controller supporting user-selected sort combinations
+
+**Quando usarlo**: Product listing pages, search results
+
+**Esempio**:
+```ruby
+class ProductsController < ApplicationController
+  ALLOWED_SORTS = {
+    'price_low' => [:sort_price_asc, :sort_name_asc_i],
+    'price_high' => [:sort_price_desc, :sort_name_asc_i],
+    'name' => [:sort_name_asc_i, :sort_price_asc],
+    'newest' => [:sort_created_at_newest, :sort_name_asc_i],
+    'rating' => [:sort_rating_desc_nulls_last, :sort_price_asc]
+  }.freeze
+
+  def index
+    @products = Product.where(active: true)
+
+    # Apply sort chain based on parameter
+    sort_key = params[:sort] || 'price_low'
+    sort_chain = ALLOWED_SORTS[sort_key] || ALLOWED_SORTS['price_low']
+
+    sort_chain.each do |sort_scope|
+      @products = @products.public_send(sort_scope)
+    end
+
+    @products = @products.page(params[:page]).per(24)
+
+    render json: @products
+  end
+end
+
+# Request examples:
+# GET /products?sort=price_low   => ORDER BY price ASC, LOWER(name) ASC
+# GET /products?sort=price_high  => ORDER BY price DESC, LOWER(name) ASC
+# GET /products?sort=name        => ORDER BY LOWER(name) ASC, price ASC
+# GET /products?sort=newest      => ORDER BY created_at DESC, LOWER(name) ASC
+# GET /products?sort=rating      => ORDER BY rating DESC NULLS LAST, price ASC
+```
+
+---
+
 ## String Field Sorting
 
 ### Alphabetical Sorting

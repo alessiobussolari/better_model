@@ -8,37 +8,37 @@ require_relative "errors/stateable/check_failed_error"
 require_relative "errors/stateable/validation_failed_error"
 require_relative "errors/stateable/configuration_error"
 
-# Stateable - Declarative State Machine per modelli Rails
+# Stateable - Declarative State Machine for Rails models
 #
-# Questo concern permette di definire state machines dichiarative con:
-# - Stati espliciti con initial state
-# - Transizioni con guards, validazioni e callbacks
-# - Tracking storico transizioni
-# - Integrazione con Statusable per guards
+# This concern allows defining declarative state machines with:
+# - Explicit states with initial state
+# - Transitions with guards, validations, and callbacks
+# - Transition history tracking
+# - Integration with Statusable for guards
 #
-# APPROCCIO OPT-IN: La state machine non è attiva automaticamente.
-# Devi chiamare esplicitamente `stateable do...end` nel tuo modello.
+# OPT-IN APPROACH: The state machine is not enabled automatically.
+# You must explicitly call `stateable do...end` in your model.
 #
-# REQUISITI DATABASE:
-#   - Colonna `state` (string) nel modello
-#   - Tabella per storico transizioni (default: `state_transitions`, configurabile)
+# DATABASE REQUIREMENTS:
+#   - `state` column (string) in the model
+#   - Table for transition history (default: `state_transitions`, configurable)
 #
-# Esempio di utilizzo:
+# Usage example:
 #   class Order < ApplicationRecord
 #     include BetterModel
 #
-#     # Optional: Statusable per status derivati
+#     # Optional: Statusable for derived statuses
 #     is :payable, -> { confirmed? && !paid? }
 #
-#     # Attiva stateable (opt-in)
+#     # Enable stateable (opt-in)
 #     stateable do
-#       # Stati
+#       # States
 #       state :pending, initial: true
 #       state :confirmed
 #       state :paid
 #       state :cancelled
 #
-#       # Transizioni
+#       # Transitions
 #       transition :confirm, from: :pending, to: :confirmed do
 #         check { items.any? }
 #         check :customer_valid?
@@ -61,15 +61,15 @@ require_relative "errors/stateable/configuration_error"
 #     transitions_table 'order_transitions'
 #   end
 #
-# Utilizzo:
+# Usage:
 #   order.state              # => "pending"
 #   order.pending?           # => true
-#   order.can_confirm?       # => true (controlla guards)
-#   order.confirm!           # Esegue transizione
+#   order.can_confirm?       # => true (checks guards)
+#   order.confirm!           # Execute transition
 #   order.state              # => "confirmed"
 #
-#   order.state_transitions  # => Array di StateTransition records
-#   order.transition_history # => Array formattato di transizioni
+#   order.state_transitions  # => Array of StateTransition records
+#   order.transition_history # => Formatted array of transitions
 #
 # Table Naming Options:
 #   # Option 1: Default shared table (state_transitions)
@@ -102,12 +102,15 @@ module BetterModel
     CLASS_CREATION_MUTEX = Mutex.new
 
     included do
-      # Validazione ActiveRecord
+      # Include shared enabled check concern
+      include BetterModel::Concerns::EnabledCheck
+
+      # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
         raise BetterModel::Errors::Stateable::ConfigurationError, "Invalid configuration"
       end
 
-      # Configurazione stateable (opt-in)
+      # Stateable configuration (opt-in)
       class_attribute :stateable_enabled, default: false
       class_attribute :stateable_config, default: {}.freeze
       class_attribute :stateable_states, default: [].freeze
@@ -118,16 +121,16 @@ module BetterModel
     end
 
     class_methods do
-      # DSL per attivare e configurare stateable (OPT-IN)
+      # DSL to enable and configure stateable (OPT-IN)
       #
-      # @example Attivazione base
+      # @example Basic activation
       #   stateable do
       #     state :draft, initial: true
       #     state :published
       #     transition :publish, from: :draft, to: :published
       #   end
       #
-      # @example Con checks e callbacks
+      # @example With checks and callbacks
       #   stateable do
       #     state :pending, initial: true
       #     state :confirmed
@@ -140,10 +143,10 @@ module BetterModel
       #   end
       #
       def stateable(&block)
-        # Attiva stateable
+        # Enable stateable
         self.stateable_enabled = true
 
-        # Configura se passato un blocco
+        # Configure if block provided
         if block_given?
           configurator = Configurator.new(self)
           configurator.instance_eval(&block)
@@ -163,7 +166,7 @@ module BetterModel
 
         self._stateable_setup_done = true
 
-        # Setup association con StateTransition
+        # Setup association with StateTransition
         setup_state_transitions_association
 
         # Setup dynamic methods
@@ -176,14 +179,14 @@ module BetterModel
         setup_initial_state_callback
       end
 
-      # Verifica se stateable è attivo
+      # Check if stateable is enabled
       #
       # @return [Boolean]
       def stateable_enabled? = stateable_enabled == true
 
       private
 
-      # Setup association con StateTransition model
+      # Setup association with StateTransition model
       def setup_state_transitions_association
         # Create or retrieve a StateTransition class for the given table name
         transition_class = create_state_transition_class_for_table(stateable_table_name)
@@ -230,18 +233,18 @@ module BetterModel
         end
       end
 
-      # Setup dynamic methods per stati e transizioni
+      # Setup dynamic methods for states and transitions
       def setup_dynamic_methods
-        # Metodi per ogni stato: pending?, confirmed?, etc.
+        # Methods for each state: pending?, confirmed?, etc.
         stateable_states.each do |state_name|
           define_method "#{state_name}?" do
             state.to_s == state_name.to_s
           end
         end
 
-        # Metodi per ogni transizione: confirm!, can_confirm?, etc.
+        # Methods for each transition: confirm!, can_confirm?, etc.
         stateable_transitions.each do |event_name, transition_config|
-          # event! - esegue transizione (raise se fallisce)
+          # event! - execute transition (raises if it fails)
           # Accepts both positional hash and keyword arguments for flexibility
           define_method "#{event_name}!" do |metadata = {}, **kwargs|
             # Convert positional hash to keyword args if provided
@@ -272,21 +275,19 @@ module BetterModel
       end
     end
 
-    # Metodi di istanza
+    # Instance methods
 
-    # Esegue una transizione di stato
+    # Execute a state transition
     #
-    # @param event [Symbol] Nome della transizione
-    # @param metadata [Hash] Metadata opzionale da salvare nella StateTransition
-    # @raise [BetterModel::Errors::Stateable::InvalidTransitionError] Se la transizione non è valida
-    # @raise [BetterModel::Errors::Stateable::CheckFailedError] Se un check fallisce
-    # @raise [BetterModel::Errors::Stateable::ValidationFailedError] Se una validazione fallisce
-    # @return [Boolean] true se la transizione ha successo
+    # @param event [Symbol] Transition name
+    # @param metadata [Hash] Optional metadata to save in StateTransition
+    # @raise [BetterModel::Errors::Stateable::InvalidTransitionError] If transition is not valid
+    # @raise [BetterModel::Errors::Stateable::CheckFailedError] If a check fails
+    # @raise [BetterModel::Errors::Stateable::ValidationFailedError] If a validation fails
+    # @return [Boolean] true if transition succeeds
     #
     def transition_to!(event, **metadata)
-      unless self.class.stateable_enabled?
-        raise BetterModel::Errors::Stateable::NotEnabledError, "Module is not enabled"
-      end
+      ensure_module_enabled!(:stateable, BetterModel::Errors::Stateable::NotEnabledError)
 
       transition_config = self.class.stateable_transitions[event.to_sym]
       unless transition_config
@@ -295,21 +296,21 @@ module BetterModel
 
       current_state = state.to_sym
 
-      # Verifica che from_state sia valido
+      # Verify that from_state is valid
       from_states = Array(transition_config[:from])
       unless from_states.include?(current_state)
         raise BetterModel::Errors::Stateable::InvalidTransitionError, "Cannot transition from #{current_state} to #{transition_config[:to]} via #{event}"
       end
 
-      # Esegui la transizione usando Transition executor
+      # Execute the transition using Transition executor
       transition = Transition.new(self, event, transition_config, metadata)
       transition.execute!
     end
 
-    # Verifica se una transizione è possibile
+    # Check if a transition is possible
     #
-    # @param event [Symbol] Nome della transizione
-    # @return [Boolean] true se la transizione è possibile
+    # @param event [Symbol] Transition name
+    # @return [Boolean] true if transition is possible
     #
     def can_transition_to?(event)
       return false unless self.class.stateable_enabled?
@@ -321,7 +322,7 @@ module BetterModel
       from_states = Array(transition_config[:from])
       return false unless from_states.include?(current_state)
 
-      # Verifica guards
+      # Check guards
       guards = transition_config[:guards] || []
       guards.all? do |guard|
         Guard.new(self, guard).evaluate
@@ -330,14 +331,12 @@ module BetterModel
       false
     end
 
-    # Ottieni lo storico delle transizioni formattato
+    # Get formatted transition history
     #
-    # @return [Array<Hash>] Array di transizioni con :event, :from, :to, :at, :metadata
+    # @return [Array<Hash>] Array of transitions with :event, :from, :to, :at, :metadata
     #
     def transition_history
-      unless self.class.stateable_enabled?
-        raise BetterModel::Errors::Stateable::NotEnabledError, "Module is not enabled"
-      end
+      ensure_module_enabled!(:stateable, BetterModel::Errors::Stateable::NotEnabledError)
 
       state_transitions.map do |transition|
         {

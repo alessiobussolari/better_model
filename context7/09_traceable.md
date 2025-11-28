@@ -921,9 +921,619 @@ class FeatureFlagService
 end
 ```
 
+## Enterprise: External Data Lake Integration
+
+### 31. Strategy for External Data Lake Archival
+
+**What it does**: Integrate Traceable with external data lakes (S3, Snowflake, BigQuery) for long-term audit trail retention.
+
+**When to use**: Enterprise compliance requiring 7+ years retention, regulatory audits, cross-system analytics.
+
+**Example**:
+```ruby
+# Service for data lake export
+class AuditDataLakeExporter
+  def initialize(data_lake_client:)
+    @client = data_lake_client  # S3, Snowflake, BigQuery client
+  end
+
+  # Export audit trails to data lake with partitioning
+  def export_to_data_lake(model_class, cutoff_date:, partition_by: :month)
+    versions = model_class.const_get("#{model_class.name}Version")
+                          .where("created_at < ?", cutoff_date)
+                          .order(:created_at)
+
+    versions.find_in_batches(batch_size: 10_000) do |batch|
+      # Partition by date for efficient querying
+      partitioned = batch.group_by do |v|
+        partition_key(v.created_at, partition_by)
+      end
+
+      partitioned.each do |partition_key, records|
+        export_partition(model_class, partition_key, records)
+      end
+    end
+  end
+
+  private
+
+  def partition_key(timestamp, strategy)
+    case strategy
+    when :day
+      timestamp.strftime("%Y/%m/%d")
+    when :month
+      timestamp.strftime("%Y/%m")
+    when :year
+      timestamp.strftime("%Y")
+    end
+  end
+
+  def export_partition(model_class, partition_key, records)
+    # Schema-versioned export with metadata
+    payload = {
+      schema_version: "1.0",
+      exported_at: Time.current.iso8601,
+      model: model_class.name,
+      partition: partition_key,
+      records: records.map { |r| serialize_for_lake(r) }
+    }
+
+    # Write to partitioned path: /audit/articles/2024/01/data.parquet
+    path = "audit/#{model_class.table_name}/#{partition_key}/data.parquet"
+    @client.write(path, payload.to_json)
+  end
+
+  def serialize_for_lake(version)
+    {
+      id: version.id,
+      item_type: version.item_type,
+      item_id: version.item_id,
+      event: version.event,
+      object_changes: version.object_changes,
+      updated_by_id: version.updated_by_id,
+      updated_reason: version.updated_reason,
+      created_at: version.created_at.iso8601
+    }
+  end
+end
+
+# Usage
+exporter = AuditDataLakeExporter.new(data_lake_client: S3Client.new)
+exporter.export_to_data_lake(Article, cutoff_date: 2.years.ago, partition_by: :month)
+```
+
+### 32. Schema Evolution for Long-Term Storage
+
+**What it does**: Handle schema changes over time while maintaining compatibility with historical data.
+
+**When to use**: When audit data structure evolves but historical records must remain queryable.
+
+**Example**:
+```ruby
+# Schema evolution manager
+class AuditSchemaManager
+  SCHEMA_VERSIONS = {
+    "1.0" => {
+      fields: [:id, :item_type, :item_id, :event, :object_changes, :created_at],
+      transformations: {}
+    },
+    "2.0" => {
+      fields: [:id, :item_type, :item_id, :event, :object_changes, :created_at,
+               :updated_by_id, :updated_reason],
+      transformations: {
+        # How to migrate 1.0 -> 2.0
+        from_1_0: ->(record) {
+          record.merge(
+            updated_by_id: record.dig(:object_changes, "updated_by_id") || nil,
+            updated_reason: record.dig(:object_changes, "updated_reason") || "Legacy import"
+          )
+        }
+      }
+    },
+    "3.0" => {
+      fields: [:id, :item_type, :item_id, :event, :object_changes, :created_at,
+               :updated_by_id, :updated_reason, :ip_address, :user_agent],
+      transformations: {
+        from_2_0: ->(record) {
+          record.merge(ip_address: nil, user_agent: nil)
+        }
+      }
+    }
+  }
+
+  # Export with current schema version
+  def export_with_schema(records)
+    {
+      schema_version: current_version,
+      schema_hash: schema_hash(current_version),
+      records: records.map { |r| to_current_schema(r) }
+    }
+  end
+
+  # Import handling schema migration
+  def import_from_lake(data)
+    source_version = data[:schema_version]
+    return data[:records] if source_version == current_version
+
+    # Chain migrations: 1.0 -> 2.0 -> 3.0
+    migrate_records(data[:records], from: source_version, to: current_version)
+  end
+
+  private
+
+  def current_version
+    SCHEMA_VERSIONS.keys.last
+  end
+
+  def schema_hash(version)
+    Digest::SHA256.hexdigest(SCHEMA_VERSIONS[version][:fields].join(","))
+  end
+
+  def migrate_records(records, from:, to:)
+    versions = SCHEMA_VERSIONS.keys
+    from_idx = versions.index(from)
+    to_idx = versions.index(to)
+
+    (from_idx...to_idx).each do |i|
+      next_version = versions[i + 1]
+      transform_key = :"from_#{versions[i].gsub('.', '_')}"
+      transform = SCHEMA_VERSIONS[next_version][:transformations][transform_key]
+
+      records = records.map { |r| transform.call(r) }
+    end
+
+    records
+  end
+end
+
+# Usage in migration job
+class MigrateAuditSchemaJob < ApplicationJob
+  def perform
+    schema_manager = AuditSchemaManager.new
+
+    # Fetch old schema data from lake
+    old_data = DataLakeClient.read("audit/articles/2023/*/data.parquet")
+
+    # Migrate to current schema
+    migrated = schema_manager.import_from_lake(old_data)
+
+    # Write back with new schema
+    DataLakeClient.write(
+      "audit/articles/2023/migrated/data.parquet",
+      schema_manager.export_with_schema(migrated)
+    )
+  end
+end
+```
+
+### 33. Data Partitioning Strategies
+
+**What it does**: Partition audit data for efficient storage, querying, and lifecycle management.
+
+**When to use**: Large-scale deployments with millions of audit records requiring fast queries.
+
+**Example**:
+```ruby
+# Partitioned versions table (PostgreSQL)
+class CreatePartitionedVersions < ActiveRecord::Migration[7.0]
+  def up
+    # Create partitioned table by created_at
+    execute <<-SQL
+      CREATE TABLE article_versions (
+        id BIGSERIAL,
+        item_type VARCHAR NOT NULL,
+        item_id BIGINT NOT NULL,
+        event VARCHAR,
+        object_changes JSONB,
+        updated_by_id BIGINT,
+        updated_reason TEXT,
+        created_at TIMESTAMP NOT NULL,
+        PRIMARY KEY (id, created_at)
+      ) PARTITION BY RANGE (created_at);
+    SQL
+
+    # Create partitions for each month
+    create_monthly_partitions
+  end
+
+  def create_monthly_partitions
+    # Create partitions for current year + 1
+    (Date.today.year..(Date.today.year + 1)).each do |year|
+      (1..12).each do |month|
+        start_date = Date.new(year, month, 1)
+        end_date = start_date.next_month
+
+        partition_name = "article_versions_#{year}_#{month.to_s.rjust(2, '0')}"
+
+        execute <<-SQL
+          CREATE TABLE #{partition_name}
+          PARTITION OF article_versions
+          FOR VALUES FROM ('#{start_date}') TO ('#{end_date}');
+        SQL
+
+        # Add indexes to partition
+        execute <<-SQL
+          CREATE INDEX idx_#{partition_name}_item
+          ON #{partition_name} (item_type, item_id);
+          CREATE INDEX idx_#{partition_name}_user
+          ON #{partition_name} (updated_by_id);
+        SQL
+      end
+    end
+  end
+end
+
+# Automatic partition maintenance job
+class PartitionMaintenanceJob < ApplicationJob
+  def perform
+    # Create future partitions
+    create_future_partitions(months_ahead: 3)
+
+    # Archive old partitions to cold storage
+    archive_old_partitions(older_than: 2.years.ago)
+
+    # Detach and drop very old partitions
+    drop_archived_partitions(older_than: 7.years.ago)
+  end
+
+  private
+
+  def create_future_partitions(months_ahead:)
+    months_ahead.times do |i|
+      date = (i + 1).months.from_now
+      partition_name = "article_versions_#{date.strftime('%Y_%m')}"
+
+      unless partition_exists?(partition_name)
+        create_partition(date)
+      end
+    end
+  end
+
+  def archive_old_partitions(older_than:)
+    partitions_older_than(older_than).each do |partition|
+      # Export to S3
+      S3Client.export_partition(partition)
+      # Mark as archived
+      update_partition_status(partition, :archived)
+    end
+  end
+end
+
+# Query optimizer for partitioned tables
+class PartitionedVersionQuery
+  def self.for_date_range(model_class, start_date, end_date)
+    # PostgreSQL will automatically prune partitions
+    model_class.versions
+               .where(created_at: start_date..end_date)
+               .order(created_at: :desc)
+  end
+
+  def self.recent_versions(model_class, days: 30)
+    # Queries only recent partitions
+    for_date_range(model_class, days.days.ago, Time.current)
+  end
+end
+```
+
+### 34. Secure Retrieval of Masked Data for Authorized Users
+
+**What it does**: Allow authorized users (auditors, compliance officers) to retrieve unmasked sensitive data with proper authorization and logging.
+
+**When to use**: Compliance investigations, legal discovery, security incident response requiring access to masked data.
+
+**Example**:
+```ruby
+# Secure sensitive data vault
+class SensitiveDataVault
+  AUTHORIZATION_LEVELS = {
+    standard: [],
+    auditor: [:partial],
+    security_officer: [:partial, :hash],
+    compliance_admin: [:partial, :hash, :full]
+  }.freeze
+
+  def initialize(user:, authorization_level:)
+    @user = user
+    @level = authorization_level
+    validate_authorization!
+  end
+
+  # Retrieve version with unmasked data (for authorized users)
+  def retrieve_unmasked(version, reason:)
+    # Log access attempt
+    log_access_attempt(version, reason)
+
+    # Validate authorization
+    unless authorized_for_version?(version)
+      raise UnauthorizedAccessError, "Insufficient authorization"
+    end
+
+    # Decrypt/unmask data
+    unmasked_data = unmask_version(version)
+
+    # Log successful access
+    log_successful_access(version, reason, unmasked_data.keys)
+
+    unmasked_data
+  end
+
+  private
+
+  def validate_authorization!
+    unless AUTHORIZATION_LEVELS.key?(@level)
+      raise InvalidAuthorizationError, "Unknown authorization level"
+    end
+  end
+
+  def authorized_for_version?(version)
+    sensitive_types = version.sensitive_field_types
+    allowed_types = AUTHORIZATION_LEVELS[@level]
+
+    (sensitive_types - allowed_types).empty?
+  end
+
+  def unmask_version(version)
+    model_class = version.item_type.constantize
+    sensitive_config = model_class.traceable_sensitive_fields
+
+    version.object_changes.transform_values.with_index do |(old_val, new_val), field|
+      if sensitive_config.key?(field.to_sym)
+        [
+          retrieve_original_value(version, field, :old),
+          retrieve_original_value(version, field, :new)
+        ]
+      else
+        [old_val, new_val]
+      end
+    end
+  end
+
+  def retrieve_original_value(version, field, position)
+    # Retrieve from secure storage (KMS-encrypted)
+    SecureAuditStorage.retrieve(
+      version_id: version.id,
+      field: field,
+      position: position
+    )
+  end
+
+  def log_access_attempt(version, reason)
+    AuditAccessLog.create!(
+      user_id: @user.id,
+      authorization_level: @level,
+      version_id: version.id,
+      action: "access_attempt",
+      reason: reason,
+      ip_address: Current.ip_address,
+      timestamp: Time.current
+    )
+  end
+
+  def log_successful_access(version, reason, accessed_fields)
+    AuditAccessLog.create!(
+      user_id: @user.id,
+      authorization_level: @level,
+      version_id: version.id,
+      action: "access_granted",
+      reason: reason,
+      accessed_fields: accessed_fields,
+      ip_address: Current.ip_address,
+      timestamp: Time.current
+    )
+  end
+end
+
+# Secure storage for original sensitive values
+class SecureAuditStorage
+  # Store original value with encryption
+  def self.store(version_id:, field:, position:, value:)
+    encrypted = encrypt_value(value)
+    SecureValue.create!(
+      version_id: version_id,
+      field: field,
+      position: position,
+      encrypted_value: encrypted,
+      key_id: current_kms_key_id
+    )
+  end
+
+  # Retrieve with decryption
+  def self.retrieve(version_id:, field:, position:)
+    record = SecureValue.find_by(
+      version_id: version_id,
+      field: field,
+      position: position
+    )
+    return nil unless record
+
+    decrypt_value(record.encrypted_value, record.key_id)
+  end
+
+  private
+
+  def self.encrypt_value(value)
+    KmsClient.encrypt(value, key_id: current_kms_key_id)
+  end
+
+  def self.decrypt_value(encrypted, key_id)
+    KmsClient.decrypt(encrypted, key_id: key_id)
+  end
+
+  def self.current_kms_key_id
+    Rails.application.credentials.dig(:kms, :audit_key_id)
+  end
+end
+
+# Usage in compliance investigation
+class ComplianceInvestigationService
+  def investigate(investigation_id:, user:, records:)
+    vault = SensitiveDataVault.new(
+      user: user,
+      authorization_level: :compliance_admin
+    )
+
+    results = records.map do |version|
+      {
+        version_id: version.id,
+        unmasked_data: vault.retrieve_unmasked(
+          version,
+          reason: "Investigation #{investigation_id}"
+        ),
+        metadata: {
+          event: version.event,
+          timestamp: version.created_at,
+          modified_by: version.updated_by_id
+        }
+      }
+    end
+
+    # Generate investigation report
+    InvestigationReport.create!(
+      investigation_id: investigation_id,
+      conducted_by: user.id,
+      records_accessed: results.count,
+      results: results
+    )
+  end
+end
+
+# Controller for authorized access
+class Admin::AuditAccessController < Admin::BaseController
+  before_action :require_audit_authorization!
+
+  def show_unmasked
+    version = Version.find(params[:id])
+    vault = SensitiveDataVault.new(
+      user: current_user,
+      authorization_level: current_user.audit_authorization_level
+    )
+
+    @unmasked = vault.retrieve_unmasked(
+      version,
+      reason: params[:reason]
+    )
+
+    render json: { data: @unmasked }
+  rescue SensitiveDataVault::UnauthorizedAccessError => e
+    render json: { error: e.message }, status: :forbidden
+  end
+
+  private
+
+  def require_audit_authorization!
+    unless current_user.has_audit_access?
+      render json: { error: "Audit access required" }, status: :forbidden
+    end
+  end
+end
+```
+
+### 35. Complete Enterprise Audit Architecture
+
+**What it does**: Full enterprise audit system combining data lake, schema evolution, partitioning, and secure access.
+
+**When to use**: Enterprise deployments with strict compliance requirements (SOX, HIPAA, GDPR, PCI-DSS).
+
+**Example**:
+```ruby
+# Enterprise audit configuration
+class EnterpriseAuditSystem
+  def self.configure
+    {
+      # Storage tiers
+      storage: {
+        hot: {
+          duration: 90.days,
+          storage: :postgresql,
+          partitioning: :daily
+        },
+        warm: {
+          duration: 2.years,
+          storage: :s3_standard,
+          partitioning: :monthly
+        },
+        cold: {
+          duration: 7.years,
+          storage: :s3_glacier,
+          partitioning: :yearly
+        }
+      },
+
+      # Schema versioning
+      schema: {
+        current_version: "3.0",
+        migration_strategy: :lazy  # Migrate on read
+      },
+
+      # Security
+      security: {
+        encryption: :kms,
+        access_logging: true,
+        mfa_required_for_unmasking: true
+      },
+
+      # Compliance
+      compliance: {
+        retention_policy: 7.years,
+        immutable_after: 24.hours,
+        required_fields: [:updated_by_id, :updated_reason]
+      }
+    }
+  end
+end
+
+# Lifecycle manager
+class AuditLifecycleManager
+  def run_lifecycle_tasks
+    # Move hot -> warm
+    migrate_to_warm_storage(older_than: 90.days.ago)
+
+    # Move warm -> cold
+    migrate_to_cold_storage(older_than: 2.years.ago)
+
+    # Verify cold storage integrity
+    verify_cold_storage_integrity
+
+    # Generate compliance report
+    generate_compliance_report
+  end
+
+  private
+
+  def migrate_to_warm_storage(older_than:)
+    partitions = hot_partitions_older_than(older_than)
+
+    partitions.each do |partition|
+      # Export with schema versioning
+      exporter = AuditDataLakeExporter.new(data_lake_client: S3StandardClient.new)
+      exporter.export_partition(partition)
+
+      # Verify export
+      verify_export(partition)
+
+      # Drop from hot storage
+      drop_hot_partition(partition) if verified?
+    end
+  end
+
+  def verify_cold_storage_integrity
+    # Verify checksums, record counts
+    ColdStorageVerifier.verify_all
+  end
+
+  def generate_compliance_report
+    ComplianceReportGenerator.generate(
+      period: 1.month.ago..Time.current,
+      include_access_logs: true,
+      include_schema_changes: true
+    )
+  end
+end
+```
+
 ## Performance e Best Practices
 
-### 31. Indici Corretti
+### 36. Indici Corretti
 
 **Cosa fa**: Indici essenziali per query performanti su tabelle versions.
 

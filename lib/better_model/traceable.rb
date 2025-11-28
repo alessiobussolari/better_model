@@ -61,12 +61,15 @@ module BetterModel
     CLASS_CREATION_MUTEX = Mutex.new
 
     included do
-      # Validazione ActiveRecord
+      # Include shared enabled check concern
+      include BetterModel::Concerns::EnabledCheck
+
+      # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
         raise BetterModel::Errors::Traceable::ConfigurationError, "Invalid configuration"
       end
 
-      # Configurazione traceable (opt-in)
+      # Traceable configuration (opt-in)
       class_attribute :traceable_enabled, default: false
       class_attribute :traceable_config, default: {}.freeze
       class_attribute :traceable_fields, default: [].freeze
@@ -76,18 +79,18 @@ module BetterModel
     end
 
     class_methods do
-      # DSL per attivare e configurare traceable (OPT-IN)
+      # DSL to enable and configure traceable (OPT-IN)
       #
-      # @example Attivazione base
+      # @example Basic activation
       #   traceable do
       #     track :status, :title
       #   end
       #
       def traceable(&block)
-        # Attiva traceable
+        # Enable traceable
         self.traceable_enabled = true
 
-        # Configura se passato un blocco
+        # Configure if block provided
         if block_given?
           configurator = TraceableConfigurator.new(self)
           configurator.instance_eval(&block)
@@ -123,7 +126,7 @@ module BetterModel
         before_destroy :create_version_on_destroy
       end
 
-      # Verifica se traceable è attivo
+      # Check if traceable is enabled
       #
       # @return [Boolean]
       def traceable_enabled? = traceable_enabled == true
@@ -133,10 +136,7 @@ module BetterModel
       # @param user_id [Integer] User ID
       # @return [ActiveRecord::Relation]
       def changed_by(user_id)
-        unless traceable_enabled?
-          raise BetterModel::Errors::Traceable::NotEnabledError, "Module is not enabled"
-        end
-
+        ensure_module_enabled!(:traceable, BetterModel::Errors::Traceable::NotEnabledError)
         joins(:versions).where(traceable_table_name => { updated_by_id: user_id }).distinct
       end
 
@@ -146,10 +146,7 @@ module BetterModel
       # @param end_time [Time, Date] End time
       # @return [ActiveRecord::Relation]
       def changed_between(start_time, end_time)
-        unless traceable_enabled?
-          raise BetterModel::Errors::Traceable::NotEnabledError, "Module is not enabled"
-        end
-
+        ensure_module_enabled!(:traceable, BetterModel::Errors::Traceable::NotEnabledError)
         joins(:versions).where(traceable_table_name => { created_at: start_time..end_time }).distinct
       end
 
@@ -158,10 +155,7 @@ module BetterModel
       # @param field [Symbol] Field name
       # @return [ChangeQuery]
       def field_changed(field)
-        unless traceable_enabled?
-          raise BetterModel::Errors::Traceable::NotEnabledError, "Module is not enabled"
-        end
-
+        ensure_module_enabled!(:traceable, BetterModel::Errors::Traceable::NotEnabledError)
         ChangeQuery.new(self, field)
       end
 
@@ -221,16 +215,14 @@ module BetterModel
       end
     end
 
-    # Metodi di istanza
+    # Instance methods
 
     # Get changes for a specific field across all versions
     #
     # @param field [Symbol] Field name
     # @return [Array<Hash>] Array of changes with :before, :after, :at, :by
     def changes_for(field)
-      unless self.class.traceable_enabled?
-        raise BetterModel::Errors::Traceable::NotEnabledError, "Module is not enabled"
-      end
+      ensure_module_enabled!(:traceable, BetterModel::Errors::Traceable::NotEnabledError)
 
       versions.select { |v| v.changed?(field) }.map do |version|
         change = version.change_for(field)
@@ -248,9 +240,7 @@ module BetterModel
     #
     # @return [Array<Hash>] Full audit trail
     def audit_trail
-      unless self.class.traceable_enabled?
-        raise BetterModel::Errors::Traceable::NotEnabledError, "Module is not enabled"
-      end
+      ensure_module_enabled!(:traceable, BetterModel::Errors::Traceable::NotEnabledError)
 
       versions.map do |version|
         {
@@ -268,9 +258,7 @@ module BetterModel
     # @param timestamp [Time, Date] Point in time
     # @return [self] Reconstructed object (not saved)
     def as_of(timestamp)
-      unless self.class.traceable_enabled?
-        raise BetterModel::Errors::Traceable::NotEnabledError, "Module is not enabled"
-      end
+      ensure_module_enabled!(:traceable, BetterModel::Errors::Traceable::NotEnabledError)
 
       # Get all versions up to timestamp, ordered from oldest to newest
       relevant_versions = versions.where("created_at <= ?", timestamp).order(created_at: :asc)
@@ -299,9 +287,7 @@ module BetterModel
     # @param updated_reason [String] Reason for rollback
     # @return [self]
     def rollback_to(version, updated_by_id: nil, updated_reason: nil, allow_sensitive: false)
-      unless self.class.traceable_enabled?
-        raise BetterModel::Errors::Traceable::NotEnabledError, "Module is not enabled"
-      end
+      ensure_module_enabled!(:traceable, BetterModel::Errors::Traceable::NotEnabledError)
 
       version = versions.find(version) if version.is_a?(Integer)
 
@@ -495,7 +481,7 @@ module BetterModel
   end
 
 
-  # Configurator per traceable DSL
+  # Configurator for traceable DSL
   class TraceableConfigurator
     attr_reader :fields, :table_name, :sensitive_fields
 
@@ -573,9 +559,9 @@ module BetterModel
       # Base query
       query = @model_class.joins(:versions)
 
-      # NOTA: I blocchi PostgreSQL e MySQL qui sotto non sono coperti da test
-      # automatici perché i test vengono eseguiti su SQLite per performance.
-      # Testare manualmente su PostgreSQL/MySQL con: rails console RAILS_ENV=test
+      # NOTE: PostgreSQL and MySQL blocks below are not covered by automated tests
+      # because tests run on SQLite for performance.
+      # Test manually on PostgreSQL/MySQL with: rails console RAILS_ENV=test
 
       # PostgreSQL: Use JSONB operators for better performance
       if postgres?

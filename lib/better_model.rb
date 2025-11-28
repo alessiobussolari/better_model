@@ -38,6 +38,10 @@ require "better_model/errors/permissible/configuration_error"
 require "better_model/errors/taggable/taggable_error"
 require "better_model/errors/taggable/configuration_error"
 
+# Load shared concerns
+require "better_model/concerns/enabled_check"
+require "better_model/concerns/base_configurator"
+
 # Load modules
 require "better_model/statusable"
 require "better_model/permissible"

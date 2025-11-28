@@ -876,9 +876,265 @@ Article.where('published_at < ?', 2.years.ago)
 
 ---
 
+## Permanent Deletion After Archive Period
+
+> **Note**: This section shows **custom extension patterns** - methods you implement yourself
+> using BetterModel's Archivable foundation. These are NOT built-in methods of the gem,
+> but recommended patterns for common use cases like data retention and GDPR compliance.
+
+### Destroy Archived Records After Period
+
+**Cosa fa**: Permanently destroys archived records after they've been archived for a certain period
+
+**Quando usarlo**: For GDPR compliance, storage management, data retention policies
+
+**Pattern type**: Custom extension (implement in your model)
+
+**Esempio**:
+```ruby
+class Comment < ApplicationRecord
+  include BetterModel
+  belongs_to :post
+  belongs_to :user
+
+  archivable
+
+  # Permanently destroy comments archived for more than 30 days
+  def self.destroy_old_archived!(days: 30)
+    archived
+      .where('archived_at < ?', days.days.ago)
+      .find_each do |comment|
+        comment.destroy!
+      end
+  end
+
+  # Destroy with count return
+  def self.purge_archived_older_than(period)
+    destroyed_count = 0
+
+    archived
+      .where('archived_at < ?', period.ago)
+      .find_each do |comment|
+        comment.destroy!
+        destroyed_count += 1
+      end
+
+    destroyed_count
+  end
+
+  # With safety check and logging
+  def self.permanently_delete_archived!(days:, dry_run: false)
+    scope = archived.where('archived_at < ?', days.days.ago)
+    count = scope.count
+
+    Rails.logger.info "[Comment] Found #{count} archived comments older than #{days} days"
+
+    return { found: count, destroyed: 0, dry_run: true } if dry_run
+
+    destroyed = 0
+    scope.find_each do |comment|
+      Rails.logger.debug "[Comment] Permanently destroying comment ##{comment.id}"
+      comment.destroy!
+      destroyed += 1
+    end
+
+    Rails.logger.info "[Comment] Permanently destroyed #{destroyed} archived comments"
+    { found: count, destroyed: destroyed, dry_run: false }
+  end
+end
+
+# Usage examples
+Comment.destroy_old_archived!                    # Default: 30 days
+Comment.destroy_old_archived!(days: 90)          # Custom period
+Comment.purge_archived_older_than(60.days)       # Returns count
+Comment.permanently_delete_archived!(days: 30, dry_run: true)  # Preview only
+```
+
+---
+
+### Scheduled Cleanup Job
+
+**Cosa fa**: Background job for regular cleanup of old archived records
+
+**Quando usarlo**: Automated data retention enforcement
+
+**Pattern type**: Custom extension (implement in your application)
+
+**Esempio**:
+```ruby
+class PurgeArchivedCommentsJob < ApplicationJob
+  queue_as :maintenance
+
+  # Run daily via cron/scheduler
+  def perform(retention_days: 30)
+    result = Comment.permanently_delete_archived!(
+      days: retention_days,
+      dry_run: false
+    )
+
+    Rails.logger.info(
+      "[PurgeArchivedCommentsJob] Completed: " \
+      "#{result[:destroyed]}/#{result[:found]} comments destroyed"
+    )
+
+    # Optional: notify admin if many records deleted
+    if result[:destroyed] > 100
+      AdminNotifier.large_purge_completed(
+        model: 'Comment',
+        count: result[:destroyed]
+      ).deliver_later
+    end
+  end
+end
+
+# Schedule with whenever gem or Rails scheduler
+# config/schedule.rb (whenever gem)
+every 1.day, at: '3:00 am' do
+  runner "PurgeArchivedCommentsJob.perform_later(retention_days: 30)"
+end
+
+# Or in application.rb with solid_queue
+# config.solid_queue.schedule = {
+#   purge_archived_comments: {
+#     class: "PurgeArchivedCommentsJob",
+#     every: 1.day,
+#     args: [{ retention_days: 30 }]
+#   }
+# }
+```
+
+---
+
+### Multi-Model Archival Cleanup
+
+**Cosa fa**: Unified cleanup for multiple models with different retention periods
+
+**Quando usarlo**: Enterprise data retention policies
+
+**Pattern type**: Custom service class (implement in your application)
+
+**Esempio**:
+```ruby
+class ArchivalCleanupService
+  RETENTION_POLICIES = {
+    Comment => 30.days,      # Comments: 30 days
+    Notification => 7.days,  # Notifications: 7 days
+    AuditLog => 365.days,    # Audit logs: 1 year
+    TempFile => 1.day        # Temp files: 1 day
+  }.freeze
+
+  def self.run_cleanup!(dry_run: false)
+    results = {}
+
+    RETENTION_POLICIES.each do |model_class, retention_period|
+      next unless model_class.respond_to?(:archived)
+
+      scope = model_class.archived
+                         .where('archived_at < ?', retention_period.ago)
+
+      count = scope.count
+      destroyed = 0
+
+      unless dry_run
+        scope.find_each do |record|
+          record.destroy!
+          destroyed += 1
+        end
+      end
+
+      results[model_class.name] = {
+        retention_days: (retention_period / 1.day).to_i,
+        found: count,
+        destroyed: destroyed
+      }
+    end
+
+    results
+  end
+end
+
+# Usage
+results = ArchivalCleanupService.run_cleanup!(dry_run: true)
+# => {
+#   "Comment" => { retention_days: 30, found: 150, destroyed: 0 },
+#   "Notification" => { retention_days: 7, found: 2340, destroyed: 0 },
+#   "AuditLog" => { retention_days: 365, found: 0, destroyed: 0 },
+#   "TempFile" => { retention_days: 1, found: 89, destroyed: 0 }
+# }
+
+# Execute for real
+ArchivalCleanupService.run_cleanup!(dry_run: false)
+```
+
+---
+
+### GDPR-Compliant Permanent Deletion
+
+**Cosa fa**: Destroy with compliance logging and right-to-be-forgotten support
+
+**Quando usarlo**: GDPR Article 17 compliance, legal data deletion requests
+
+**Pattern type**: Custom extension (implement in your model)
+
+**Esempio**:
+```ruby
+class Comment < ApplicationRecord
+  include BetterModel
+  archivable
+
+  # GDPR-compliant permanent deletion with audit trail
+  def self.gdpr_purge!(user_id:, requester:, reason:)
+    comments = where(user_id: user_id)
+
+    # Log the deletion request
+    GdprDeletionLog.create!(
+      subject_type: 'Comment',
+      subject_user_id: user_id,
+      requester_id: requester.id,
+      reason: reason,
+      record_count: comments.count,
+      requested_at: Time.current
+    )
+
+    destroyed_ids = []
+
+    comments.find_each do |comment|
+      destroyed_ids << comment.id
+
+      # Create minimal audit record (no PII)
+      DataDeletionAudit.create!(
+        model_class: 'Comment',
+        record_id: comment.id,
+        deleted_at: Time.current,
+        deletion_type: 'gdpr_request',
+        requester_id: requester.id
+      )
+
+      comment.destroy!
+    end
+
+    {
+      user_id: user_id,
+      comments_destroyed: destroyed_ids.count,
+      destroyed_ids: destroyed_ids,
+      completed_at: Time.current
+    }
+  end
+end
+
+# Usage for GDPR right-to-be-forgotten request
+result = Comment.gdpr_purge!(
+  user_id: user.id,
+  requester: admin_user,
+  reason: "GDPR Article 17 - Right to erasure request"
+)
+```
+
+---
+
 ## Summary
 
-**Core Features**:
+**Core Features (Built-in)**:
 - **Soft Delete Pattern**: Archive instead of destroy
 - **Audit Trail**: Track who, when, why
 - **Restoration**: Single method to restore
@@ -887,13 +1143,21 @@ Article.where('published_at < ?', 2.years.ago)
 - **Opt-In**: Explicitly enable per model
 - **Default Scope**: Optional hide archived by default
 
-**Key Methods**:
+**Built-in Methods**:
 - `archive!(by:, reason:)` - Archive record
 - `restore!` - Restore archived record
 - `archived?` / `active?` - Check status
 - `Model.archived` - Archived records scope
 - `Model.not_archived` - Active records scope
 - `Model.archived_only` - Bypasses default scope
+- `Model.archived_today` - Records archived today
+- `Model.archived_this_week` - Records archived this week
+- `Model.archived_recently(duration)` - Records archived within duration
+
+**Custom Extension Patterns** (shown in "Permanent Deletion" section):
+- `destroy_old_archived!` - Implement yourself for data retention
+- `purge_archived_older_than` - Implement yourself for cleanup jobs
+- `gdpr_purge!` - Implement yourself for GDPR compliance
 
 **Database Columns**:
 - `archived_at` (datetime) - Required

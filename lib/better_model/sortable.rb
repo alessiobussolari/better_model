@@ -56,7 +56,7 @@ module BetterModel
           validate_sortable_field!(field_name)
           register_sortable_field(field_name)
 
-          # Auto-rileva tipo e genera scope appropriati
+          # Auto-detect type and generate appropriate scopes
           column = columns_hash[field_name.to_s]
           next unless column
 

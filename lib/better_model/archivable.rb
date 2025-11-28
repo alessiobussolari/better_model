@@ -73,6 +73,9 @@ module BetterModel
     extend ActiveSupport::Concern
 
     included do
+      # Include shared enabled check concern
+      include BetterModel::Concerns::EnabledCheck
+
       # Validate ActiveRecord inheritance
       unless ancestors.include?(ActiveRecord::Base)
         raise BetterModel::Errors::Archivable::ConfigurationError, "Invalid configuration"
@@ -140,9 +143,7 @@ module BetterModel
       # @example
       #   Article.archived_only
       def archived_only
-        unless archivable_enabled?
-          raise BetterModel::Errors::Archivable::NotEnabledError, "Module is not enabled"
-        end
+        ensure_module_enabled!(:archivable, BetterModel::Errors::Archivable::NotEnabledError)
         unscoped.archived
       end
 
@@ -156,9 +157,7 @@ module BetterModel
       # @example
       #   Article.archived_today
       def archived_today
-        unless archivable_enabled?
-          raise BetterModel::Errors::Archivable::NotEnabledError, "Module is not enabled"
-        end
+        ensure_module_enabled!(:archivable, BetterModel::Errors::Archivable::NotEnabledError)
         archived_at_today
       end
 
@@ -172,9 +171,7 @@ module BetterModel
       # @example
       #   Article.archived_this_week
       def archived_this_week
-        unless archivable_enabled?
-          raise BetterModel::Errors::Archivable::NotEnabledError, "Module is not enabled"
-        end
+        ensure_module_enabled!(:archivable, BetterModel::Errors::Archivable::NotEnabledError)
         archived_at_this_week
       end
 
@@ -192,9 +189,7 @@ module BetterModel
       # @example Find records archived in the last month
       #   Article.archived_recently(1.month)
       def archived_recently(duration = 7.days)
-        unless archivable_enabled?
-          raise BetterModel::Errors::Archivable::NotEnabledError, "Module is not enabled"
-        end
+        ensure_module_enabled!(:archivable, BetterModel::Errors::Archivable::NotEnabledError)
         archived_at_within(duration)
       end
 
@@ -233,9 +228,7 @@ module BetterModel
     # @example Archive with both user and reason
     #   article.archive!(by: current_user, reason: "Compliance violation")
     def archive!(by: nil, reason: nil)
-      unless self.class.archivable_enabled?
-        raise BetterModel::Errors::Archivable::NotEnabledError, "Module is not enabled"
-      end
+      ensure_module_enabled!(:archivable, BetterModel::Errors::Archivable::NotEnabledError)
 
       if archived?
         raise BetterModel::Errors::Archivable::AlreadyArchivedError, "Record is already archived"
@@ -266,9 +259,7 @@ module BetterModel
     # @example
     #   article.restore!
     def restore!
-      unless self.class.archivable_enabled?
-        raise BetterModel::Errors::Archivable::NotEnabledError, "Module is not enabled"
-      end
+      ensure_module_enabled!(:archivable, BetterModel::Errors::Archivable::NotEnabledError)
 
       unless archived?
         raise BetterModel::Errors::Archivable::NotArchivedError, "Record is not archived"

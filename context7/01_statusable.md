@@ -20,6 +20,217 @@ Statusable provides dynamic status management where statuses are computed on-dem
 - ActiveRecord 8.0+
 - BetterModel ~> 3.0.0
 
+---
+
+## Complete User Model Example
+
+### User with Active Status Based on last_login_at
+
+**Cosa fa**: User model with active status determined by last_login_at timestamp
+
+**Quando usarlo**: User management, activity tracking, session management
+
+**Esempio**:
+```ruby
+class User < ApplicationRecord
+  include BetterModel
+
+  # Active status: logged in within the last 30 days
+  is :active, -> { last_login_at && last_login_at >= 30.days.ago }
+
+  # Inactive: no login for 30+ days
+  is :inactive, -> { last_login_at.nil? || last_login_at < 30.days.ago }
+
+  # Recently active: logged in within 24 hours
+  is :recently_active, -> { last_login_at && last_login_at >= 24.hours.ago }
+
+  # Dormant: no login for 90+ days
+  is :dormant, -> { last_login_at.nil? || last_login_at < 90.days.ago }
+
+  # At risk of churn: active but engagement declining
+  is :at_risk, -> {
+    last_login_at &&
+    last_login_at.between?(14.days.ago, 30.days.ago)
+  }
+
+  # Never logged in (new account)
+  is :never_logged_in, -> { last_login_at.nil? }
+
+  # VIP: premium tier AND active
+  is :vip, -> { tier == "premium" && is?(:active) }
+end
+
+# Usage examples
+user = User.find(1)
+
+# Check activity status
+user.is_active?            # => true (if logged in within 30 days)
+user.is_inactive?          # => false
+user.is_recently_active?   # => true (if logged in within 24h)
+user.is_dormant?           # => false
+user.is_at_risk?           # => false
+user.is_never_logged_in?   # => false
+
+# Get all statuses
+user.statuses
+# => {
+#   active: true,
+#   inactive: false,
+#   recently_active: true,
+#   dormant: false,
+#   at_risk: false,
+#   never_logged_in: false,
+#   vip: false
+# }
+
+# Use in conditional logic
+if user.is_dormant?
+  UserMailer.reengagement_email(user).deliver_later
+elsif user.is_at_risk?
+  UserMailer.retention_offer(user).deliver_later
+end
+
+# Filter users by status
+all_users = User.all
+active_users = all_users.select(&:is_active?)
+dormant_users = all_users.select(&:is_dormant?)
+```
+
+---
+
+### Activity-Based User Segmentation
+
+**Cosa fa**: Segment users based on activity patterns for marketing/analytics
+
+**Quando usarlo**: User analytics, marketing automation, engagement tracking
+
+**Esempio**:
+```ruby
+class User < ApplicationRecord
+  include BetterModel
+
+  # Activity tiers based on last_login_at
+  is :active, -> { last_login_at && last_login_at >= 30.days.ago }
+  is :churned, -> { last_login_at && last_login_at < 90.days.ago }
+  is :new_user, -> { created_at >= 7.days.ago }
+
+  # Engagement levels
+  is :power_user, -> {
+    is?(:active) && login_count >= 20 && last_login_at >= 3.days.ago
+  }
+
+  is :regular_user, -> {
+    is?(:active) && login_count.between?(5, 19)
+  }
+
+  is :casual_user, -> {
+    is?(:active) && login_count < 5
+  }
+
+  # Lifecycle stages
+  is :onboarding, -> {
+    is?(:new_user) && !profile_completed?
+  }
+
+  is :activated, -> {
+    is?(:new_user) && profile_completed? && first_action_at.present?
+  }
+
+  # Segment for re-engagement campaigns
+  def self.segment_for_reengagement
+    all.select do |user|
+      user.is?(:churned) ||
+      (user.is?(:active) && user.is?(:casual_user))
+    end
+  end
+
+  # Get user engagement tier
+  def engagement_tier
+    case
+    when is_power_user? then :power
+    when is_regular_user? then :regular
+    when is_casual_user? then :casual
+    when is_churned? then :churned
+    else :unknown
+    end
+  end
+end
+
+# Usage
+user = User.find(1)
+user.engagement_tier           # => :regular
+user.is_power_user?            # => false
+user.is_regular_user?          # => true
+
+# Batch operations
+User.all.group_by(&:engagement_tier)
+# => {
+#   power: [<User>, <User>],
+#   regular: [<User>, <User>, <User>],
+#   casual: [<User>],
+#   churned: [<User>, <User>]
+# }
+```
+
+---
+
+### Admin Dashboard with User Activity Stats
+
+**Cosa fa**: Dashboard controller using activity statuses
+
+**Quando usarlo**: Admin panels, user management interfaces
+
+**Esempio**:
+```ruby
+class Admin::DashboardController < Admin::BaseController
+  def user_activity_stats
+    users = User.all
+
+    @stats = {
+      total: users.count,
+      active: users.count(&:is_active?),
+      inactive: users.count(&:is_inactive?),
+      recently_active: users.count(&:is_recently_active?),
+      dormant: users.count(&:is_dormant?),
+      never_logged_in: users.count(&:is_never_logged_in?),
+      at_risk: users.count(&:is_at_risk?)
+    }
+
+    # Calculate percentages
+    @stats[:active_rate] = (@stats[:active].to_f / @stats[:total] * 100).round(1)
+    @stats[:churn_risk_rate] = (@stats[:at_risk].to_f / @stats[:active] * 100).round(1)
+
+    render json: @stats
+  end
+
+  def users_needing_attention
+    @at_risk = User.all.select(&:is_at_risk?).first(50)
+    @dormant = User.all.select(&:is_dormant?).first(50)
+    @never_logged_in = User.all.select(&:is_never_logged_in?).first(50)
+
+    render json: {
+      at_risk: @at_risk.map { |u| user_summary(u) },
+      dormant: @dormant.map { |u| user_summary(u) },
+      never_logged_in: @never_logged_in.map { |u| user_summary(u) }
+    }
+  end
+
+  private
+
+  def user_summary(user)
+    {
+      id: user.id,
+      email: user.email,
+      last_login_at: user.last_login_at,
+      days_since_login: user.last_login_at ? ((Time.current - user.last_login_at) / 1.day).to_i : nil,
+      statuses: user.statuses
+    }
+  end
+end
+```
+
+---
+
 ## Installation
 
 No migration required. Statusable is automatically available when you include BetterModel:
