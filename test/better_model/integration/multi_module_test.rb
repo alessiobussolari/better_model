@@ -61,7 +61,7 @@ module BetterModel
         assert_equal "Python Basics", sorted.first.title
 
         # Search combines them
-        results = model_class.search({ status_eq: "published" }, orders: [:sort_title_asc])
+        results = model_class.search({ status_eq: "published" }, orders: [ :sort_title_asc ])
         assert_equal 2, results.count
         assert_equal "Python Basics", results.first.title
       end
@@ -161,7 +161,7 @@ module BetterModel
           end
         end
 
-        record = model_class.create!(title: "Tagged Article", tags: ["ruby", "rails"])
+        record = model_class.create!(title: "Tagged Article", tags: [ "ruby", "rails" ])
         assert record.tagged_with?("ruby")
 
         # Taggable auto-registers predicates

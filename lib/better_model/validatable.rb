@@ -240,5 +240,4 @@ module BetterModel
       end
     end
   end
-
 end

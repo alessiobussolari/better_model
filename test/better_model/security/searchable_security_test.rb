@@ -222,7 +222,7 @@ module BetterModel
         predicates :title, :active
         searchable do
           # Security policies use full predicate names (e.g., active_eq not just active)
-          security :admin_only, [:active_eq]
+          security :admin_only, [ :active_eq ]
         end
       end
 
@@ -240,7 +240,7 @@ module BetterModel
         predicates :title, :active
         searchable do
           # Security policies use full predicate names (e.g., active_eq not just active)
-          security :admin_only, [:active_eq]
+          security :admin_only, [ :active_eq ]
         end
       end
 
@@ -273,7 +273,7 @@ module BetterModel
         predicates :title, :active
         searchable do
           # Security policies use full predicate names
-          security :strict, [:active_eq]
+          security :strict, [ :active_eq ]
         end
       end
 
@@ -338,7 +338,7 @@ module BetterModel
 
       # Searching with LIKE special characters should not cause errors
       # Note: Whether % is escaped depends on the database adapter
-      dangerous_patterns = ["%", "_", "%%", "__", "\\", "'", "\""]
+      dangerous_patterns = [ "%", "_", "%%", "__", "\\", "'", "\"" ]
 
       dangerous_patterns.each do |pattern|
         result = SecureSearchable.search({ title_cont: pattern })

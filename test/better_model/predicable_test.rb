@@ -90,7 +90,6 @@ module BetterModel
 
       results = Article.title_eq("Ruby").pluck(:title)
       assert_equal [ "Ruby" ], results
-
     end
 
     test "title_not_eq filters by non-match" do
@@ -99,7 +98,6 @@ module BetterModel
 
       results = Article.title_not_eq("Ruby").pluck(:title)
       assert_equal [ "Rails" ], results
-
     end
 
     test "title_start filters by prefix" do
@@ -109,7 +107,6 @@ module BetterModel
 
       results = Article.title_start("Ruby").pluck(:title).sort
       assert_equal [ "Ruby Gems", "Ruby on Rails" ], results
-
     end
 
     test "title_end filters by suffix" do
@@ -119,7 +116,6 @@ module BetterModel
 
       results = Article.title_end("Rails").pluck(:title)
       assert_equal [ "Learning Rails", "Ruby on Rails" ], results.sort
-
     end
 
     test "title_cont filters by substring" do
@@ -129,7 +125,6 @@ module BetterModel
 
       results = Article.title_cont("Rails").pluck(:title)
       assert_equal [ "Rails Tutorial", "Ruby on Rails" ], results.sort
-
     end
 
     test "title_i_cont filters case-insensitive" do
@@ -139,7 +134,6 @@ module BetterModel
 
       results = Article.title_i_cont("rails").pluck(:title)
       assert_equal [ "Ruby on RAILS", "rails tutorial" ], results.sort
-
     end
 
     test "title_not_cont filters by not containing substring" do
@@ -148,7 +142,6 @@ module BetterModel
 
       results = Article.title_not_cont("Rails").pluck(:title)
       assert_equal [ "Python Guide" ], results
-
     end
 
     test "title_not_i_cont filters case-insensitive not containing" do
@@ -157,7 +150,6 @@ module BetterModel
 
       results = Article.title_not_i_cont("rails").pluck(:title)
       assert_equal [ "Python Guide" ], results
-
     end
 
     test "title_in filters by array of values" do
@@ -167,7 +159,6 @@ module BetterModel
 
       results = Article.title_in([ "Ruby", "Rails" ]).pluck(:title)
       assert_equal [ "Rails", "Ruby" ], results.sort
-
     end
 
     test "title_not_in filters by not in array" do
@@ -177,7 +168,6 @@ module BetterModel
 
       results = Article.title_not_in([ "Ruby", "Rails" ]).pluck(:title)
       assert_equal [ "Python" ], results
-
     end
 
     test "title_present filters non-null and non-empty" do
@@ -187,7 +177,6 @@ module BetterModel
 
       results = Article.title_present(true).pluck(:title)
       assert_equal [ "Ruby" ], results
-
     end
 
     test "title_blank filters null or empty" do
@@ -197,7 +186,6 @@ module BetterModel
 
       results = Article.title_blank(true).count
       assert_equal 2, results
-
     end
 
     test "title_null filters only null" do
@@ -207,7 +195,6 @@ module BetterModel
 
       results = Article.title_null(true).count
       assert_equal 1, results
-
     end
 
     # Test Numeric predicates
@@ -236,7 +223,6 @@ module BetterModel
 
       results = Article.view_count_eq(100).pluck(:view_count)
       assert_equal [ 100 ], results
-
     end
 
     test "view_count_not_eq filters by not equal" do
@@ -245,7 +231,6 @@ module BetterModel
 
       results = Article.view_count_not_eq(100).pluck(:view_count)
       assert_equal [ 50 ], results
-
     end
 
     test "view_count_lt filters less than" do
@@ -255,7 +240,6 @@ module BetterModel
 
       results = Article.view_count_lt(75).pluck(:view_count)
       assert_equal [ 25, 50 ], results.sort
-
     end
 
     test "view_count_lteq filters less than or equal" do
@@ -265,7 +249,6 @@ module BetterModel
 
       results = Article.view_count_lteq(50).pluck(:view_count)
       assert_equal [ 25, 50 ], results.sort
-
     end
 
     test "view_count_gt filters greater than" do
@@ -275,7 +258,6 @@ module BetterModel
 
       results = Article.view_count_gt(40).pluck(:view_count)
       assert_equal [ 50, 100 ], results.sort
-
     end
 
     test "view_count_gteq filters greater than or equal" do
@@ -285,7 +267,6 @@ module BetterModel
 
       results = Article.view_count_gteq(50).pluck(:view_count)
       assert_equal [ 50, 100 ], results.sort
-
     end
 
     test "view_count_in filters by array" do
@@ -295,7 +276,6 @@ module BetterModel
 
       results = Article.view_count_in([ 50, 100 ]).pluck(:view_count)
       assert_equal [ 50, 100 ], results.sort
-
     end
 
     test "view_count_not_in filters by not in array" do
@@ -305,7 +285,6 @@ module BetterModel
 
       results = Article.view_count_not_in([ 50, 100 ]).pluck(:view_count)
       assert_equal [ 25 ], results
-
     end
 
     test "view_count_present filters non-null" do
@@ -314,7 +293,6 @@ module BetterModel
 
       results = Article.view_count_present(true).pluck(:view_count)
       assert_equal [ 100 ], results
-
     end
 
     # Test Boolean predicates
@@ -337,7 +315,6 @@ module BetterModel
 
       results = Article.featured_eq(true).pluck(:featured)
       assert_equal [ true ], results
-
     end
 
     test "featured_not_eq filters by not equal boolean" do
@@ -346,7 +323,6 @@ module BetterModel
 
       results = Article.featured_not_eq(true).pluck(:featured)
       assert_equal [ false ], results
-
     end
 
 
@@ -356,7 +332,6 @@ module BetterModel
 
       results = Article.featured_present(true).count
       assert_equal 1, results
-
     end
 
     # Test Date predicates
@@ -388,7 +363,6 @@ module BetterModel
 
       results = Article.published_at_eq(date).count
       assert_equal 1, results
-
     end
 
     test "published_at_not_eq filters by not equal date" do
@@ -398,7 +372,6 @@ module BetterModel
 
       results = Article.published_at_not_eq(date).count
       assert_equal 1, results
-
     end
 
     test "published_at_lt filters before date" do
@@ -407,7 +380,6 @@ module BetterModel
 
       results = Article.published_at_lt(2.days.ago).count
       assert_equal 1, results
-
     end
 
     test "published_at_lteq filters before or equal date" do
@@ -418,7 +390,6 @@ module BetterModel
 
       results = Article.published_at_lteq(date).count
       assert_equal 2, results
-
     end
 
     test "published_at_gt filters after date" do
@@ -427,7 +398,6 @@ module BetterModel
 
       results = Article.published_at_gt(2.days.ago).count
       assert_equal 1, results
-
     end
 
     test "published_at_gteq filters after or equal date" do
@@ -438,7 +408,6 @@ module BetterModel
 
       results = Article.published_at_gteq(date).count
       assert_equal 2, results
-
     end
 
     test "published_at_in filters by array of dates" do
@@ -450,7 +419,6 @@ module BetterModel
 
       results = Article.published_at_in([ date1, date2 ]).count
       assert_equal 2, results
-
     end
 
     test "published_at_not_in filters by not in array" do
@@ -462,7 +430,6 @@ module BetterModel
 
       results = Article.published_at_not_in([ date1, date2 ]).count
       assert_equal 1, results
-
     end
 
     test "published_at_present filters non-null" do
@@ -471,7 +438,6 @@ module BetterModel
 
       results = Article.published_at_present(true).count
       assert_equal 1, results
-
     end
 
     test "published_at_blank filters null" do
@@ -480,7 +446,6 @@ module BetterModel
 
       results = Article.published_at_blank(true).count
       assert_equal 1, results
-
     end
 
     test "published_at_null filters null" do
@@ -489,7 +454,6 @@ module BetterModel
 
       results = Article.published_at_null(true).count
       assert_equal 1, results
-
     end
 
     test "published_at_null(false) filters non-null" do
@@ -498,7 +462,6 @@ module BetterModel
 
       results = Article.published_at_null(false).count
       assert_equal 1, results
-
     end
 
     # Test Complex Predicates
@@ -539,7 +502,6 @@ module BetterModel
 
       results = test_class.recent_popular(7, 100).pluck(:title)
       assert_equal [ "Recent Popular" ], results
-
     end
 
     test "register_complex_predicate requires block" do
@@ -656,7 +618,6 @@ module BetterModel
 
       results = Article.title_cont("Ruby").view_count_gt(75).pluck(:title)
       assert_equal [ "Ruby on Rails" ], results
-
     end
 
     test "can chain with sorting scopes" do
@@ -666,7 +627,6 @@ module BetterModel
 
       results = Article.title_cont("Ruby").sort_view_count_desc.pluck(:title)
       assert_equal [ "Ruby A", "Ruby B" ], results
-
     end
 
     # Test multiple fields
@@ -725,7 +685,6 @@ module BetterModel
 
       results = Article.view_count_between(75, 150).pluck(:view_count)
       assert_equal [ 100 ], results
-
     end
 
     test "view_count_not_between filters outside numeric range" do
@@ -735,7 +694,6 @@ module BetterModel
 
       results = Article.view_count_not_between(75, 150).pluck(:view_count).sort
       assert_equal [ 50, 200 ], results
-
     end
 
     test "published_at_between filters within date range" do
@@ -745,7 +703,6 @@ module BetterModel
 
       results = Article.published_at_between(7.days.ago, 3.days.ago).count
       assert_equal 1, results
-
     end
 
     test "published_at_not_between filters outside date range" do
@@ -755,7 +712,6 @@ module BetterModel
 
       results = Article.published_at_not_between(7.days.ago, 3.days.ago).count
       assert_equal 2, results
-
     end
 
 
@@ -766,7 +722,6 @@ module BetterModel
 
       results = Article.published_at_within(7).pluck(:title)
       assert_equal [ "Recent" ], results
-
     end
 
     test "published_at_within accepts ActiveSupport::Duration" do
@@ -775,7 +730,6 @@ module BetterModel
 
       results = Article.published_at_within(7.days).pluck(:title)
       assert_equal [ "Recent" ], results
-
     end
 
     test "published_at_within works with hours" do
@@ -784,7 +738,6 @@ module BetterModel
 
       results = Article.published_at_within(6.hours).pluck(:title)
       assert_equal [ "Very recent" ], results
-
     end
 
     test "created_at_within works with weeks" do
@@ -793,7 +746,6 @@ module BetterModel
 
       results = Article.created_at_within(2.weeks).pluck(:title)
       assert_equal [ "Recent" ], results
-
     end
 
     # Test scope generation for complex predicates

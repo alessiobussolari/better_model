@@ -124,7 +124,7 @@ module BetterModel
 
       test "class if_module_enabled returns default when module is not enabled" do
         result = @test_class.if_module_enabled(:test_module, default: []) do
-          ["item1", "item2"]
+          [ "item1", "item2" ]
         end
 
         assert_equal [], result
@@ -134,10 +134,10 @@ module BetterModel
         @test_class.test_module_enabled = true
 
         result = @test_class.if_module_enabled(:test_module, default: []) do
-          ["item1", "item2"]
+          [ "item1", "item2" ]
         end
 
-        assert_equal ["item1", "item2"], result
+        assert_equal [ "item1", "item2" ], result
       end
 
       # ========================================

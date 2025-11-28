@@ -159,7 +159,7 @@ Comment.create!(article: @eager_article2, body: "First comment", author_name: "R
 Comment.create!(article: @eager_article2, body: "Second comment", author_name: "Reader 2")
 
 test("search with includes: [:author] loads association") do
-  results = Article.search({ status_eq: "published" }, includes: [:author])
+  results = Article.search({ status_eq: "published" }, includes: [ :author ])
   # Should return relation
   results.is_a?(ActiveRecord::Relation) &&
   # Should be able to access author without N+1 query
@@ -167,7 +167,7 @@ test("search with includes: [:author] loads association") do
 end
 
 test("search with includes: [:author, :comments] loads multiple associations") do
-  results = Article.search({ status_eq: "published" }, includes: [:author, :comments])
+  results = Article.search({ status_eq: "published" }, includes: [ :author, :comments ])
   # Should return relation
   results.is_a?(ActiveRecord::Relation) &&
   # Should be able to access both associations
@@ -185,7 +185,7 @@ end
 section("SEARCHABLE - Test Eager Loading with preload and eager_load")
 
 test("search with preload: [:author] uses separate queries") do
-  results = Article.search({ status_eq: "published" }, preload: [:author])
+  results = Article.search({ status_eq: "published" }, preload: [ :author ])
   # Should return relation
   results.is_a?(ActiveRecord::Relation) &&
   # Should preload association
@@ -193,7 +193,7 @@ test("search with preload: [:author] uses separate queries") do
 end
 
 test("search with eager_load: [:author] forces LEFT OUTER JOIN") do
-  results = Article.search({ status_eq: "published" }, eager_load: [:author], orders: [])
+  results = Article.search({ status_eq: "published" }, eager_load: [ :author ], orders: [])
   # Should return relation (orders: [] to avoid ambiguous column errors)
   results.is_a?(ActiveRecord::Relation)
 end
@@ -202,8 +202,8 @@ test("search combines eager loading with pagination and orders") do
   results = Article.search(
     { status_eq: "published" },
     pagination: { page: 1, per_page: 10 },
-    orders: [:sort_view_count_desc],
-    includes: [:author]
+    orders: [ :sort_view_count_desc ],
+    includes: [ :author ]
   )
   # Should return paginated relation with includes
   results.is_a?(ActiveRecord::Relation) &&

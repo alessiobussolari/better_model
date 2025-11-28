@@ -1201,7 +1201,7 @@ module BetterModel
         author: author
       )
 
-      results = Article.search({ status_eq: "published" }, includes: [:author])
+      results = Article.search({ status_eq: "published" }, includes: [ :author ])
 
       assert_kind_of ActiveRecord::Relation, results
       assert_equal 1, results.count
@@ -1224,7 +1224,7 @@ module BetterModel
       comment1 = Comment.create!(article: article, body: "Great post!", author_name: "Reader 1")
       comment2 = Comment.create!(article: article, body: "Thanks!", author_name: "Reader 2")
 
-      results = Article.search({ status_eq: "published" }, includes: [:author, :comments])
+      results = Article.search({ status_eq: "published" }, includes: [ :author, :comments ])
 
       assert_kind_of ActiveRecord::Relation, results
       assert_equal 1, results.count
@@ -1276,7 +1276,7 @@ module BetterModel
       # Test complex mix: direct + nested + multiple nested
       results = Article.search(
         { status_eq: "published" },
-        includes: [{ author: :articles }, { comments: :article }]
+        includes: [ { author: :articles }, { comments: :article } ]
       )
 
       assert_kind_of ActiveRecord::Relation, results
@@ -1303,7 +1303,7 @@ module BetterModel
         author: author
       )
 
-      results = Article.search({ status_eq: "published" }, preload: [:author])
+      results = Article.search({ status_eq: "published" }, preload: [ :author ])
 
       assert_kind_of ActiveRecord::Relation, results
       assert_equal 1, results.count
@@ -1344,8 +1344,8 @@ module BetterModel
       results = Article.search(
         { status_eq: "published" },
         pagination: { page: 1, per_page: 10 },
-        orders: [:sort_view_count_desc],
-        includes: [:author]
+        orders: [ :sort_view_count_desc ],
+        includes: [ :author ]
       )
 
       assert_equal 2, results.count
@@ -1374,8 +1374,8 @@ module BetterModel
       # This is contrived but tests that all three can be used together
       results = Article.search(
         { status_eq: "published" },
-        includes: [:author],
-        preload: [:comments]
+        includes: [ :author ],
+        preload: [ :comments ]
       )
 
       assert_kind_of ActiveRecord::Relation, results
@@ -1434,7 +1434,7 @@ module BetterModel
 
       results = Article.search(
         { status_eq: "published" },
-        includes: [:author]
+        includes: [ :author ]
       ).where("view_count > 100")
 
       assert_kind_of ActiveRecord::Relation, results

@@ -402,7 +402,7 @@ module BetterModel
       Article.create!(title: "Test", author: author)
       repo = ArticleRepository.new
 
-      results = repo.search({}, includes: [:author])
+      results = repo.search({}, includes: [ :author ])
 
       # Verify includes option was applied
       assert_equal 1, results.count
@@ -414,7 +414,7 @@ module BetterModel
       Article.create!(title: "Test", author: author)
       repo = ArticleRepository.new
 
-      results = repo.search({}, joins: [:author])
+      results = repo.search({}, joins: [ :author ])
       assert_equal 1, results.count
       assert_kind_of ActiveRecord::Relation, results
     end
@@ -424,7 +424,7 @@ module BetterModel
       Article.create!(title: "Test", author: author)
       repo = ArticleRepository.new
 
-      results = repo.search({}, joins: [:author], includes: [:author])
+      results = repo.search({}, joins: [ :author ], includes: [ :author ])
       assert_equal 1, results.count
     end
 
@@ -437,8 +437,8 @@ module BetterModel
       repo = ArticleRepository.new
 
       results = repo.search({},
-        joins: [:author],
-        includes: [:author],
+        joins: [ :author ],
+        includes: [ :author ],
         order: "authors.name ASC"
       )
       assert_equal [ "Article 1", "Article 2" ], results.pluck(:title)

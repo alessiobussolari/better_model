@@ -76,7 +76,6 @@ module BetterModel
 
       results = Article.sort_title_asc.pluck(:title)
       assert_equal [ "Apple", "Mango", "Zebra" ], results
-
     end
 
     test "sort_title_desc orders by title descending" do
@@ -86,7 +85,6 @@ module BetterModel
 
       results = Article.sort_title_desc.pluck(:title)
       assert_equal [ "Zebra", "Mango", "Apple" ], results
-
     end
 
     test "sort_title_asc_i orders case-insensitive ascending" do
@@ -96,7 +94,6 @@ module BetterModel
 
       results = Article.sort_title_asc_i.pluck(:title)
       assert_equal [ "Apple", "MANGO", "zebra" ], results
-
     end
 
     test "sort_title_desc_i orders case-insensitive descending" do
@@ -106,7 +103,6 @@ module BetterModel
 
       results = Article.sort_title_desc_i.pluck(:title)
       assert_equal [ "zebra", "MANGO", "Apple" ], results
-
     end
 
     # Test Numeric sorting scopes
@@ -133,7 +129,6 @@ module BetterModel
 
       results = Article.sort_view_count_asc.pluck(:view_count)
       assert_equal [ 10, 50, 100 ], results
-
     end
 
     test "sort_view_count_desc orders by view_count descending" do
@@ -143,7 +138,6 @@ module BetterModel
 
       results = Article.sort_view_count_desc.pluck(:view_count)
       assert_equal [ 100, 50, 10 ], results
-
     end
 
     test "sort_view_count_desc_nulls_last puts NULL values at end" do
@@ -153,7 +147,6 @@ module BetterModel
 
       results = Article.sort_view_count_desc_nulls_last.pluck(:view_count)
       assert_equal [ 100, 50, nil ], results
-
     end
 
     test "sort_view_count_asc_nulls_first puts NULL values at start" do
@@ -163,7 +156,6 @@ module BetterModel
 
       results = Article.sort_view_count_asc_nulls_first.pluck(:view_count)
       assert_equal [ nil, 10, 50 ], results
-
     end
 
     # Test Date sorting scopes
@@ -188,7 +180,6 @@ module BetterModel
 
       results = Article.sort_published_at_newest.pluck(:title)
       assert_equal [ "Recent", "Middle", "Old" ], results
-
     end
 
     test "sort_published_at_oldest orders dates ascending (oldest first)" do
@@ -198,7 +189,6 @@ module BetterModel
 
       results = Article.sort_published_at_oldest.pluck(:title)
       assert_equal [ "Old", "Middle", "Recent" ], results
-
     end
 
     # Test registry tracking
@@ -264,7 +254,6 @@ module BetterModel
       # Order by view_count desc, then by published_at newest
       results = Article.sort_view_count_desc.sort_published_at_newest.pluck(:title)
       assert_equal [ "A", "B", "C" ], results
-
     end
 
     # Test instance methods
@@ -356,7 +345,6 @@ module BetterModel
 
       assert_equal [ "Apple", "Zebra" ], Article.sort_title_asc.pluck(:title)
       assert_equal [ 100, 50 ], Article.sort_view_count_desc.pluck(:view_count)
-
     end
 
     # Test validation errors for coverage
@@ -752,7 +740,7 @@ module BetterModel
 
       results = test_class.published.sort_by_views.pluck(:title)
 
-      assert_equal ["A", "C"], results # Only published, ordered by views DESC
+      assert_equal [ "A", "C" ], results # Only published, ordered by views DESC
     end
 
     test "complex_sorts_registry is thread-safe (frozen)" do
@@ -842,7 +830,7 @@ module BetterModel
       results = test_class.sort_published_by_popularity.pluck(:title)
 
       # Should filter to published AND order by view_count DESC
-      assert_equal ["D", "A", "C"], results
+      assert_equal [ "D", "A", "C" ], results
     end
 
     test "complex sort can be combined with standard sort scopes" do

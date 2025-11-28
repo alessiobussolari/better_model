@@ -82,7 +82,7 @@ module BetterModel
         configurator = BaseConfigurator.new(@model_class)
 
         assert_nothing_raised do
-          configurator.send(:validate_array!, [:a, :b], "fields")
+          configurator.send(:validate_array!, [ :a, :b ], "fields")
         end
       end
 
@@ -225,7 +225,7 @@ module BetterModel
         configurator = BaseConfigurator.new(@model_class)
 
         assert_nothing_raised do
-          configurator.send(:validate_inclusion!, :asc, [:asc, :desc], "direction")
+          configurator.send(:validate_inclusion!, :asc, [ :asc, :desc ], "direction")
         end
       end
 
@@ -233,7 +233,7 @@ module BetterModel
         configurator = BaseConfigurator.new(@model_class)
 
         error = assert_raises(ArgumentError) do
-          configurator.send(:validate_inclusion!, :invalid, [:asc, :desc], "direction")
+          configurator.send(:validate_inclusion!, :invalid, [ :asc, :desc ], "direction")
         end
 
         assert_match(/direction must be one of/, error.message)
@@ -311,7 +311,7 @@ module BetterModel
         configurator.configure_option(:option1)
         configurator.configure_option(:option2)
 
-        assert_equal({ options: [:option1, :option2] }, configurator.to_h)
+        assert_equal({ options: [ :option1, :option2 ] }, configurator.to_h)
       end
     end
   end

@@ -96,9 +96,9 @@ module BetterModel
         # Use BetterModel's search() method if available, otherwise use all
         result = if @model.respond_to?(:search) && cleaned_predicates.present?
                    @model.search(cleaned_predicates)
-                 else
+        else
                    @model.all
-                 end
+        end
 
         # Apply joins BEFORE includes (necessary for ORDER BY on joined tables)
         result = result.joins(*joins) if joins.present?
