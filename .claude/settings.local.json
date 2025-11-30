@@ -5,7 +5,8 @@
       "Read(//Users/alessiobussolari/.asdf/installs/ruby/3.3.4/lib/ruby/gems/3.3.0/gems/activemodel-8.0.0/lib/**)",
       "Read(//Users/alessiobussolari/.asdf/installs/ruby/3.3.4/lib/ruby/gems/3.3.0/gems/activerecord-8.0.0/lib/**)",
       "Bash(sort:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "mcp__mcp-server-firecrawl__firecrawl_scrape"
     ],
     "deny": [],
     "ask": []

@@ -3,13 +3,13 @@
 /log/*.log
 /pkg/
 /tmp/
-./spec/rails_app/db/*.sqlite3
-./spec/rails_app/db/*.sqlite3-*
-./spec/rails_app/log/*.log
-./spec/rails_app/storage/
-./spec/rails_app/tmp/
-./spec/rails_app/log/
-./spec/rails_app/storage
+/spec/rails_app/db/*.sqlite3
+/spec/rails_app/db/*.sqlite3-*
+/spec/rails_app/log/*.log
+/spec/rails_app/storage/
+/spec/rails_app/tmp/
+/spec/rails_app/log/
+/spec/rails_app/storage
 /coverage/
 
 # Gem builds

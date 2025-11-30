@@ -43,7 +43,7 @@ jobs:
       - name: Run tests
         env:
           RAILS_ENV: test
-        run: bundle exec rake test
+        run: bundle exec rspec
 
       - name: Upload coverage to Codecov
         if: matrix.ruby-version == '3.3'
