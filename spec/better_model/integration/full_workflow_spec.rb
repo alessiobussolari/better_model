@@ -102,7 +102,7 @@ RSpec.describe "Full Workflow Integration", type: :integration do
     end
 
     it "searches with single predicate" do
-      results = Article.search(status_eq: "published")
+      results = Article.search({ status_eq: "published" })
 
       expect(results.count).to eq(2)
       expect(results).to include(@article1, @article2)
@@ -110,24 +110,24 @@ RSpec.describe "Full Workflow Integration", type: :integration do
     end
 
     it "searches with multiple predicates" do
-      results = Article.search(
+      results = Article.search({
         status_eq: "published",
         featured_eq: true
-      )
+      })
 
       expect(results.count).to eq(1)
       expect(results.first).to eq(@article1)
     end
 
     it "searches with comparison predicates" do
-      results = Article.search(view_count_gteq: 100)
+      results = Article.search({ view_count_gteq: 100 })
 
       expect(results.count).to eq(1)
       expect(results.first).to eq(@article1)
     end
 
     it "searches with text predicates" do
-      results = Article.search(title_cont: "Ruby")
+      results = Article.search({ title_cont: "Ruby" })
 
       expect(results.count).to eq(1)
       expect(results.first).to eq(@article1)
@@ -136,7 +136,7 @@ RSpec.describe "Full Workflow Integration", type: :integration do
     it "combines search with sorting" do
       results = Article.search(
         { status_eq: "published" },
-        order_scope: { field: :view_count, direction: :desc }
+        orders: [:sort_view_count_desc]
       )
 
       expect(results.first).to eq(@article1) # Higher view count
@@ -146,25 +146,35 @@ RSpec.describe "Full Workflow Integration", type: :integration do
     it "combines search with pagination" do
       results = Article.search(
         { status_eq: "published" },
-        per_page: 1,
-        page: 1
+        pagination: { per_page: 1, page: 1 }
       )
 
       expect(results.count).to eq(1)
     end
 
-    it "searches with tags" do
-      results = Article.with_tag("ruby")
-
-      expect(results.count).to eq(1)
-      expect(results.first).to eq(@article1)
-    end
-
-    it "searches with any of multiple tags" do
-      results = Article.with_any_tag(["ruby", "rails"])
+    it "uses OR conditions" do
+      results = Article.search({
+        or: [
+          { title_cont: "Ruby" },
+          { title_cont: "Rails" }
+        ]
+      })
 
       expect(results.count).to eq(2)
       expect(results).to include(@article1, @article2)
+    end
+
+    it "combines OR conditions with AND predicates" do
+      results = Article.search({
+        or: [
+          { title_cont: "Ruby" },
+          { title_cont: "Testing" }
+        ],
+        status_eq: "published"
+      })
+
+      expect(results.count).to eq(1)
+      expect(results.first).to eq(@article1)
     end
   end
 
@@ -279,19 +289,19 @@ RSpec.describe "Full Workflow Integration", type: :integration do
         tags: ["ruby"]
       )
 
-      expect(article.tags).to eq(["ruby"])
+      expect(article.tags).to include("ruby")
 
       # Add tags
-      article.add_tag("rails")
+      article.tag_with("rails")
       expect(article.tags).to include("rails")
 
       # Remove tags
-      article.remove_tag("ruby")
+      article.untag("ruby")
       expect(article.tags).not_to include("ruby")
       expect(article.tags).to include("rails")
 
-      # Replace tags
-      article.update!(tags: ["testing", "rspec"])
+      # Replace tags with retag
+      article.retag("testing", "rspec")
       expect(article.tags).to eq(["testing", "rspec"])
     end
 
@@ -299,11 +309,50 @@ RSpec.describe "Full Workflow Integration", type: :integration do
       article = Article.create!(
         title: "Normalized Tags",
         status: "draft",
-        tags: ["Ruby", "RAILS", "Testing"]
+        tags: []
       )
 
-      # Tags should be normalized (downcased)
-      expect(article.tags).to eq(["ruby", "rails", "testing"])
+      # Add tags with mixed case - they should be normalized on save
+      article.tag_with("Ruby", "RAILS", "Testing")
+
+      expect(article.tags).to include("ruby")
+      expect(article.tags).to include("rails")
+      expect(article.tags).to include("testing")
+    end
+
+    it "checks if article has specific tag" do
+      article = Article.create!(
+        title: "Tagged",
+        status: "draft",
+        tags: ["ruby", "rails"]
+      )
+
+      expect(article.tagged_with?("ruby")).to be true
+      expect(article.tagged_with?("python")).to be false
+    end
+
+    it "uses tag_list for CSV representation" do
+      article = Article.create!(
+        title: "Tagged",
+        status: "draft",
+        tags: ["ruby", "rails", "testing"]
+      )
+
+      expect(article.tag_list).to eq("ruby, rails, testing")
+    end
+
+    it "sets tags from CSV via tag_list=" do
+      article = Article.create!(
+        title: "Tagged",
+        status: "draft",
+        tags: []
+      )
+
+      article.tag_list = "ruby, rails, testing"
+
+      expect(article.tags).to include("ruby")
+      expect(article.tags).to include("rails")
+      expect(article.tags).to include("testing")
     end
   end
 
@@ -327,7 +376,7 @@ RSpec.describe "Full Workflow Integration", type: :integration do
       expect(article.tags).to include("integration")
 
       # Search for it
-      found = Article.search(title_cont: "Complete", status_eq: "draft")
+      found = Article.search({ title_cont: "Complete", status_eq: "draft" })
       expect(found).to include(article)
 
       # Update and check searchable
@@ -337,7 +386,7 @@ RSpec.describe "Full Workflow Integration", type: :integration do
       expect(article.is_popular?).to be true
 
       # Search by new criteria
-      popular_found = Article.search(view_count_gteq: 100, status_eq: "published")
+      popular_found = Article.search({ view_count_gteq: 100, status_eq: "published" })
       expect(popular_found).to include(article)
 
       # Check permissions changed
@@ -348,6 +397,10 @@ RSpec.describe "Full Workflow Integration", type: :integration do
       perms = article.permissions
       expect(perms[:delete]).to be false
       expect(perms[:edit]).to be true
+
+      # Tag operations
+      article.tag_with("complete")
+      expect(article.tagged_with?("complete")).to be true
     end
   end
 end

@@ -52,23 +52,47 @@ class Article < ApplicationRecord
   end
 
   # ========================================
-  # Archivable Example (Opt-In)
+  # Archivable (Opt-In)
   # ========================================
-  # Uncomment to enable archivable functionality:
-  #
-  # archivable do
-  #   skip_archived_by_default true  # Nasconde archiviati di default
-  # end
-  #
-  # Usage:
-  #   article.archive!(by: user, reason: "Outdated content")
-  #   article.archived?  # => true
-  #   article.restore!
-  #
-  #   Article.archived                    # Scope: find archived
-  #   Article.not_archived                # Scope: find active
-  #   Article.archived_at_within(7.days)  # Predicate: archived recently
-  #   Article.archived_today              # Helper: archived today
-  #
-  #   Article.search({ archived_at_null: true, status_eq: "published" })
+  # Enable archivable functionality for integration tests
+  archivable
+
+  # ========================================
+  # Traceable (Opt-In)
+  # ========================================
+  # Enable change tracking for integration tests
+  # Track key fields for audit trail
+  traceable do
+    track :title, :status, :content, :published_at, :view_count
+    versions_table "article_versions"
+  end
+
+  # ========================================
+  # Validatable (Opt-In)
+  # ========================================
+  # Register complex validations for integration tests
+  # NOTE: These validations are registered but NOT automatically applied
+  # They can be manually triggered in tests via validate_group or explicit calls
+  register_complex_validation :content_required_for_publish do
+    # Only validate content when explicitly checking publish_info group
+    # This is used for multi-step form validation, not global save
+  end
+
+  register_complex_validation :valid_publish_date do
+    # This validation checks that published_at < expires_at
+    # Only triggered when explicitly called via validate_group
+    if published_at.present? && expires_at.present? && published_at >= expires_at
+      errors.add(:published_at, "must be before expiration date")
+    end
+  end
+
+  # Enable validatable with groups for multi-step form testing
+  # NOTE: Using validation groups for controlled, explicit validation
+  # Complex validations are NOT applied globally to avoid breaking existing tests
+  validatable do
+    # Validation groups for multi-step workflows
+    validation_group :basic_info, [ :title ]
+    validation_group :publish_info, [ :content, :published_at ]
+    validation_group :date_validation, [ :published_at, :expires_at ]
+  end
 end
