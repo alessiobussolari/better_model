@@ -9,6 +9,7 @@
 /spec/rails_app/storage/
 /spec/rails_app/tmp/
 /spec/rails_app/log/
+/spec/rails_app/storage
 /coverage/
 
 # Gem builds
