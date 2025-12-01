@@ -57,7 +57,7 @@ RSpec.describe BetterModel::Generators::Stateable::InstallGenerator, type: :gene
     end
 
     context "with --table-name option" do
-      before { run_generator ["--table-name=order_transitions"] }
+      before { run_generator [ "--table-name=order_transitions" ] }
 
       it "creates migration with custom table name" do
         migration_file = Dir.glob("#{destination_root}/db/migrate/*_create_order_transitions.rb").first

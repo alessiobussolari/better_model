@@ -72,7 +72,7 @@ RSpec.describe BetterModel::Stateable do
         end
       end
 
-      expect(test_class.stateable_states).to eq([:draft, :published, :archived])
+      expect(test_class.stateable_states).to eq([ :draft, :published, :archived ])
       expect(test_class.stateable_initial_state).to eq(:draft)
     end
 
@@ -156,7 +156,7 @@ RSpec.describe BetterModel::Stateable do
           state :archived
           state :deleted
           transition :publish, from: :draft, to: :published
-          transition :delete, from: [:draft, :published, :archived], to: :deleted
+          transition :delete, from: [ :draft, :published, :archived ], to: :deleted
         end
       end
 
@@ -297,7 +297,7 @@ RSpec.describe BetterModel::Stateable do
       article = test_class.create!(title: "Test")
       article.publish!
 
-      expect(callback_log).to eq(["before", "after"])
+      expect(callback_log).to eq([ "before", "after" ])
     end
 
     it "stops transition when before callback raises" do
@@ -325,7 +325,7 @@ RSpec.describe BetterModel::Stateable do
       # State should not have changed
       expect(article.draft?).to be true
       # After callback should not have run
-      expect(callback_log).to eq(["before"])
+      expect(callback_log).to eq([ "before" ])
     end
   end
 
@@ -877,7 +877,7 @@ RSpec.describe BetterModel::Stateable do
         end
 
         config = test_class.stateable_config
-        expect(config[:states]).to eq([:draft, :published])
+        expect(config[:states]).to eq([ :draft, :published ])
         expect(config[:initial_state]).to eq(:draft)
         expect(config[:table_name]).to eq("test_transitions")
         expect(config[:transitions]).to have_key(:publish)
@@ -968,7 +968,7 @@ RSpec.describe BetterModel::Stateable do
       article = test_class.create!(title: "Test")
       article.publish!
 
-      expect(callback_log).to eq(["around_start", "around_end"])
+      expect(callback_log).to eq([ "around_start", "around_end" ])
       expect(article.published?).to be true
     end
 
@@ -1000,7 +1000,7 @@ RSpec.describe BetterModel::Stateable do
       article.publish!
 
       # Around callbacks are nested: outer wraps inner
-      expect(callback_log).to eq(["outer_start", "inner_start", "inner_end", "outer_end"])
+      expect(callback_log).to eq([ "outer_start", "inner_start", "inner_end", "outer_end" ])
     end
   end
 
@@ -1027,7 +1027,7 @@ RSpec.describe BetterModel::Stateable do
       article = test_class.create!(title: "Test")
       article.publish!
 
-      expect(callback_log).to eq(["prepare_publishing"])
+      expect(callback_log).to eq([ "prepare_publishing" ])
     end
 
     it "calls after_transition method" do
@@ -1052,7 +1052,7 @@ RSpec.describe BetterModel::Stateable do
       article = test_class.create!(title: "Test")
       article.publish!
 
-      expect(callback_log).to eq(["send_notification"])
+      expect(callback_log).to eq([ "send_notification" ])
     end
   end
 

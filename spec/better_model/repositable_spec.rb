@@ -285,7 +285,7 @@ RSpec.describe BetterModel::Repositable do
       Article.create!(title: "Banana", view_count: 30)
 
       results = repo.search({}, order: "title ASC")
-      expect(results.pluck(:title)).to eq(["Apple", "Banana", "Zebra"])
+      expect(results.pluck(:title)).to eq([ "Apple", "Banana", "Zebra" ])
     end
 
     it "applies order hash" do
@@ -294,7 +294,7 @@ RSpec.describe BetterModel::Repositable do
       Article.create!(title: "Medium", view_count: 50)
 
       results = repo.search({}, order: { view_count: :desc })
-      expect(results.pluck(:title)).to eq(["High", "Medium", "Low"])
+      expect(results.pluck(:title)).to eq([ "High", "Medium", "Low" ])
     end
 
     it "applies order_scope using Sortable" do
@@ -303,7 +303,7 @@ RSpec.describe BetterModel::Repositable do
       Article.create!(title: "Medium", view_count: 50)
 
       results = repo.search({}, order_scope: { field: :view_count, direction: :desc })
-      expect(results.pluck(:title)).to eq(["High", "Medium", "Low"])
+      expect(results.pluck(:title)).to eq([ "High", "Medium", "Low" ])
     end
 
     it "order_scope has priority over order" do
@@ -314,7 +314,7 @@ RSpec.describe BetterModel::Repositable do
         order: "view_count ASC",
         order_scope: { field: :view_count, direction: :desc }
       )
-      expect(results.pluck(:title)).to eq(["B", "A"])
+      expect(results.pluck(:title)).to eq([ "B", "A" ])
     end
   end
 
@@ -323,7 +323,7 @@ RSpec.describe BetterModel::Repositable do
       author = Author.create!(name: "John", email: "john@example.com")
       Article.create!(title: "Test", author: author)
 
-      results = repo.search({}, includes: [:author])
+      results = repo.search({}, includes: [ :author ])
 
       expect(results.count).to eq(1)
       expect(results.first.author.name).to eq("John")
@@ -333,7 +333,7 @@ RSpec.describe BetterModel::Repositable do
       author = Author.create!(name: "John", email: "john@example.com")
       Article.create!(title: "Test", author: author)
 
-      results = repo.search({}, joins: [:author])
+      results = repo.search({}, joins: [ :author ])
       expect(results.count).to eq(1)
       expect(results).to be_a(ActiveRecord::Relation)
     end
@@ -342,7 +342,7 @@ RSpec.describe BetterModel::Repositable do
       author = Author.create!(name: "John", email: "john@example.com")
       Article.create!(title: "Test", author: author)
 
-      results = repo.search({}, joins: [:author], includes: [:author])
+      results = repo.search({}, joins: [ :author ], includes: [ :author ])
       expect(results.count).to eq(1)
     end
   end
@@ -440,7 +440,7 @@ RSpec.describe BetterModel::Repositable do
       )
 
       expect(results.count).to eq(2)
-      expect(results.pluck(:title)).to eq(["Rails Tutorial", "Ruby Guide"])
+      expect(results.pluck(:title)).to eq([ "Rails Tutorial", "Ruby Guide" ])
     end
 
     it "handles multi-step query building scenario" do

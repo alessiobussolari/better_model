@@ -23,11 +23,11 @@ spec_root = __dir__
 Dir[File.join(spec_root, "support/**/*.rb")].sort.each { |f| require f }
 
 # Load factories
-FactoryBot.definition_file_paths = [File.join(spec_root, "factories")]
+FactoryBot.definition_file_paths = [ File.join(spec_root, "factories") ]
 FactoryBot.find_definitions
 
 # Set up migrations path
-ActiveRecord::Migrator.migrations_paths = [File.expand_path("rails_app/db/migrate", __dir__)]
+ActiveRecord::Migrator.migrations_paths = [ File.expand_path("rails_app/db/migrate", __dir__) ]
 
 # Checks for pending migrations and applies them before tests are run.
 begin
@@ -46,7 +46,7 @@ end
 
 RSpec.configure do |config|
   # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
-  config.fixture_paths = [File.expand_path("fixtures", __dir__)]
+  config.fixture_paths = [ File.expand_path("fixtures", __dir__) ]
 
   # If you're not using ActiveRecord, or you'd prefer not to run each of your
   # examples within a transaction, remove the following line or assign false

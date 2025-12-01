@@ -97,11 +97,11 @@ RSpec.describe BetterModel::Sortable do
       end
 
       it "orders by title ascending" do
-        expect(Article.sort_title_asc.pluck(:title)).to eq(["Apple", "Mango", "Zebra"])
+        expect(Article.sort_title_asc.pluck(:title)).to eq([ "Apple", "Mango", "Zebra" ])
       end
 
       it "orders by title descending" do
-        expect(Article.sort_title_desc.pluck(:title)).to eq(["Zebra", "Mango", "Apple"])
+        expect(Article.sort_title_desc.pluck(:title)).to eq([ "Zebra", "Mango", "Apple" ])
       end
 
       it "orders case-insensitive ascending" do
@@ -110,7 +110,7 @@ RSpec.describe BetterModel::Sortable do
         Article.create!(title: "Apple", content: "Test", status: "draft")
         Article.create!(title: "MANGO", content: "Test", status: "draft")
 
-        expect(Article.sort_title_asc_i.pluck(:title)).to eq(["Apple", "MANGO", "zebra"])
+        expect(Article.sort_title_asc_i.pluck(:title)).to eq([ "Apple", "MANGO", "zebra" ])
       end
 
       it "orders case-insensitive descending" do
@@ -119,7 +119,7 @@ RSpec.describe BetterModel::Sortable do
         Article.create!(title: "Apple", content: "Test", status: "draft")
         Article.create!(title: "MANGO", content: "Test", status: "draft")
 
-        expect(Article.sort_title_desc_i.pluck(:title)).to eq(["zebra", "MANGO", "Apple"])
+        expect(Article.sort_title_desc_i.pluck(:title)).to eq([ "zebra", "MANGO", "Apple" ])
       end
     end
   end
@@ -148,11 +148,11 @@ RSpec.describe BetterModel::Sortable do
       end
 
       it "orders by view_count ascending" do
-        expect(Article.sort_view_count_asc.pluck(:view_count)).to eq([10, 50, 100])
+        expect(Article.sort_view_count_asc.pluck(:view_count)).to eq([ 10, 50, 100 ])
       end
 
       it "orders by view_count descending" do
-        expect(Article.sort_view_count_desc.pluck(:view_count)).to eq([100, 50, 10])
+        expect(Article.sort_view_count_desc.pluck(:view_count)).to eq([ 100, 50, 10 ])
       end
     end
 
@@ -165,12 +165,12 @@ RSpec.describe BetterModel::Sortable do
 
       it "puts NULL values at end with nulls_last" do
         results = Article.sort_view_count_desc_nulls_last.pluck(:view_count)
-        expect(results).to eq([100, 50, nil])
+        expect(results).to eq([ 100, 50, nil ])
       end
 
       it "puts NULL values at start with nulls_first" do
         results = Article.sort_view_count_asc_nulls_first.pluck(:view_count)
-        expect(results).to eq([nil, 50, 100])
+        expect(results).to eq([ nil, 50, 100 ])
       end
     end
   end
@@ -197,11 +197,11 @@ RSpec.describe BetterModel::Sortable do
       end
 
       it "orders newest first" do
-        expect(Article.sort_published_at_newest.pluck(:title)).to eq(["Recent", "Middle", "Old"])
+        expect(Article.sort_published_at_newest.pluck(:title)).to eq([ "Recent", "Middle", "Old" ])
       end
 
       it "orders oldest first" do
-        expect(Article.sort_published_at_oldest.pluck(:title)).to eq(["Old", "Middle", "Recent"])
+        expect(Article.sort_published_at_oldest.pluck(:title)).to eq([ "Old", "Middle", "Recent" ])
       end
     end
   end
@@ -267,7 +267,7 @@ RSpec.describe BetterModel::Sortable do
       test_class.create!(title: "C", status: "published", view_count: 50)
 
       results = test_class.published.sort_by_views.pluck(:title)
-      expect(results).to eq(["A", "C"])
+      expect(results).to eq([ "A", "C" ])
     end
   end
 
@@ -304,7 +304,7 @@ RSpec.describe BetterModel::Sortable do
 
     it "can chain multiple sort scopes" do
       results = Article.sort_view_count_desc.sort_published_at_newest.pluck(:title)
-      expect(results).to eq(["A", "B", "C"])
+      expect(results).to eq([ "A", "B", "C" ])
     end
 
     it "can chain with predicate scopes" do
@@ -351,7 +351,7 @@ RSpec.describe BetterModel::Sortable do
     it "excludes sensitive fields from sortable_attributes" do
       test_class = create_sortable_class("SensitiveFieldsTest") do
         def self.column_names
-          super + ["password_digest", "encrypted_email"]
+          super + [ "password_digest", "encrypted_email" ]
         end
       end
 
@@ -403,7 +403,7 @@ RSpec.describe BetterModel::Sortable do
 
     it "generates case-insensitive scopes for string/text fields" do
       string_fields = Article.sortable_fields.select do |field|
-        [:string, :text].include?(Article.columns_hash[field.to_s]&.type)
+        [ :string, :text ].include?(Article.columns_hash[field.to_s]&.type)
       end
 
       string_fields.each do |field|

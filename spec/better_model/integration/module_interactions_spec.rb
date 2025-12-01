@@ -32,7 +32,7 @@ RSpec.describe "Module Interactions", type: :integration do
     it "combines predicates and sorting" do
       results = Article.search(
         { status_eq: "published" },
-        orders: [:sort_view_count_desc]
+        orders: [ :sort_view_count_desc ]
       )
 
       expect(results.first).to eq(@article1)
@@ -42,7 +42,7 @@ RSpec.describe "Module Interactions", type: :integration do
     it "applies multiple predicates with sorting" do
       results = Article.search(
         { status_eq: "published", view_count_gteq: 100 },
-        orders: [:sort_title_asc]
+        orders: [ :sort_title_asc ]
       )
 
       expect(results.count).to eq(2)
@@ -52,7 +52,7 @@ RSpec.describe "Module Interactions", type: :integration do
     it "uses predicates with pagination and sorting" do
       results = Article.search(
         { status_eq: "published" },
-        orders: [:sort_view_count_desc],
+        orders: [ :sort_view_count_desc ],
         pagination: { page: 1, per_page: 1 }
       )
 
@@ -71,7 +71,7 @@ RSpec.describe "Module Interactions", type: :integration do
 
       results = Article.search(
         { status_eq: "published" },
-        orders: [:sort_view_count_desc, :sort_title_asc]
+        orders: [ :sort_view_count_desc, :sort_title_asc ]
       )
 
       # Both articles with view_count 200 should be first, sorted by title
@@ -140,21 +140,21 @@ RSpec.describe "Module Interactions", type: :integration do
         title: "Ruby Guide",
         status: "published",
         published_at: Time.current,
-        tags: ["ruby", "programming"]
+        tags: [ "ruby", "programming" ]
       )
 
       @rails_article = Article.create!(
         title: "Rails Guide",
         status: "published",
         published_at: Time.current,
-        tags: ["rails", "web"]
+        tags: [ "rails", "web" ]
       )
 
       @both_article = Article.create!(
         title: "Full Stack",
         status: "published",
         published_at: Time.current,
-        tags: ["ruby", "rails", "full-stack"]
+        tags: [ "ruby", "rails", "full-stack" ]
       )
     end
 
@@ -274,7 +274,7 @@ RSpec.describe "Module Interactions", type: :integration do
         view_count: 0,
         featured: false,
         author: author,
-        tags: ["testing"]
+        tags: [ "testing" ]
       )
 
       # Verify initial state
@@ -307,7 +307,7 @@ RSpec.describe "Module Interactions", type: :integration do
       # Search with new criteria
       popular = Article.search(
         { featured_eq: true, view_count_gteq: 100 },
-        orders: [:sort_view_count_desc]
+        orders: [ :sort_view_count_desc ]
       )
       expect(popular).to include(article)
 
@@ -371,24 +371,24 @@ RSpec.describe "Module Interactions", type: :integration do
     end
 
     it "sorts by single field ascending" do
-      results = Article.search({}, orders: [:sort_title_asc])
-      expect(results.map(&:title)).to eq(["Alpha", "Beta", "Gamma"])
+      results = Article.search({}, orders: [ :sort_title_asc ])
+      expect(results.map(&:title)).to eq([ "Alpha", "Beta", "Gamma" ])
     end
 
     it "sorts by single field descending" do
-      results = Article.search({}, orders: [:sort_title_desc])
-      expect(results.map(&:title)).to eq(["Gamma", "Beta", "Alpha"])
+      results = Article.search({}, orders: [ :sort_title_desc ])
+      expect(results.map(&:title)).to eq([ "Gamma", "Beta", "Alpha" ])
     end
 
     it "applies secondary sort for ties" do
       results = Article.search(
         {},
-        orders: [:sort_view_count_asc, :sort_title_asc]
+        orders: [ :sort_view_count_asc, :sort_title_asc ]
       )
 
       # view_count 100: Alpha, Beta (sorted by title)
       # view_count 200: Gamma
-      expect(results.map(&:title)).to eq(["Alpha", "Beta", "Gamma"])
+      expect(results.map(&:title)).to eq([ "Alpha", "Beta", "Gamma" ])
     end
 
     it "uses default order when no orders specified" do

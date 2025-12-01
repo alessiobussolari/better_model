@@ -241,8 +241,8 @@ RSpec.describe BetterModel::Validatable do
           check :status, presence: true
           check :view_count, presence: true
 
-          validation_group :step1, [:title]
-          validation_group :step2, [:status, :view_count]
+          validation_group :step1, [ :title ]
+          validation_group :step2, [ :status, :view_count ]
         end
       end
 
@@ -264,7 +264,7 @@ RSpec.describe BetterModel::Validatable do
           check :title, presence: true
           check :status, presence: true
 
-          validation_group :step1, [:title]
+          validation_group :step1, [ :title ]
         end
       end
 
@@ -315,8 +315,8 @@ RSpec.describe BetterModel::Validatable do
       expect do
         create_validatable_class("ValidatableDuplicateGroupTest") do
           validatable do
-            validation_group :step1, [:title]
-            validation_group :step1, [:status]
+            validation_group :step1, [ :title ]
+            validation_group :step1, [ :status ]
           end
         end
       end.to raise_error(ArgumentError, /Group already defined/)
@@ -329,8 +329,8 @@ RSpec.describe BetterModel::Validatable do
           check :status, presence: true
           check :content, presence: true
 
-          validation_group :group1, [:title, :status]
-          validation_group :group2, [:status, :content]
+          validation_group :group1, [ :title, :status ]
+          validation_group :group2, [ :status, :content ]
         end
       end
 
@@ -356,7 +356,7 @@ RSpec.describe BetterModel::Validatable do
           check :title, presence: true
           check :status, presence: true
 
-          validation_group :group1, [:title]
+          validation_group :group1, [ :title ]
         end
       end
 
@@ -675,7 +675,7 @@ RSpec.describe BetterModel::Validatable do
           20.times { |i| check "field_#{i}".to_sym, presence: true }
 
           10.times do |i|
-            validation_group "group_#{i}".to_sym, ["field_#{i * 2}".to_sym, "field_#{i * 2 + 1}".to_sym]
+            validation_group "group_#{i}".to_sym, [ "field_#{i * 2}".to_sym, "field_#{i * 2 + 1}".to_sym ]
           end
         end
       end

@@ -126,8 +126,8 @@ RSpec.describe BetterModel::Statusable do
       end
 
       it "handles single status" do
-        expect(article.has_all_statuses?([:draft])).to be true
-        expect(article.has_all_statuses?([:published])).to be false
+        expect(article.has_all_statuses?([ :draft ])).to be true
+        expect(article.has_all_statuses?([ :published ])).to be false
       end
 
       it "handles empty array" do

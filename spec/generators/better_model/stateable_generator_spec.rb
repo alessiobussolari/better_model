@@ -26,7 +26,7 @@ RSpec.describe BetterModel::Generators::StateableGenerator, type: :generator do
 
   describe "migration generation" do
     context "with default options" do
-      before { run_generator ["Order"] }
+      before { run_generator [ "Order" ] }
 
       it "creates migration file" do
         migration_files = Dir.glob("#{destination_root}/db/migrate/*_add_stateable_to_orders.rb")
@@ -49,7 +49,7 @@ RSpec.describe BetterModel::Generators::StateableGenerator, type: :generator do
     end
 
     context "with --initial-state option" do
-      before { run_generator ["Order", "--initial-state=draft"] }
+      before { run_generator [ "Order", "--initial-state=draft" ] }
 
       it "uses custom initial state" do
         migration_file = Dir.glob("#{destination_root}/db/migrate/*_add_stateable_to_orders.rb").first
@@ -60,13 +60,13 @@ RSpec.describe BetterModel::Generators::StateableGenerator, type: :generator do
 
     context "with different model names" do
       it "handles simple model name" do
-        run_generator ["Article"]
+        run_generator [ "Article" ]
         migration_files = Dir.glob("#{destination_root}/db/migrate/*_add_stateable_to_articles.rb")
         expect(migration_files.length).to eq(1)
       end
 
       it "handles underscored model name" do
-        run_generator ["blog_post"]
+        run_generator [ "blog_post" ]
         migration_file = Dir.glob("#{destination_root}/db/migrate/*_add_stateable_to_blog_posts.rb").first
         expect(migration_file).not_to be_nil
       end
@@ -77,7 +77,7 @@ RSpec.describe BetterModel::Generators::StateableGenerator, type: :generator do
     it "produces output after generation" do
       output = StringIO.new
       $stdout = output
-      run_generator ["Order"]
+      run_generator [ "Order" ]
       $stdout = STDOUT
       # Just verify something was output
       expect(output.string.length).to be >= 0

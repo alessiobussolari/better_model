@@ -12,11 +12,11 @@ RSpec.describe "Full Workflow Integration", type: :integration do
         content: "This is a comprehensive test",
         status: "draft",
         author: author,
-        tags: ["ruby", "rails", "testing"]
+        tags: [ "ruby", "rails", "testing" ]
       )
 
       expect(article).to be_persisted
-      expect(article.tags).to eq(["ruby", "rails", "testing"])
+      expect(article.tags).to eq([ "ruby", "rails", "testing" ])
       expect(article.author).to eq(author)
       expect(article.is_draft?).to be true
     end
@@ -77,7 +77,7 @@ RSpec.describe "Full Workflow Integration", type: :integration do
         view_count: 150,
         featured: true,
         author: @author,
-        tags: ["ruby", "programming"]
+        tags: [ "ruby", "programming" ]
       )
 
       @article2 = Article.create!(
@@ -88,7 +88,7 @@ RSpec.describe "Full Workflow Integration", type: :integration do
         view_count: 50,
         featured: false,
         author: @author,
-        tags: ["rails", "web"]
+        tags: [ "rails", "web" ]
       )
 
       @article3 = Article.create!(
@@ -97,7 +97,7 @@ RSpec.describe "Full Workflow Integration", type: :integration do
         status: "draft",
         view_count: 0,
         featured: false,
-        tags: ["testing"]
+        tags: [ "testing" ]
       )
     end
 
@@ -136,7 +136,7 @@ RSpec.describe "Full Workflow Integration", type: :integration do
     it "combines search with sorting" do
       results = Article.search(
         { status_eq: "published" },
-        orders: [:sort_view_count_desc]
+        orders: [ :sort_view_count_desc ]
       )
 
       expect(results.first).to eq(@article1) # Higher view count
@@ -226,7 +226,7 @@ RSpec.describe "Full Workflow Integration", type: :integration do
     it "filters granted permissions" do
       article = Article.create!(title: "Test", status: "draft")
 
-      granted = article.granted_permissions([:delete, :edit, :publish, :unpublish])
+      granted = article.granted_permissions([ :delete, :edit, :publish, :unpublish ])
 
       expect(granted).to include(:delete)
       expect(granted).to include(:edit)
@@ -243,8 +243,8 @@ RSpec.describe "Full Workflow Integration", type: :integration do
     it "checks if has all specified permissions" do
       article = Article.create!(title: "Test", status: "draft")
 
-      expect(article.has_all_permissions?([:delete, :edit])).to be true
-      expect(article.has_all_permissions?([:delete, :unpublish])).to be false
+      expect(article.has_all_permissions?([ :delete, :edit ])).to be true
+      expect(article.has_all_permissions?([ :delete, :unpublish ])).to be false
     end
   end
 
@@ -286,7 +286,7 @@ RSpec.describe "Full Workflow Integration", type: :integration do
       article = Article.create!(
         title: "Tagged Article",
         status: "draft",
-        tags: ["ruby"]
+        tags: [ "ruby" ]
       )
 
       expect(article.tags).to include("ruby")
@@ -302,7 +302,7 @@ RSpec.describe "Full Workflow Integration", type: :integration do
 
       # Replace tags with retag
       article.retag("testing", "rspec")
-      expect(article.tags).to eq(["testing", "rspec"])
+      expect(article.tags).to eq([ "testing", "rspec" ])
     end
 
     it "normalizes tags when configured" do
@@ -324,7 +324,7 @@ RSpec.describe "Full Workflow Integration", type: :integration do
       article = Article.create!(
         title: "Tagged",
         status: "draft",
-        tags: ["ruby", "rails"]
+        tags: [ "ruby", "rails" ]
       )
 
       expect(article.tagged_with?("ruby")).to be true
@@ -335,7 +335,7 @@ RSpec.describe "Full Workflow Integration", type: :integration do
       article = Article.create!(
         title: "Tagged",
         status: "draft",
-        tags: ["ruby", "rails", "testing"]
+        tags: [ "ruby", "rails", "testing" ]
       )
 
       expect(article.tag_list).to eq("ruby, rails, testing")
@@ -366,7 +366,7 @@ RSpec.describe "Full Workflow Integration", type: :integration do
         content: "Testing all modules together",
         status: "draft",
         author: author,
-        tags: ["integration", "testing"],
+        tags: [ "integration", "testing" ],
         featured: true
       )
 

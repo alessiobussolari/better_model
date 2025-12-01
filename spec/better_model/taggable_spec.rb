@@ -104,7 +104,7 @@ RSpec.describe BetterModel::Taggable do
 
     describe "#untag" do
       it "removes single tag" do
-        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby", "rails"])
+        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby", "rails" ])
         article.untag("ruby")
 
         expect(article.tags).not_to include("ruby")
@@ -112,7 +112,7 @@ RSpec.describe BetterModel::Taggable do
       end
 
       it "removes multiple tags" do
-        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby", "rails", "python"])
+        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby", "rails", "python" ])
         article.untag("ruby", "python")
 
         expect(article.tags).not_to include("ruby")
@@ -121,7 +121,7 @@ RSpec.describe BetterModel::Taggable do
       end
 
       it "ignores non-existent tags" do
-        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby"])
+        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby" ])
         article.untag("python")
 
         expect(article.tags).to include("ruby")
@@ -129,7 +129,7 @@ RSpec.describe BetterModel::Taggable do
       end
 
       it "persists changes to database" do
-        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby", "rails"])
+        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby", "rails" ])
         article.untag("ruby")
 
         article.reload
@@ -139,7 +139,7 @@ RSpec.describe BetterModel::Taggable do
 
     describe "#retag" do
       it "replaces all existing tags" do
-        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby", "rails"])
+        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby", "rails" ])
         article.retag("python", "django")
 
         expect(article.tags).not_to include("ruby")
@@ -149,7 +149,7 @@ RSpec.describe BetterModel::Taggable do
       end
 
       it "persists changes to database" do
-        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby"])
+        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby" ])
         article.retag("python")
 
         article.reload
@@ -160,13 +160,13 @@ RSpec.describe BetterModel::Taggable do
 
     describe "#tagged_with?" do
       it "returns true if tag exists" do
-        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby", "rails"])
+        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby", "rails" ])
 
         expect(article.tagged_with?("ruby")).to be true
       end
 
       it "returns false if tag missing" do
-        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby"])
+        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby" ])
 
         expect(article.tagged_with?("python")).to be false
       end
@@ -176,7 +176,7 @@ RSpec.describe BetterModel::Taggable do
   describe "tag list (CSV)" do
     describe "#tag_list" do
       it "returns comma-separated string" do
-        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby", "rails", "tutorial"])
+        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby", "rails", "tutorial" ])
 
         expect(article.tag_list).to eq("ruby, rails, tutorial")
       end
@@ -200,7 +200,7 @@ RSpec.describe BetterModel::Taggable do
           end
         end
 
-        article = test_class.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby", "rails"])
+        article = test_class.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby", "rails" ])
         expect(article.tag_list).to eq("ruby;rails")
       end
     end
@@ -234,7 +234,7 @@ RSpec.describe BetterModel::Taggable do
       end
 
       it "handles empty string" do
-        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby"])
+        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby" ])
         article.tag_list = ""
 
         expect(article.tags).to be_empty
@@ -250,7 +250,7 @@ RSpec.describe BetterModel::Taggable do
       end
 
       it "handles nil" do
-        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby"])
+        article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby" ])
         article.tag_list = nil
 
         expect(article.tags).to be_empty
@@ -294,6 +294,27 @@ RSpec.describe BetterModel::Taggable do
 
       expect(article.tags).to include("ruby")
       expect(article.tags).to include("rails")
+    end
+
+    it "preserves whitespace if strip disabled" do
+      test_class = Class.new(ApplicationRecord) do
+        self.table_name = "articles"
+        include BetterModel::Taggable
+
+        serialize :tags, coder: JSON, type: Array
+
+        taggable do
+          tag_field :tags
+          strip false
+          normalize false
+        end
+      end
+
+      article = test_class.create!(title: "Test", content: "Test", status: "draft")
+      article.tag_with("  ruby  ", "  rails  ")
+
+      expect(article.tags).to include("  ruby  ")
+      expect(article.tags).to include("  rails  ")
     end
 
     it "skips tags shorter than min_length" do
@@ -353,7 +374,7 @@ RSpec.describe BetterModel::Taggable do
       end
 
       article = test_class.new(title: "Test", content: "Test", status: "draft")
-      article.tags = ["ruby"]
+      article.tags = [ "ruby" ]
 
       expect(article).not_to be_valid
       expect(article.errors[:tags]).to include("must have at least 2 tags")
@@ -373,7 +394,7 @@ RSpec.describe BetterModel::Taggable do
       end
 
       article = test_class.new(title: "Test", content: "Test", status: "draft")
-      article.tags = ["ruby", "rails", "python", "django"]
+      article.tags = [ "ruby", "rails", "python", "django" ]
 
       expect(article).not_to be_valid
       expect(article.errors[:tags]).to include("must have at most 3 tags")
@@ -388,12 +409,12 @@ RSpec.describe BetterModel::Taggable do
 
         taggable do
           tag_field :tags
-          validates_tags allowed_tags: ["ruby", "rails", "python", "django"]
+          validates_tags allowed_tags: [ "ruby", "rails", "python", "django" ]
         end
       end
 
       article = test_class.new(title: "Test", content: "Test", status: "draft")
-      article.tags = ["ruby", "javascript"]
+      article.tags = [ "ruby", "javascript" ]
 
       expect(article).not_to be_valid
       expect(article.errors[:tags]).to include("contains invalid tags: javascript")
@@ -408,12 +429,12 @@ RSpec.describe BetterModel::Taggable do
 
         taggable do
           tag_field :tags
-          validates_tags forbidden_tags: ["spam", "nsfw", "banned"]
+          validates_tags forbidden_tags: [ "spam", "nsfw", "banned" ]
         end
       end
 
       article = test_class.new(title: "Test", content: "Test", status: "draft")
-      article.tags = ["ruby", "spam"]
+      article.tags = [ "ruby", "spam" ]
 
       expect(article).not_to be_valid
       expect(article.errors[:tags]).to include("contains forbidden tags: spam")
@@ -424,9 +445,9 @@ RSpec.describe BetterModel::Taggable do
     describe ".tag_counts" do
       it "returns hash of tag frequencies" do
         Article.delete_all
-        Article.create!(title: "A1", content: "Test", status: "draft", tags: ["ruby", "rails"])
-        Article.create!(title: "A2", content: "Test", status: "draft", tags: ["ruby", "python"])
-        Article.create!(title: "A3", content: "Test", status: "draft", tags: ["ruby"])
+        Article.create!(title: "A1", content: "Test", status: "draft", tags: [ "ruby", "rails" ])
+        Article.create!(title: "A2", content: "Test", status: "draft", tags: [ "ruby", "python" ])
+        Article.create!(title: "A3", content: "Test", status: "draft", tags: [ "ruby" ])
 
         counts = Article.tag_counts
 
@@ -447,19 +468,19 @@ RSpec.describe BetterModel::Taggable do
     describe ".popular_tags" do
       it "returns top N tags by frequency" do
         Article.delete_all
-        Article.create!(title: "A1", content: "Test", status: "draft", tags: ["ruby", "rails", "tutorial"])
-        Article.create!(title: "A2", content: "Test", status: "draft", tags: ["ruby", "python"])
-        Article.create!(title: "A3", content: "Test", status: "draft", tags: ["ruby"])
+        Article.create!(title: "A1", content: "Test", status: "draft", tags: [ "ruby", "rails", "tutorial" ])
+        Article.create!(title: "A2", content: "Test", status: "draft", tags: [ "ruby", "python" ])
+        Article.create!(title: "A3", content: "Test", status: "draft", tags: [ "ruby" ])
 
         popular = Article.popular_tags(limit: 2)
 
         expect(popular.size).to eq(2)
-        expect(popular.first).to eq(["ruby", 3])
+        expect(popular.first).to eq([ "ruby", 3 ])
       end
 
       it "returns array of [tag, count] pairs" do
         Article.delete_all
-        Article.create!(title: "A1", content: "Test", status: "draft", tags: ["ruby", "rails"])
+        Article.create!(title: "A1", content: "Test", status: "draft", tags: [ "ruby", "rails" ])
 
         popular = Article.popular_tags(limit: 10)
 
@@ -480,9 +501,9 @@ RSpec.describe BetterModel::Taggable do
     describe ".related_tags" do
       it "finds tags that appear together" do
         Article.delete_all
-        Article.create!(title: "A1", content: "Test", status: "draft", tags: ["ruby", "rails", "activerecord"])
-        Article.create!(title: "A2", content: "Test", status: "draft", tags: ["ruby", "rails"])
-        Article.create!(title: "A3", content: "Test", status: "draft", tags: ["ruby", "sinatra"])
+        Article.create!(title: "A1", content: "Test", status: "draft", tags: [ "ruby", "rails", "activerecord" ])
+        Article.create!(title: "A2", content: "Test", status: "draft", tags: [ "ruby", "rails" ])
+        Article.create!(title: "A3", content: "Test", status: "draft", tags: [ "ruby", "sinatra" ])
 
         related = Article.related_tags("ruby")
 
@@ -493,7 +514,7 @@ RSpec.describe BetterModel::Taggable do
 
       it "excludes the query tag itself" do
         Article.delete_all
-        Article.create!(title: "A1", content: "Test", status: "draft", tags: ["ruby", "rails"])
+        Article.create!(title: "A1", content: "Test", status: "draft", tags: [ "ruby", "rails" ])
 
         related = Article.related_tags("ruby")
 
@@ -502,9 +523,9 @@ RSpec.describe BetterModel::Taggable do
 
       it "orders by frequency" do
         Article.delete_all
-        Article.create!(title: "A1", content: "Test", status: "draft", tags: ["ruby", "rails"])
-        Article.create!(title: "A2", content: "Test", status: "draft", tags: ["ruby", "rails"])
-        Article.create!(title: "A3", content: "Test", status: "draft", tags: ["ruby", "python"])
+        Article.create!(title: "A1", content: "Test", status: "draft", tags: [ "ruby", "rails" ])
+        Article.create!(title: "A2", content: "Test", status: "draft", tags: [ "ruby", "rails" ])
+        Article.create!(title: "A3", content: "Test", status: "draft", tags: [ "ruby", "python" ])
 
         related = Article.related_tags("ruby")
 
@@ -513,7 +534,7 @@ RSpec.describe BetterModel::Taggable do
 
       it "respects limit parameter" do
         Article.delete_all
-        Article.create!(title: "A1", content: "Test", status: "draft", tags: ["ruby", "a", "b", "c", "d"])
+        Article.create!(title: "A1", content: "Test", status: "draft", tags: [ "ruby", "a", "b", "c", "d" ])
 
         related = Article.related_tags("ruby", limit: 2)
 
@@ -524,15 +545,15 @@ RSpec.describe BetterModel::Taggable do
 
   describe "#as_json" do
     it "includes tags by default" do
-      article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby", "rails"])
+      article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby", "rails" ])
       json = article.as_json
 
       expect(json.keys).to include("tags")
-      expect(json["tags"]).to eq(["ruby", "rails"])
+      expect(json["tags"]).to eq([ "ruby", "rails" ])
     end
 
     it "includes tag_list as string" do
-      article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby", "rails"])
+      article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby", "rails" ])
       json = article.as_json(include_tag_list: true)
 
       expect(json.keys).to include("tag_list")
@@ -541,7 +562,7 @@ RSpec.describe BetterModel::Taggable do
 
     it "includes tag statistics" do
       Article.delete_all
-      article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby", "rails"])
+      article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby", "rails" ])
       json = article.as_json(include_tag_stats: true)
 
       expect(json.keys).to include("tag_stats")
@@ -633,20 +654,20 @@ RSpec.describe BetterModel::Taggable do
       article.tag_with("ruby")
 
       expect(article.tags.size).to eq(1)
-      expect(article.tags).to eq(["ruby"])
+      expect(article.tags).to eq([ "ruby" ])
     end
   end
 
   describe "integration" do
     it "works with Statusable" do
-      article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby"])
+      article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby" ])
 
       expect(article.is?(:draft)).to be true
       expect(article.tagged_with?("ruby")).to be true
     end
 
     it "works with Permissible" do
-      article = Article.create!(title: "Test", content: "Test", status: "draft", tags: ["ruby"])
+      article = Article.create!(title: "Test", content: "Test", status: "draft", tags: [ "ruby" ])
 
       expect(article.permit?(:edit)).to be true
       expect(article.tagged_with?("ruby")).to be true
@@ -654,8 +675,8 @@ RSpec.describe BetterModel::Taggable do
 
     it "works with Sortable scopes" do
       Article.delete_all
-      a1 = Article.create!(title: "A", content: "Test", status: "draft", tags: ["ruby"])
-      Article.create!(title: "B", content: "Test", status: "draft", tags: ["python"])
+      a1 = Article.create!(title: "A", content: "Test", status: "draft", tags: [ "ruby" ])
+      Article.create!(title: "B", content: "Test", status: "draft", tags: [ "python" ])
 
       sorted = Article.sort_title_asc.to_a
       expect(sorted.first.id).to eq(a1.id)

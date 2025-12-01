@@ -29,5 +29,4 @@ RSpec.configure do |config|
 
   # Seed global randomization in this process using the `--seed` CLI option
   Kernel.srand config.seed
-
 end

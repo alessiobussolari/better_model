@@ -101,7 +101,7 @@ RSpec.describe BetterModel::Concerns::BaseConfigurator do
       end
 
       it "does not raise error for array with elements" do
-        expect { configurator.validate_array!([1, 2, 3], "param") }.not_to raise_error
+        expect { configurator.validate_array!([ 1, 2, 3 ], "param") }.not_to raise_error
       end
     end
 
@@ -245,7 +245,7 @@ RSpec.describe BetterModel::Concerns::BaseConfigurator do
   end
 
   describe "#validate_inclusion!" do
-    let(:allowed_values) { [:draft, :published, :archived] }
+    let(:allowed_values) { [ :draft, :published, :archived ] }
 
     context "with value in allowed list" do
       it "does not raise error" do
@@ -275,7 +275,7 @@ RSpec.describe BetterModel::Concerns::BaseConfigurator do
       end
 
       it "does not raise error when nil is allowed" do
-        allowed_with_nil = [:draft, :published, nil]
+        allowed_with_nil = [ :draft, :published, nil ]
         expect { configurator.validate_inclusion!(nil, allowed_with_nil, "status") }.not_to raise_error
       end
     end
@@ -325,7 +325,7 @@ RSpec.describe BetterModel::Concerns::BaseConfigurator do
           end
 
           def self.column_names
-            ["id", "name"]
+            [ "id", "name" ]
           end
         end
       end
@@ -344,7 +344,7 @@ RSpec.describe BetterModel::Concerns::BaseConfigurator do
           end
 
           def self.column_names
-            ["id", "name"]
+            [ "id", "name" ]
           end
         end
       end

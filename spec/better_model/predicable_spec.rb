@@ -108,40 +108,40 @@ RSpec.describe BetterModel::Predicable do
       end
 
       it "filters by exact match with _eq" do
-        expect(Article.title_eq("Ruby").pluck(:title)).to eq(["Ruby"])
+        expect(Article.title_eq("Ruby").pluck(:title)).to eq([ "Ruby" ])
       end
 
       it "filters by non-match with _not_eq" do
-        expect(Article.title_not_eq("Ruby").pluck(:title).sort).to eq(["Python Guide", "Rails"])
+        expect(Article.title_not_eq("Ruby").pluck(:title).sort).to eq([ "Python Guide", "Rails" ])
       end
 
       it "filters by prefix with _start" do
-        expect(Article.title_start("Ru").pluck(:title).sort).to eq(["Ruby"])
+        expect(Article.title_start("Ru").pluck(:title).sort).to eq([ "Ruby" ])
       end
 
       it "filters by suffix with _end" do
-        expect(Article.title_end("uide").pluck(:title)).to eq(["Python Guide"])
+        expect(Article.title_end("uide").pluck(:title)).to eq([ "Python Guide" ])
       end
 
       it "filters by substring with _cont" do
-        expect(Article.title_cont("ail").pluck(:title).sort).to eq(["Rails"])
+        expect(Article.title_cont("ail").pluck(:title).sort).to eq([ "Rails" ])
       end
 
       it "filters case-insensitive with _i_cont" do
         Article.create!(title: "RUBY ON RAILS", content: "Test", status: "draft")
-        expect(Article.title_i_cont("rails").pluck(:title).sort).to eq(["RUBY ON RAILS", "Rails"])
+        expect(Article.title_i_cont("rails").pluck(:title).sort).to eq([ "RUBY ON RAILS", "Rails" ])
       end
 
       it "filters by not containing with _not_cont" do
-        expect(Article.title_not_cont("Rails").pluck(:title).sort).to eq(["Python Guide", "Ruby"])
+        expect(Article.title_not_cont("Rails").pluck(:title).sort).to eq([ "Python Guide", "Ruby" ])
       end
 
       it "filters by array with _in" do
-        expect(Article.title_in(["Ruby", "Rails"]).pluck(:title).sort).to eq(["Rails", "Ruby"])
+        expect(Article.title_in([ "Ruby", "Rails" ]).pluck(:title).sort).to eq([ "Rails", "Ruby" ])
       end
 
       it "filters by not in array with _not_in" do
-        expect(Article.title_not_in(["Ruby", "Rails"]).pluck(:title)).to eq(["Python Guide"])
+        expect(Article.title_not_in([ "Ruby", "Rails" ]).pluck(:title)).to eq([ "Python Guide" ])
       end
     end
 
@@ -153,7 +153,7 @@ RSpec.describe BetterModel::Predicable do
       end
 
       it "filters non-null and non-empty with _present" do
-        expect(Article.title_present(true).pluck(:title)).to eq(["Ruby"])
+        expect(Article.title_present(true).pluck(:title)).to eq([ "Ruby" ])
       end
 
       it "filters null or empty with _blank" do
@@ -195,43 +195,43 @@ RSpec.describe BetterModel::Predicable do
       end
 
       it "filters by exact value with _eq" do
-        expect(Article.view_count_eq(100).pluck(:view_count)).to eq([100])
+        expect(Article.view_count_eq(100).pluck(:view_count)).to eq([ 100 ])
       end
 
       it "filters by not equal with _not_eq" do
-        expect(Article.view_count_not_eq(100).pluck(:view_count).sort).to eq([25, 50])
+        expect(Article.view_count_not_eq(100).pluck(:view_count).sort).to eq([ 25, 50 ])
       end
 
       it "filters less than with _lt" do
-        expect(Article.view_count_lt(75).pluck(:view_count).sort).to eq([25, 50])
+        expect(Article.view_count_lt(75).pluck(:view_count).sort).to eq([ 25, 50 ])
       end
 
       it "filters less than or equal with _lteq" do
-        expect(Article.view_count_lteq(50).pluck(:view_count).sort).to eq([25, 50])
+        expect(Article.view_count_lteq(50).pluck(:view_count).sort).to eq([ 25, 50 ])
       end
 
       it "filters greater than with _gt" do
-        expect(Article.view_count_gt(40).pluck(:view_count).sort).to eq([50, 100])
+        expect(Article.view_count_gt(40).pluck(:view_count).sort).to eq([ 50, 100 ])
       end
 
       it "filters greater than or equal with _gteq" do
-        expect(Article.view_count_gteq(50).pluck(:view_count).sort).to eq([50, 100])
+        expect(Article.view_count_gteq(50).pluck(:view_count).sort).to eq([ 50, 100 ])
       end
 
       it "filters by array with _in" do
-        expect(Article.view_count_in([50, 100]).pluck(:view_count).sort).to eq([50, 100])
+        expect(Article.view_count_in([ 50, 100 ]).pluck(:view_count).sort).to eq([ 50, 100 ])
       end
 
       it "filters by not in array with _not_in" do
-        expect(Article.view_count_not_in([50, 100]).pluck(:view_count)).to eq([25])
+        expect(Article.view_count_not_in([ 50, 100 ]).pluck(:view_count)).to eq([ 25 ])
       end
 
       it "filters within range with _between" do
-        expect(Article.view_count_between(30, 75).pluck(:view_count)).to eq([50])
+        expect(Article.view_count_between(30, 75).pluck(:view_count)).to eq([ 50 ])
       end
 
       it "filters outside range with _not_between" do
-        expect(Article.view_count_not_between(30, 75).pluck(:view_count).sort).to eq([25, 100])
+        expect(Article.view_count_not_between(30, 75).pluck(:view_count).sort).to eq([ 25, 100 ])
       end
     end
   end
@@ -256,11 +256,11 @@ RSpec.describe BetterModel::Predicable do
       end
 
       it "filters by boolean value with _eq" do
-        expect(Article.featured_eq(true).pluck(:featured)).to eq([true])
+        expect(Article.featured_eq(true).pluck(:featured)).to eq([ true ])
       end
 
       it "filters by not equal boolean with _not_eq" do
-        expect(Article.featured_not_eq(true).pluck(:featured)).to eq([false])
+        expect(Article.featured_not_eq(true).pluck(:featured)).to eq([ false ])
       end
     end
   end
@@ -304,11 +304,11 @@ RSpec.describe BetterModel::Predicable do
       end
 
       it "filters within days with _within (numeric)" do
-        expect(Article.published_at_within(7).pluck(:title).sort).to eq(["Mid", "Recent"])
+        expect(Article.published_at_within(7).pluck(:title).sort).to eq([ "Mid", "Recent" ])
       end
 
       it "filters within duration with _within (Duration)" do
-        expect(Article.published_at_within(7.days).pluck(:title).sort).to eq(["Mid", "Recent"])
+        expect(Article.published_at_within(7.days).pluck(:title).sort).to eq([ "Mid", "Recent" ])
       end
     end
   end
@@ -352,7 +352,7 @@ RSpec.describe BetterModel::Predicable do
                          view_count: 50, published_at: 3.days.ago)
 
       results = test_class.recent_popular(7, 100).pluck(:title)
-      expect(results).to eq(["Recent Popular"])
+      expect(results).to eq([ "Recent Popular" ])
     end
 
     it "returns ActiveRecord::Relation" do
@@ -414,12 +414,12 @@ RSpec.describe BetterModel::Predicable do
 
     it "can chain multiple predicate scopes" do
       results = Article.title_cont("Ruby").view_count_gt(75).pluck(:title)
-      expect(results).to eq(["Ruby on Rails"])
+      expect(results).to eq([ "Ruby on Rails" ])
     end
 
     it "can chain with sorting scopes" do
       results = Article.title_cont("Ruby").sort_view_count_desc.pluck(:title)
-      expect(results).to eq(["Ruby on Rails", "Ruby Gems"])
+      expect(results).to eq([ "Ruby on Rails", "Ruby Gems" ])
     end
   end
 

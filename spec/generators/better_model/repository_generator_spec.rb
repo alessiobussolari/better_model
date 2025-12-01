@@ -27,7 +27,7 @@ RSpec.describe BetterModel::Generators::RepositoryGenerator, type: :generator do
 
   describe "repository generation" do
     context "with default options" do
-      before { run_generator ["Article"] }
+      before { run_generator [ "Article" ] }
 
       it "creates repository file" do
         repo_file = File.join(destination_root, "app/repositories/article_repository.rb")
@@ -62,7 +62,7 @@ RSpec.describe BetterModel::Generators::RepositoryGenerator, type: :generator do
     end
 
     context "with --skip-base option" do
-      before { run_generator ["Article", "--skip-base"] }
+      before { run_generator [ "Article", "--skip-base" ] }
 
       it "creates repository file" do
         expect(File).to exist(File.join(destination_root, "app/repositories/article_repository.rb"))
@@ -80,7 +80,7 @@ RSpec.describe BetterModel::Generators::RepositoryGenerator, type: :generator do
     end
 
     context "with --path option" do
-      before { run_generator ["Article", "--path=app/services/repos"] }
+      before { run_generator [ "Article", "--path=app/services/repos" ] }
 
       it "creates repository in custom path" do
         repo_file = File.join(destination_root, "app/services/repos/article_repository.rb")
@@ -89,7 +89,7 @@ RSpec.describe BetterModel::Generators::RepositoryGenerator, type: :generator do
     end
 
     context "with --namespace option" do
-      before { run_generator ["Article", "--namespace=Admin"] }
+      before { run_generator [ "Article", "--namespace=Admin" ] }
 
       it "namespaces the repository class" do
         repo_file = File.join(destination_root, "app/repositories/article_repository.rb")
@@ -106,7 +106,7 @@ RSpec.describe BetterModel::Generators::RepositoryGenerator, type: :generator do
           File.join(destination_root, "app/repositories/application_repository.rb"),
           "class ApplicationRepository; end"
         )
-        run_generator ["Article"]
+        run_generator [ "Article" ]
       end
 
       it "does not overwrite application_repository.rb" do
@@ -118,12 +118,12 @@ RSpec.describe BetterModel::Generators::RepositoryGenerator, type: :generator do
 
     context "with different model names" do
       it "handles simple model name" do
-        run_generator ["User"]
+        run_generator [ "User" ]
         expect(File).to exist(File.join(destination_root, "app/repositories/user_repository.rb"))
       end
 
       it "creates correct class name" do
-        run_generator ["BlogPost"]
+        run_generator [ "BlogPost" ]
         repo_file = File.join(destination_root, "app/repositories/blog_post_repository.rb")
         content = File.read(repo_file)
         expect(content).to include("class BlogPostRepository")
@@ -134,7 +134,7 @@ RSpec.describe BetterModel::Generators::RepositoryGenerator, type: :generator do
 
   describe "file structure" do
     it "creates proper directory structure" do
-      run_generator ["Article"]
+      run_generator [ "Article" ]
       expect(Dir).to exist(File.join(destination_root, "app/repositories"))
     end
   end

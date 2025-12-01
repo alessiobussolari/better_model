@@ -66,7 +66,7 @@ RSpec.describe BetterModel::Traceable do
         end
       end
 
-      expect(test_class.traceable_fields).to eq([:status, :title, :published_at])
+      expect(test_class.traceable_fields).to eq([ :status, :title, :published_at ])
     end
 
     it "sets up versions association" do
@@ -433,12 +433,12 @@ RSpec.describe BetterModel::Traceable do
       article = test_class.create!(title: nil, status: "draft")
       article.update!(title: "Now has value")
       version = article.versions.where(event: "updated").first
-      expect(version.object_changes["title"]).to eq([nil, "Now has value"])
+      expect(version.object_changes["title"]).to eq([ nil, "Now has value" ])
 
       article.update!(title: nil)
       versions = article.versions.where(event: "updated").order(created_at: :desc)
       latest_version = versions.first
-      expect(latest_version.object_changes["title"]).to eq(["Now has value", nil])
+      expect(latest_version.object_changes["title"]).to eq([ "Now has value", nil ])
     end
 
     it "handles empty string vs nil consistently" do
@@ -462,11 +462,11 @@ RSpec.describe BetterModel::Traceable do
       article = test_class2.create!(title: "Test", status: "draft", featured: false)
       article.update!(featured: true)
       version = article.versions.where(event: "updated").first
-      expect(version.object_changes["featured"]).to eq([false, true])
+      expect(version.object_changes["featured"]).to eq([ false, true ])
 
       article.update!(featured: false)
       version = article.versions.where(event: "updated").first
-      expect(version.object_changes["featured"]).to eq([true, false])
+      expect(version.object_changes["featured"]).to eq([ true, false ])
     end
 
     it "handles zero values for numeric fields" do
@@ -479,11 +479,11 @@ RSpec.describe BetterModel::Traceable do
       article = test_class2.create!(title: "Test", status: "draft", view_count: 0)
       article.update!(view_count: 1)
       version = article.versions.where(event: "updated").first
-      expect(version.object_changes["view_count"]).to eq([0, 1])
+      expect(version.object_changes["view_count"]).to eq([ 0, 1 ])
 
       article.update!(view_count: 0)
       version = article.versions.where(event: "updated").first
-      expect(version.object_changes["view_count"]).to eq([1, 0])
+      expect(version.object_changes["view_count"]).to eq([ 1, 0 ])
     end
 
     it "does not track changes with update_columns" do
@@ -959,7 +959,7 @@ RSpec.describe BetterModel::Traceable do
     it "tracks multiple fields" do
       config = BetterModel::TraceableConfigurator.new(Article)
       config.track(:status, :title)
-      expect(config.fields).to eq([:status, :title])
+      expect(config.fields).to eq([ :status, :title ])
     end
 
     it "stores sensitive field configuration" do
@@ -974,7 +974,7 @@ RSpec.describe BetterModel::Traceable do
       config.track(:email, sensitive: :partial)
       config.track(:password, sensitive: :full)
 
-      expect(config.fields).to eq([:status, :email, :password])
+      expect(config.fields).to eq([ :status, :email, :password ])
       expect(config.sensitive_fields).to eq({ email: :partial, password: :full })
     end
 
@@ -991,7 +991,7 @@ RSpec.describe BetterModel::Traceable do
       config.versions_table("custom_versions")
 
       hash = config.to_h
-      expect(hash[:fields]).to eq([:status, :title, :password])
+      expect(hash[:fields]).to eq([ :status, :title, :password ])
       expect(hash[:sensitive_fields]).to eq({ password: :full })
       expect(hash[:table_name]).to eq("custom_versions")
     end

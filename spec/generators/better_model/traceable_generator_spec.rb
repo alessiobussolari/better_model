@@ -26,13 +26,13 @@ RSpec.describe BetterModel::Generators::TraceableGenerator, type: :generator do
 
   describe "without --create-table option" do
     it "does not create migration" do
-      run_generator ["Article"]
+      run_generator [ "Article" ]
       expect(Dir.glob("#{destination_root}/db/migrate/*.rb")).to be_empty
     end
   end
 
   describe "with --create-table option" do
-    before { run_generator ["Article", "--create-table"] }
+    before { run_generator [ "Article", "--create-table" ] }
 
     it "creates migration file" do
       migration_files = Dir.glob("#{destination_root}/db/migrate/*_create_article_versions.rb")
@@ -56,7 +56,7 @@ RSpec.describe BetterModel::Generators::TraceableGenerator, type: :generator do
   end
 
   describe "with --table-name option" do
-    before { run_generator ["Article", "--create-table", "--table-name=custom_versions"] }
+    before { run_generator [ "Article", "--create-table", "--table-name=custom_versions" ] }
 
     it "uses custom table name" do
       migration_files = Dir.glob("#{destination_root}/db/migrate/*_create_custom_versions.rb")
@@ -72,13 +72,13 @@ RSpec.describe BetterModel::Generators::TraceableGenerator, type: :generator do
 
   describe "with different model names" do
     it "handles simple model name" do
-      run_generator ["User", "--create-table"]
+      run_generator [ "User", "--create-table" ]
       migration_files = Dir.glob("#{destination_root}/db/migrate/*_create_user_versions.rb")
       expect(migration_files.length).to eq(1)
     end
 
     it "handles underscored model name" do
-      run_generator ["blog_post", "--create-table"]
+      run_generator [ "blog_post", "--create-table" ]
       migration_files = Dir.glob("#{destination_root}/db/migrate/*_create_blog_post_versions.rb")
       expect(migration_files.length).to eq(1)
     end
@@ -86,7 +86,7 @@ RSpec.describe BetterModel::Generators::TraceableGenerator, type: :generator do
 
   describe "timestamp generation" do
     it "generates valid timestamp format" do
-      run_generator ["Article", "--create-table"]
+      run_generator [ "Article", "--create-table" ]
       migration_file = Dir.glob("#{destination_root}/db/migrate/*.rb").first
       filename = File.basename(migration_file)
       timestamp = filename.split("_").first

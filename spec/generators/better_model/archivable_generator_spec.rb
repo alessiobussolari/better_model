@@ -26,7 +26,7 @@ RSpec.describe BetterModel::Generators::ArchivableGenerator, type: :generator do
 
   describe "migration generation" do
     context "with default options" do
-      before { run_generator ["Article"] }
+      before { run_generator [ "Article" ] }
 
       it "creates migration file" do
         migration_files = Dir.glob("#{destination_root}/db/migrate/*_add_archivable_to_articles.rb")
@@ -55,7 +55,7 @@ RSpec.describe BetterModel::Generators::ArchivableGenerator, type: :generator do
     end
 
     context "with --with-tracking option" do
-      before { run_generator ["Article", "--with-tracking"] }
+      before { run_generator [ "Article", "--with-tracking" ] }
 
       it "includes archived_by_id column" do
         migration_file = Dir.glob("#{destination_root}/db/migrate/*_add_archivable_to_articles.rb").first
@@ -71,7 +71,7 @@ RSpec.describe BetterModel::Generators::ArchivableGenerator, type: :generator do
     end
 
     context "with --with-by option" do
-      before { run_generator ["Article", "--with-by"] }
+      before { run_generator [ "Article", "--with-by" ] }
 
       it "includes archived_by_id column" do
         migration_file = Dir.glob("#{destination_root}/db/migrate/*_add_archivable_to_articles.rb").first
@@ -87,7 +87,7 @@ RSpec.describe BetterModel::Generators::ArchivableGenerator, type: :generator do
     end
 
     context "with --with-reason option" do
-      before { run_generator ["Article", "--with-reason"] }
+      before { run_generator [ "Article", "--with-reason" ] }
 
       it "includes archive_reason column" do
         migration_file = Dir.glob("#{destination_root}/db/migrate/*_add_archivable_to_articles.rb").first
@@ -103,7 +103,7 @@ RSpec.describe BetterModel::Generators::ArchivableGenerator, type: :generator do
     end
 
     context "with --skip-indexes option" do
-      before { run_generator ["Article", "--skip-indexes"] }
+      before { run_generator [ "Article", "--skip-indexes" ] }
 
       it "does not add indexes" do
         migration_file = Dir.glob("#{destination_root}/db/migrate/*_add_archivable_to_articles.rb").first
@@ -114,13 +114,13 @@ RSpec.describe BetterModel::Generators::ArchivableGenerator, type: :generator do
 
     context "with different model names" do
       it "handles simple model name" do
-        run_generator ["User"]
+        run_generator [ "User" ]
         migration_files = Dir.glob("#{destination_root}/db/migrate/*_add_archivable_to_users.rb")
         expect(migration_files.length).to eq(1)
       end
 
       it "handles underscored model name" do
-        run_generator ["blog_post"]
+        run_generator [ "blog_post" ]
         migration_files = Dir.glob("#{destination_root}/db/migrate/*_add_archivable_to_blog_posts.rb")
         expect(migration_files.length).to eq(1)
       end

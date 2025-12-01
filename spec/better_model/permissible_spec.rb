@@ -203,7 +203,7 @@ RSpec.describe BetterModel::Permissible do
         end
 
         instance = test_class.new
-        expect(instance.has_all_permissions?([:delete])).to be true
+        expect(instance.has_all_permissions?([ :delete ])).to be true
       end
 
       it "handles empty array" do

@@ -10,7 +10,7 @@ RSpec.describe "SQL Injection Protection", type: :security do
       status: "published",
       published_at: Time.current,
       view_count: 100,
-      tags: ["ruby", "rails"]
+      tags: [ "ruby", "rails" ]
     )
   end
 
@@ -170,7 +170,7 @@ RSpec.describe "SQL Injection Protection", type: :security do
   describe "Sortable protection" do
     it "rejects invalid sort field names" do
       expect do
-        Article.search({}, orders: [:"'; DROP TABLE articles; --"])
+        Article.search({}, orders: [ :"'; DROP TABLE articles; --" ])
       end.to raise_error(BetterModel::Errors::Searchable::InvalidOrderError)
 
       expect(Article.count).to be >= 1
@@ -178,14 +178,14 @@ RSpec.describe "SQL Injection Protection", type: :security do
 
     it "only accepts registered sort scopes" do
       expect do
-        Article.search({}, orders: [:nonexistent_sort])
+        Article.search({}, orders: [ :nonexistent_sort ])
       end.to raise_error(BetterModel::Errors::Searchable::InvalidOrderError)
     end
 
     it "prevents SQL injection in sort direction" do
       # Attempting to inject via a fake scope name
       expect do
-        Article.search({}, orders: [:sort_title_asc_DROP_TABLE])
+        Article.search({}, orders: [ :sort_title_asc_DROP_TABLE ])
       end.to raise_error(BetterModel::Errors::Searchable::InvalidOrderError)
 
       expect(Article.count).to be >= 1

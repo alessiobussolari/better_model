@@ -157,7 +157,7 @@ RSpec.describe "Authorization Security", type: :security do
       it "filters to only granted permissions" do
         draft = Article.create!(title: "Draft", status: "draft")
 
-        granted = draft.granted_permissions([:delete, :edit, :publish, :unpublish, :archive])
+        granted = draft.granted_permissions([ :delete, :edit, :publish, :unpublish, :archive ])
 
         expect(granted).to contain_exactly(:delete, :edit, :publish)
       end
@@ -171,7 +171,7 @@ RSpec.describe "Authorization Security", type: :security do
         )
 
         # Check permissions that are definitely denied
-        granted = expired.granted_permissions([:delete, :archive])
+        granted = expired.granted_permissions([ :delete, :archive ])
 
         expect(granted).to be_empty
       end
@@ -200,13 +200,13 @@ RSpec.describe "Authorization Security", type: :security do
       it "returns true when all specified permissions granted" do
         draft = Article.create!(title: "Draft", status: "draft")
 
-        expect(draft.has_all_permissions?([:delete, :edit])).to be true
+        expect(draft.has_all_permissions?([ :delete, :edit ])).to be true
       end
 
       it "returns false when any specified permission denied" do
         draft = Article.create!(title: "Draft", status: "draft")
 
-        expect(draft.has_all_permissions?([:delete, :unpublish])).to be false
+        expect(draft.has_all_permissions?([ :delete, :unpublish ])).to be false
       end
     end
   end

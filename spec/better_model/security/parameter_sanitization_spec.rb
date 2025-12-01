@@ -11,7 +11,7 @@ RSpec.describe "Parameter Sanitization", type: :security do
       published_at: Time.current,
       view_count: 100,
       featured: true,
-      tags: ["test"]
+      tags: [ "test" ]
     )
   end
 
@@ -345,7 +345,7 @@ RSpec.describe "Parameter Sanitization", type: :security do
       article = Article.create!(
         title: "Empty Tags Test",
         status: "draft",
-        tags: ["existing"]
+        tags: [ "existing" ]
       )
 
       article.tag_list = ""

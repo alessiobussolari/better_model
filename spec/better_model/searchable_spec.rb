@@ -34,7 +34,7 @@ RSpec.describe BetterModel::Searchable do
     end
 
     it "accepts orders keyword argument" do
-      result = Article.search({}, orders: [:sort_title_asc])
+      result = Article.search({}, orders: [ :sort_title_asc ])
       expect(result).to be_a(ActiveRecord::Relation)
     end
 
@@ -42,7 +42,7 @@ RSpec.describe BetterModel::Searchable do
       result = Article.search(
         { title_cont: "Test" },
         pagination: { page: 1, per_page: 10 },
-        orders: [:sort_title_asc]
+        orders: [ :sort_title_asc ]
       )
       expect(result).to be_a(ActiveRecord::Relation)
     end
@@ -59,7 +59,7 @@ RSpec.describe BetterModel::Searchable do
       Article.create!(title: "Python Programming Guide", content: "Test", status: "draft")
 
       results = Article.search({ title_cont: "Ruby" }).pluck(:title)
-      expect(results).to eq(["Ruby on Rails Tutorial"])
+      expect(results).to eq([ "Ruby on Rails Tutorial" ])
     end
 
     it "applies multiple predicates" do
@@ -72,7 +72,7 @@ RSpec.describe BetterModel::Searchable do
         view_count_gt: 100
       }).pluck(:title)
 
-      expect(results.sort).to eq(["Python", "Ruby"])
+      expect(results.sort).to eq([ "Python", "Ruby" ])
     end
 
     it "validates predicate scopes" do
@@ -100,7 +100,7 @@ RSpec.describe BetterModel::Searchable do
       Article.create!(title: "Test2", content: "Test", status: "draft", featured: false)
 
       results = Article.search({ featured_eq: true }).pluck(:featured)
-      expect(results).to eq([true])
+      expect(results).to eq([ true ])
     end
   end
 
@@ -117,7 +117,7 @@ RSpec.describe BetterModel::Searchable do
         ]
       }).pluck(:title).sort
 
-      expect(results).to eq(["Python Guide", "Ruby on Rails"])
+      expect(results).to eq([ "Python Guide", "Ruby on Rails" ])
     end
 
     it "combines OR with AND predicates" do
@@ -133,7 +133,7 @@ RSpec.describe BetterModel::Searchable do
         status_eq: "published"
       }).pluck(:title).sort
 
-      expect(results).to eq(["Python", "Ruby"])
+      expect(results).to eq([ "Python", "Ruby" ])
     end
 
     it "validates predicates in OR conditions" do
@@ -194,8 +194,8 @@ RSpec.describe BetterModel::Searchable do
       Article.create!(title: "Zebra", content: "Test", status: "draft")
       Article.create!(title: "Apple", content: "Test", status: "draft")
 
-      results = Article.search({}, orders: [:sort_title_asc]).pluck(:title)
-      expect(results).to eq(["Apple", "Zebra"])
+      results = Article.search({}, orders: [ :sort_title_asc ]).pluck(:title)
+      expect(results).to eq([ "Apple", "Zebra" ])
     end
 
     it "applies multiple order scopes" do
@@ -203,13 +203,13 @@ RSpec.describe BetterModel::Searchable do
       Article.create!(title: "B", content: "Test", status: "draft", view_count: 100)
       Article.create!(title: "C", content: "Test", status: "draft", view_count: 200)
 
-      results = Article.search({}, orders: [:sort_view_count_desc, :sort_title_asc]).pluck(:title)
-      expect(results).to eq(["C", "A", "B"])
+      results = Article.search({}, orders: [ :sort_view_count_desc, :sort_title_asc ]).pluck(:title)
+      expect(results).to eq([ "C", "A", "B" ])
     end
 
     it "validates order scopes" do
       expect do
-        Article.search({}, orders: [:nonexistent_sort])
+        Article.search({}, orders: [ :nonexistent_sort ])
       end.to raise_error(BetterModel::Errors::Searchable::InvalidOrderError)
     end
 
@@ -220,7 +220,7 @@ RSpec.describe BetterModel::Searchable do
       Article.create!(title: "Third", content: "Test", status: "draft", created_at: 2.days.ago)
 
       results = Article.search({}).pluck(:title)
-      expect(results).to eq(["Second", "Third", "First"])
+      expect(results).to eq([ "Second", "Third", "First" ])
     end
 
     it "orders parameter overrides default_order" do
@@ -229,8 +229,8 @@ RSpec.describe BetterModel::Searchable do
       Article.create!(title: "Apple", content: "Test", status: "draft", created_at: 1.day.ago)
       Article.create!(title: "Mango", content: "Test", status: "draft", created_at: 2.days.ago)
 
-      results = Article.search({}, orders: [:sort_title_asc]).pluck(:title)
-      expect(results).to eq(["Apple", "Mango", "Zebra"])
+      results = Article.search({}, orders: [ :sort_title_asc ]).pluck(:title)
+      expect(results).to eq([ "Apple", "Mango", "Zebra" ])
     end
   end
 
@@ -260,8 +260,8 @@ RSpec.describe BetterModel::Searchable do
     it "handles page correctly" do
       6.times { |i| Article.create!(title: "Article #{i}", content: "Test", status: "draft") }
 
-      page1 = Article.search({}, pagination: { page: 1, per_page: 2 }, orders: [:sort_title_asc])
-      page2 = Article.search({}, pagination: { page: 2, per_page: 2 }, orders: [:sort_title_asc])
+      page1 = Article.search({}, pagination: { page: 1, per_page: 2 }, orders: [ :sort_title_asc ])
+      page2 = Article.search({}, pagination: { page: 2, per_page: 2 }, orders: [ :sort_title_asc ])
 
       expect(page1.count).to eq(2)
       expect(page2.count).to eq(2)
@@ -306,8 +306,8 @@ RSpec.describe BetterModel::Searchable do
         predicates :status, :featured
 
         searchable do
-          security :status_required, [:status_eq]
-          security :multi_pred, [:status_eq, :featured_true]
+          security :status_required, [ :status_eq ]
+          security :multi_pred, [ :status_eq, :featured_true ]
         end
       end
       stub_const("SearchableSecurityTest", klass)
@@ -315,8 +315,8 @@ RSpec.describe BetterModel::Searchable do
     end
 
     it "configures securities via DSL" do
-      expect(test_class.searchable_config[:securities][:status_required]).to eq([:status_eq])
-      expect(test_class.searchable_config[:securities][:multi_pred]).to eq([:status_eq, :featured_true])
+      expect(test_class.searchable_config[:securities][:status_required]).to eq([ :status_eq ])
+      expect(test_class.searchable_config[:securities][:multi_pred]).to eq([ :status_eq, :featured_true ])
     end
 
     it "requires at least one predicate" do
@@ -383,7 +383,7 @@ RSpec.describe BetterModel::Searchable do
         predicates :featured
 
         searchable do
-          security :featured_filter, [:featured_eq]
+          security :featured_filter, [ :featured_eq ]
         end
       end
 
@@ -448,7 +448,7 @@ RSpec.describe BetterModel::Searchable do
                        .where("view_count > 100")
                        .pluck(:title)
 
-      expect(results).to eq(["Ruby"])
+      expect(results).to eq([ "Ruby" ])
     end
   end
 
@@ -488,11 +488,11 @@ RSpec.describe BetterModel::Searchable do
         sort :title, :created_at
 
         searchable do
-          default_order [:sort_created_at_desc, :sort_title_asc]
+          default_order [ :sort_created_at_desc, :sort_title_asc ]
         end
       end
 
-      expect(test_class.searchable_config[:default_order]).to eq([:sort_created_at_desc, :sort_title_asc])
+      expect(test_class.searchable_config[:default_order]).to eq([ :sort_created_at_desc, :sort_title_asc ])
     end
 
     it "has nil defaults" do
@@ -550,7 +550,7 @@ RSpec.describe BetterModel::Searchable do
     let!(:article) { Article.create!(title: "Test Article", content: "Test Content", status: "published", author: author) }
 
     it "loads single association with includes" do
-      results = Article.search({ status_eq: "published" }, includes: [:author])
+      results = Article.search({ status_eq: "published" }, includes: [ :author ])
 
       expect(results).to be_a(ActiveRecord::Relation)
       expect(results.count).to eq(1)
@@ -561,7 +561,7 @@ RSpec.describe BetterModel::Searchable do
       comment1 = Comment.create!(article: article, body: "Great post!", author_name: "Reader 1")
       Comment.create!(article: article, body: "Thanks!", author_name: "Reader 2")
 
-      results = Article.search({ status_eq: "published" }, includes: [:author, :comments])
+      results = Article.search({ status_eq: "published" }, includes: [ :author, :comments ])
 
       expect(results.count).to eq(1)
       article_result = results.first
@@ -587,8 +587,8 @@ RSpec.describe BetterModel::Searchable do
       results = Article.search(
         { status_eq: "published" },
         pagination: { page: 1, per_page: 10 },
-        orders: [:sort_view_count_desc],
-        includes: [:author]
+        orders: [ :sort_view_count_desc ],
+        includes: [ :author ]
       )
 
       expect(results.count).to eq(2)
@@ -617,7 +617,7 @@ RSpec.describe BetterModel::Searchable do
 
       results = Article.search(
         { status_eq: "published" },
-        includes: [:author]
+        includes: [ :author ]
       ).where("view_count > 100")
 
       expect(results).to be_a(ActiveRecord::Relation)
