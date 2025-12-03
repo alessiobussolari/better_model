@@ -2,6 +2,8 @@
 
 # Code Coverage - must be at the very top
 require "simplecov"
+require "simplecov-cobertura"
+
 SimpleCov.start "rails" do
   add_filter "/spec/"
   add_filter "/test/"
@@ -9,8 +11,8 @@ SimpleCov.start "rails" do
   add_group "Concerns", "lib/better_model"
   add_group "Models", "spec/rails_app/app/models"
 
-  # Temporarily disabled during migration to RSpec
-  # minimum_coverage 80
+  # Output Cobertura XML for Codecov compatibility
+  formatter SimpleCov::Formatter::CoberturaFormatter
 end
 
 RSpec.configure do |config|

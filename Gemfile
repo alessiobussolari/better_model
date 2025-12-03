@@ -15,6 +15,7 @@ gem "bundler-audit", require: false
 
 # Code coverage [https://github.com/simplecov-ruby/simplecov]
 gem "simplecov", require: false
+gem "simplecov-cobertura", require: false
 
 # Start debugger with binding.b [https://github.com/ruby/debug]
 # gem "debug", ">= 1.0.0"
