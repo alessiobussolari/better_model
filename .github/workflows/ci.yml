@@ -45,12 +45,10 @@ jobs:
           RAILS_ENV: test
         run: bundle exec rspec
 
-      - name: Upload coverage to Codecov
+      - name: Upload coverage reports to Codecov
         if: matrix.ruby-version == '3.3'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
-          files: ./coverage/.resultset.json
-          fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Keep screenshots from failed system tests
