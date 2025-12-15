@@ -53,7 +53,7 @@ jobs:
           files: ./coverage/coverage.xml
 
       - name: Keep screenshots from failed system tests
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: screenshots-ruby-${{ matrix.ruby-version }}
